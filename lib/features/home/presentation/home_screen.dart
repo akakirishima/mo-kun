@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -6,6 +7,9 @@ import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_input_bar.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
+import 'package:image_picker/image_picker.dart';
+
+typedef HomeChatImagePicker = Future<XFile?> Function(ImageSource source);
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -13,11 +17,13 @@ class HomeScreen extends StatefulWidget {
     required this.onSettingsTap,
     this.onOverlayModeChanged,
     this.initialMoriMessage = '今日も会えて嬉しいな。\n一緒にお話ししよ！',
+    this.pickImage,
   });
 
   final VoidCallback onSettingsTap;
   final ValueChanged<HomeOverlayMode>? onOverlayModeChanged;
   final String initialMoriMessage;
+  final HomeChatImagePicker? pickImage;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -47,10 +53,14 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late final ScrollController _messageScrollController;
-  final List<String> _userMessages = <String>[];
+  final List<_HomeChatMessage> _messages = <_HomeChatMessage>[];
+  String _draftText = '';
+  XFile? _pendingAttachment;
+  bool _isPickingImage = false;
   HomeOverlayMode _overlayMode = HomeOverlayMode.none;
 
-  bool get _canSend => _controller.text.trim().isNotEmpty;
+  bool get _canSend =>
+      _draftText.trim().isNotEmpty || _pendingAttachment != null;
   bool get _isChatMode => _overlayMode == HomeOverlayMode.chat;
   bool get _isImmersiveMode => _overlayMode != HomeOverlayMode.none;
 
@@ -73,7 +83,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _handleInputChanged() {
-    setState(() {});
+    setState(() {
+      _draftText = _controller.text;
+    });
   }
 
   void _setOverlayMode(HomeOverlayMode mode) {
@@ -95,15 +107,80 @@ class _HomeScreenState extends State<HomeScreen> {
     _setOverlayMode(HomeOverlayMode.none);
   }
 
-  void _sendMessage() {
-    final message = _controller.text.trim();
-    if (message.isEmpty) {
+  Future<XFile?> _pickImage(ImageSource source) {
+    final picker = widget.pickImage;
+    if (picker != null) {
+      return picker(source);
+    }
+
+    return ImagePicker().pickImage(source: source, imageQuality: 85);
+  }
+
+  Future<void> _handleAttachmentTap(ImageSource source) async {
+    if (_isPickingImage) {
       return;
     }
 
     setState(() {
-      _userMessages.add(message);
+      _isPickingImage = true;
+    });
+
+    try {
+      final image = await _pickImage(source);
+      if (!mounted || image == null) {
+        return;
+      }
+
+      setState(() {
+        _pendingAttachment = image;
+      });
+      _focusNode.requestFocus();
+    } finally {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isPickingImage = false;
+      });
+    }
+  }
+
+  void _removePendingAttachment() {
+    if (_pendingAttachment == null) {
+      return;
+    }
+
+    setState(() {
+      _pendingAttachment = null;
+    });
+  }
+
+  void _sendMessage() {
+    final message = _draftText.trim();
+    final attachment = _pendingAttachment;
+    if (message.isEmpty && attachment == null) {
+      return;
+    }
+
+    setState(() {
+      if (attachment != null) {
+        _messages.add(
+          _HomeChatMessage(
+            imagePath: attachment.path,
+            timestamp: _timestampLabel(),
+          ),
+        );
+      }
+
+      if (message.isNotEmpty) {
+        _messages.add(
+          _HomeChatMessage(text: message, timestamp: _timestampLabel()),
+        );
+      }
+
       _controller.clear();
+      _draftText = '';
+      _pendingAttachment = null;
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -118,6 +195,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     _focusNode.requestFocus();
+  }
+
+  String _timestampLabel() {
+    final now = DateTime.now();
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   @override
@@ -184,6 +268,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         final messageLayerTop = stageHeight * 0.52;
                         final messageLayerBottom =
                             _composerHeight + composerBottom + 12;
+                        final previewBottom =
+                            composerBottom + _composerHeight + 10;
 
                         return Stack(
                           clipBehavior: Clip.none,
@@ -229,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         1.0,
                                       ),
                                       padding: _messageLayerPadding,
-                                      messages: _userMessages,
+                                      messages: _messages,
                                       includeKeys: true,
                                       allowOverflow: false,
                                     ),
@@ -237,6 +323,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             ),
+                            if (_pendingAttachment != null)
+                              Positioned(
+                                left: 12,
+                                right: 12,
+                                bottom: previewBottom,
+                                child: _HomePendingAttachmentPreview(
+                                  attachment: _pendingAttachment!,
+                                  onRemove: _removePendingAttachment,
+                                ),
+                              ),
                             Positioned(
                               left: _horizontalPadding,
                               right: _horizontalPadding,
@@ -251,6 +347,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 sendEnabled: _canSend,
                                 onSubmitted: (_) => _sendMessage(),
                                 onSendTap: _sendMessage,
+                                onCameraTap: () =>
+                                    _handleAttachmentTap(ImageSource.camera),
+                                onImageTap: () =>
+                                    _handleAttachmentTap(ImageSource.gallery),
                               ),
                             ),
                           ],
@@ -259,7 +359,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   )
                 else ...[
-                  SizedBox(height: stageHeight, child: Center(child: stageShell)),
+                  SizedBox(
+                    height: stageHeight,
+                    child: Center(child: stageShell),
+                  ),
                 ],
                 if (!isImmersiveMode) ...[
                   const SizedBox(height: _stageActionGap),
@@ -601,15 +704,22 @@ class _MoriBadgeAvatar extends StatelessWidget {
 }
 
 class _UserMessageBubble extends StatelessWidget {
-  const _UserMessageBubble({super.key, required this.text});
+  const _UserMessageBubble({super.key, this.text, this.imagePath});
 
-  final String text;
+  final String? text;
+  final String? imagePath;
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = imagePath != null && imagePath!.isNotEmpty;
+    final hasText = text != null && text!.isNotEmpty;
+
     return Container(
       constraints: const BoxConstraints(maxWidth: 270),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: EdgeInsets.symmetric(
+        horizontal: hasImage ? 8 : 16,
+        vertical: hasImage ? 8 : 14,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFBFE3B4).withValues(alpha: 0.78),
         borderRadius: const BorderRadius.only(
@@ -627,13 +737,30 @@ class _UserMessageBubble extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: const Color(0xFF1F3726),
-          fontWeight: FontWeight.w700,
-          height: 1.24,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hasImage)
+            _HomeChatImageAttachment(
+              imagePath: imagePath!,
+              imageKey: key is ValueKey<String>
+                  ? ValueKey<String>(
+                      '${(key! as ValueKey<String>).value}-image',
+                    )
+                  : null,
+            ),
+          if (hasImage && hasText) const SizedBox(height: 10),
+          if (hasText)
+            Text(
+              text!,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: const Color(0xFF1F3726),
+                fontWeight: FontWeight.w700,
+                height: 1.24,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -650,7 +777,7 @@ class _MessageCanvas extends StatelessWidget {
 
   final double minHeight;
   final EdgeInsets padding;
-  final List<String> messages;
+  final List<_HomeChatMessage> messages;
   final bool includeKeys;
   final bool allowOverflow;
 
@@ -690,7 +817,7 @@ class _MessageCanvas extends StatelessWidget {
 class _MessageColumn extends StatelessWidget {
   const _MessageColumn({required this.messages, required this.includeKeys});
 
-  final List<String> messages;
+  final List<_HomeChatMessage> messages;
   final bool includeKeys;
 
   @override
@@ -704,7 +831,8 @@ class _MessageColumn extends StatelessWidget {
             key: includeKeys
                 ? ValueKey<String>('home-user-bubble-$index')
                 : null,
-            text: messages[index],
+            text: messages[index].text,
+            imagePath: messages[index].imagePath,
           ),
           if (index != messages.length - 1)
             const SizedBox(height: _HomeScreenState._messageSpacing),
@@ -712,4 +840,147 @@ class _MessageColumn extends StatelessWidget {
       ],
     );
   }
+}
+
+class _HomePendingAttachmentPreview extends StatelessWidget {
+  const _HomePendingAttachmentPreview({
+    required this.attachment,
+    required this.onRemove,
+  });
+
+  final XFile attachment;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).chat;
+
+    return Container(
+      key: const ValueKey<String>('home-chat-pending-preview'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: palette.composerShell.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: palette.composerIcon.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          _HomePendingAttachmentThumbnail(path: attachment.path),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              attachment.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: palette.composerText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey<String>('home-chat-pending-preview-remove'),
+            onPressed: onRemove,
+            tooltip: '添付を外す',
+            icon: const Icon(Icons.close_rounded),
+            color: palette.composerIcon,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomePendingAttachmentThumbnail extends StatelessWidget {
+  const _HomePendingAttachmentThumbnail({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(path);
+    final hasFile = file.existsSync();
+    final palette = AppearanceScope.paletteOf(context).chat;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 68,
+        height: 68,
+        color: palette.composerFieldFill,
+        child: hasFile
+            ? Image.file(file, fit: BoxFit.cover)
+            : Icon(Icons.image_outlined, color: palette.composerIcon),
+      ),
+    );
+  }
+}
+
+class _HomeChatImageAttachment extends StatelessWidget {
+  const _HomeChatImageAttachment({required this.imagePath, this.imageKey});
+
+  final String imagePath;
+  final Key? imageKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(imagePath);
+    final hasFile = file.existsSync();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        key: imageKey,
+        width: 188,
+        height: 188,
+        color: const Color(0xFFBFE3B4).withValues(alpha: 0.42),
+        child: hasFile
+            ? Image.file(file, fit: BoxFit.cover)
+            : _MissingHomeChatImagePlaceholder(imagePath: imagePath),
+      ),
+    );
+  }
+}
+
+class _MissingHomeChatImagePlaceholder extends StatelessWidget {
+  const _MissingHomeChatImagePlaceholder({required this.imagePath});
+
+  final String imagePath;
+
+  @override
+  Widget build(BuildContext context) {
+    final filename = imagePath.split(RegExp(r'[\\/]')).last;
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.image_outlined, size: 42, color: Color(0xFF35683E)),
+          const SizedBox(height: 10),
+          Text(
+            filename,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF1F3726),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeChatMessage {
+  const _HomeChatMessage({this.text, this.imagePath, this.timestamp});
+
+  final String? text;
+  final String? imagePath;
+  final String? timestamp;
 }

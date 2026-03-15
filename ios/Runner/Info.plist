@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Roomチャットで写真を撮って送るためにカメラを使用します。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Roomチャットで画像を選んで送るために写真ライブラリを使用します。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

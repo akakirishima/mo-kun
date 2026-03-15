@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   testWidgets('renders the Mori card, room stage, and action buttons', (
@@ -147,6 +148,185 @@ void main() {
           .controller!
           .text,
       isEmpty,
+    );
+  });
+
+  testWidgets('shows pending preview after gallery selection', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onSettingsTap: nullHandler,
+            pickImage: (source) async {
+              expect(source, ImageSource.gallery);
+              return XFile('/tmp/home-gallery.png');
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-image')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
+      findsOneWidget,
+    );
+    expect(find.text('home-gallery.png'), findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const ValueKey<String>('chat-input-send')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('shows pending preview after camera selection', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onSettingsTap: nullHandler,
+            pickImage: (source) async {
+              expect(source, ImageSource.camera);
+              return XFile('/tmp/home-camera.png');
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-camera')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
+      findsOneWidget,
+    );
+    expect(find.text('home-camera.png'), findsOneWidget);
+  });
+
+  testWidgets('removes pending preview and disables send again', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onSettingsTap: nullHandler,
+            pickImage: (_) async => XFile('/tmp/removable-home.png'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-image')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-chat-pending-preview-remove')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
+      findsNothing,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const ValueKey<String>('chat-input-send')),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('sends image-only messages in room chat', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onSettingsTap: nullHandler,
+            pickImage: (_) async => XFile('/tmp/home-image-only.png'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-image')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('home-user-bubble-0-image')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('sends image and text as separate room chat messages', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onSettingsTap: nullHandler,
+            pickImage: (_) async => XFile('/tmp/home-image-paired.png'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-image')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('chat-input-message-field')),
+      '画像付きで送るよ',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey<String>('home-message-layer')),
+      const Offset(0, -120),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-user-bubble-0-image')),
+      findsOneWidget,
+    );
+    expect(find.text('画像付きで送るよ'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('home-user-bubble-1')),
+      findsOneWidget,
     );
   });
 
@@ -403,55 +583,67 @@ void main() {
     }
   });
 
-  testWidgets('preserves draft text and sent messages across back navigation', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: HomeScreen(onSettingsTap: nullHandler)),
-      ),
-    );
+  testWidgets(
+    'preserves draft text, attachment, and sent messages across back navigation',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HomeScreen(
+              onSettingsTap: nullHandler,
+              pickImage: (_) async => XFile('/tmp/preserved-home.png'),
+            ),
+          ),
+        ),
+      );
 
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('chat-input-message-field')),
-      'sent message',
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('chat-input-message-field')),
+        'sent message',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('chat-input-message-field')),
-      'draft text',
-    );
-    await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('chat-input-message-field')),
+        'draft text',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('chat-input-image')));
+      await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-chat-back-button')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey<String>('home-chat-input-bar')),
-      findsNothing,
-    );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('home-chat-back-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey<String>('home-chat-input-bar')),
+        findsNothing,
+      );
 
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('sent message'), findsOneWidget);
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const ValueKey<String>('chat-input-message-field')),
-          )
-          .controller!
-          .text,
-      'draft text',
-    );
-  });
+      expect(find.text('sent message'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('home-chat-pending-preview')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey<String>('chat-input-message-field')),
+            )
+            .controller!
+            .text,
+        'draft text',
+      );
+    },
+  );
 
   testWidgets('stays stable on narrow screens', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(320, 690);
