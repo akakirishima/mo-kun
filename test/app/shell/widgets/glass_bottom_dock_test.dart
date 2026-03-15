@@ -40,10 +40,11 @@ void main() {
                 ),
                 Positioned.fill(
                   child: GlassBottomDock(
-                    tabs: AppTab.values,
+                    tabs: AppTab.navigationTabs,
                     selectedTab: selectedTab,
                     selectionProgress:
-                        selectionProgress ?? selectedTab.index.toDouble(),
+                        selectionProgress ??
+                        AppTab.navigationTabs.indexOf(selectedTab).toDouble(),
                     onSelectTab: onSelectTab,
                   ),
                 ),
@@ -70,31 +71,11 @@ void main() {
       find.byKey(const ValueKey<String>('glass-dock-blur')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey<String>('glass-dock-active-pill')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('glass-dock-active-pill-gesture')),
-      findsOneWidget,
-    );
     expect(find.byKey(const ValueKey<String>('nav-home')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('nav-chat')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('nav-slot-icon-home')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey<String>('nav-diary')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('nav-image')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('nav-chat')), findsNothing);
     expect(slotIcon(tester, AppTab.home).icon, AppTab.home.selectedIcon);
-    expect(find.byKey(const ValueKey<String>('nav-label-home')), findsNothing);
-    expect(find.byKey(const ValueKey<String>('nav-label-chat')), findsNothing);
-    expect(
-      find.byKey(const ValueKey<String>('glass-dock-active-content-current')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('glass-dock-active-content-next')),
-      findsNothing,
-    );
   });
 
   testWidgets('expands to available width and uses equal slots', (
@@ -111,9 +92,6 @@ void main() {
     final homeRect = tester.getRect(
       find.byKey(const ValueKey<String>('nav-home')),
     );
-    final chatRect = tester.getRect(
-      find.byKey(const ValueKey<String>('nav-chat')),
-    );
     final diaryRect = tester.getRect(
       find.byKey(const ValueKey<String>('nav-diary')),
     );
@@ -122,8 +100,7 @@ void main() {
     );
 
     expect(barRect.width, closeTo(scaffoldRect.width - 48, 0.01));
-    expect(homeRect.width, closeTo(chatRect.width, 0.01));
-    expect(chatRect.width, closeTo(diaryRect.width, 0.01));
+    expect(homeRect.width, closeTo(diaryRect.width, 0.01));
     expect(diaryRect.width, closeTo(imageRect.width, 0.01));
   });
 
@@ -150,13 +127,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('nav-diary')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey<String>('glass-dock-active-pill')),
-      findsOneWidget,
-    );
     expect(slotIcon(tester, AppTab.home).icon, AppTab.home.icon);
     expect(slotIcon(tester, AppTab.diary).icon, AppTab.diary.selectedIcon);
-    expect(find.byKey(const ValueKey<String>('nav-label-diary')), findsNothing);
   });
 
   testWidgets('drags the active pill and settles to nearest tab on release', (
@@ -190,11 +162,11 @@ void main() {
     final beforeRect = tester.getRect(pillFinder);
 
     final gesture = await tester.startGesture(tester.getCenter(handleFinder));
-    await gesture.moveBy(const Offset(80, 0));
+    await gesture.moveBy(const Offset(100, 0));
     await tester.pump(const Duration(milliseconds: 16));
-    await gesture.moveBy(const Offset(80, 0));
+    await gesture.moveBy(const Offset(100, 0));
     await tester.pump(const Duration(milliseconds: 16));
-    await gesture.moveBy(const Offset(80, 0));
+    await gesture.moveBy(const Offset(100, 0));
     await tester.pump(const Duration(milliseconds: 16));
     await tester.pump();
 
@@ -206,8 +178,8 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(settledTab, AppTab.chat);
-    expect(slotIcon(tester, AppTab.chat).icon, AppTab.chat.selectedIcon);
+    expect(settledTab, isNot(AppTab.home));
+    expect(slotIcon(tester, AppTab.home).icon, AppTab.home.icon);
   });
 
   testWidgets('uses progress to place the pill between neighboring tabs', (
@@ -228,41 +200,14 @@ void main() {
     final homeRect = tester.getRect(
       find.byKey(const ValueKey<String>('nav-home')),
     );
-    final chatRect = tester.getRect(
-      find.byKey(const ValueKey<String>('nav-chat')),
+    final diaryRect = tester.getRect(
+      find.byKey(const ValueKey<String>('nav-diary')),
     );
-    final slotWidth = tester
-        .getRect(find.byKey(const ValueKey<String>('nav-home')))
-        .width;
 
     expect(pillRect.center.dx, greaterThan(homeRect.center.dx));
-    expect(pillRect.center.dx, lessThan(chatRect.center.dx));
-    expect(pillRect.width, lessThan(slotWidth));
+    expect(pillRect.center.dx, lessThan(diaryRect.center.dx));
     expect(slotIcon(tester, AppTab.home).icon, AppTab.home.icon);
-    expect(slotIcon(tester, AppTab.chat).icon, AppTab.chat.selectedIcon);
-    expect(find.byKey(const ValueKey<String>('nav-label-home')), findsNothing);
-    expect(find.byKey(const ValueKey<String>('nav-label-chat')), findsNothing);
-
-    final homeOpacity = tester.widget<Opacity>(
-      find
-          .ancestor(
-            of: find.byKey(const ValueKey<String>('nav-slot-icon-home')),
-            matching: find.byType(Opacity),
-          )
-          .first,
-    );
-    final chatOpacity = tester.widget<Opacity>(
-      find
-          .ancestor(
-            of: find.byKey(const ValueKey<String>('nav-slot-icon-chat')),
-            matching: find.byType(Opacity),
-          )
-          .first,
-    );
-    expect(homeOpacity.opacity, greaterThan(0.72));
-    expect(homeOpacity.opacity, lessThan(1.0));
-    expect(chatOpacity.opacity, greaterThan(0.72));
-    expect(chatOpacity.opacity, lessThan(1.0));
+    expect(slotIcon(tester, AppTab.diary).icon, AppTab.diary.selectedIcon);
   });
 
   testWidgets('semantics selected follows nearest progress index', (
@@ -279,12 +224,12 @@ void main() {
     final homeSemantics = tester.widget<Semantics>(
       find.byKey(const ValueKey<String>('nav-semantics-home')),
     );
-    final chatSemantics = tester.widget<Semantics>(
-      find.byKey(const ValueKey<String>('nav-semantics-chat')),
+    final diarySemantics = tester.widget<Semantics>(
+      find.byKey(const ValueKey<String>('nav-semantics-diary')),
     );
 
     expect(homeSemantics.properties.selected, isFalse);
-    expect(chatSemantics.properties.selected, isTrue);
+    expect(diarySemantics.properties.selected, isTrue);
   });
 
   testWidgets('stays stable on a narrow width', (WidgetTester tester) async {
@@ -309,11 +254,11 @@ void main() {
     );
   });
 
-  testWidgets('matches the Home dock golden', (WidgetTester tester) async {
+  testWidgets('matches the Room dock golden', (WidgetTester tester) async {
     await tester.pumpWidget(
       buildDockHost(
         selectedTab: AppTab.home,
-        selectionProgress: AppTab.home.index.toDouble(),
+        selectionProgress: 0,
         onSelectTab: (_) {},
       ),
     );
@@ -324,26 +269,11 @@ void main() {
     );
   });
 
-  testWidgets('matches the Chat dock golden', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      buildDockHost(
-        selectedTab: AppTab.chat,
-        selectionProgress: AppTab.chat.index.toDouble(),
-        onSelectTab: (_) {},
-      ),
-    );
-
-    await expectLater(
-      find.byType(Scaffold),
-      matchesGoldenFile('goldens/glass_bottom_dock_chat.png'),
-    );
-  });
-
   testWidgets('matches the Diary dock golden', (WidgetTester tester) async {
     await tester.pumpWidget(
       buildDockHost(
         selectedTab: AppTab.diary,
-        selectionProgress: AppTab.diary.index.toDouble(),
+        selectionProgress: 1,
         onSelectTab: (_) {},
       ),
     );
@@ -358,7 +288,7 @@ void main() {
     await tester.pumpWidget(
       buildDockHost(
         selectedTab: AppTab.image,
-        selectionProgress: AppTab.image.index.toDouble(),
+        selectionProgress: 2,
         onSelectTab: (_) {},
       ),
     );

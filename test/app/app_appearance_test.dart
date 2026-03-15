@@ -55,16 +55,22 @@ void main() {
   });
 
   testWidgets(
-    'default blossom preset is applied across chat diary image and settings',
+    'default blossom preset is applied across room diary image and settings',
     (WidgetTester tester) async {
       await tester.pumpWidget(const App());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey<String>('nav-chat')));
-      await tester.pumpAndSettle();
       expect(
-        backgroundGradient(tester, 'chat-background').colors.first,
-        const Color(0xFFFFDCEB),
+        backgroundGradient(tester, 'home-background').colors.first,
+        const Color(0xFFFFE3EE),
+      );
+      expect(
+        find.byKey(const ValueKey<String>('home-action-chat')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('home-chat-input-bar')),
+        findsNothing,
       );
 
       await tester.tap(find.byKey(const ValueKey<String>('nav-diary')));
@@ -189,12 +195,9 @@ void main() {
       find.byKey(const ValueKey<String>('settings-back-button')),
     );
     await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('nav-chat')));
-    await tester.pumpAndSettle();
     expect(
-      backgroundGradient(tester, 'chat-background').colors.first,
-      const Color(0xFFD8ECD9),
+      backgroundGradient(tester, 'home-background').colors.first,
+      const Color(0xFFE5F3E8),
     );
 
     await tester.tap(find.byKey(const ValueKey<String>('nav-diary')));

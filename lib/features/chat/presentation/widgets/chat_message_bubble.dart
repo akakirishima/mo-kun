@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
     super.key,
-    required this.text,
+    this.text,
+    this.imagePath,
+    this.imageKey,
     this.isCurrentUser = false,
     this.showAvatar = false,
     this.senderName,
@@ -13,7 +17,9 @@ class ChatMessageBubble extends StatelessWidget {
     this.alignmentKey,
     this.avatarKey,
   });
-  final String text;
+  final String? text;
+  final String? imagePath;
+  final Key? imageKey;
   final bool isCurrentUser;
   final bool showAvatar;
   final String? senderName;
@@ -25,9 +31,14 @@ class ChatMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).chat;
+    final hasImage = imagePath != null && imagePath!.isNotEmpty;
+    final hasText = text != null && text!.isNotEmpty;
     final bubble = Container(
       constraints: const BoxConstraints(maxWidth: 260),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      padding: EdgeInsets.symmetric(
+        horizontal: hasImage ? 8 : 14,
+        vertical: hasImage ? 8 : 11,
+      ),
       decoration: BoxDecoration(
         color: isCurrentUser
             ? palette.userBubbleFill
@@ -46,12 +57,26 @@ class ChatMessageBubble extends StatelessWidget {
           ),
         ],
       ),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-          color: isCurrentUser ? palette.userText : palette.characterText,
-          height: 1.35,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hasImage)
+            _ChatImageAttachment(
+              key: imageKey,
+              imagePath: imagePath!,
+              isCurrentUser: isCurrentUser,
+            ),
+          if (hasImage && hasText) const SizedBox(height: 10),
+          if (hasText)
+            Text(
+              text!,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: isCurrentUser ? palette.userText : palette.characterText,
+                height: 1.35,
+              ),
+            ),
+        ],
       ),
     );
 
@@ -171,6 +196,79 @@ class _CharacterAvatar extends StatelessWidget {
           color: palette.avatarText,
           fontWeight: FontWeight.w800,
         ),
+      ),
+    );
+  }
+}
+
+class _ChatImageAttachment extends StatelessWidget {
+  const _ChatImageAttachment({
+    super.key,
+    required this.imagePath,
+    required this.isCurrentUser,
+  });
+
+  final String imagePath;
+  final bool isCurrentUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).chat;
+    final file = File(imagePath);
+    final hasFile = file.existsSync();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 188,
+        height: 188,
+        color: isCurrentUser
+            ? palette.userBubbleFill.withValues(alpha: 0.42)
+            : palette.characterBubbleFill.withValues(alpha: 0.42),
+        child: hasFile
+            ? Image.file(file, fit: BoxFit.cover)
+            : _MissingChatImagePlaceholder(
+                imagePath: imagePath,
+                accentColor: isCurrentUser
+                    ? palette.userText
+                    : palette.metaText,
+              ),
+      ),
+    );
+  }
+}
+
+class _MissingChatImagePlaceholder extends StatelessWidget {
+  const _MissingChatImagePlaceholder({
+    required this.imagePath,
+    required this.accentColor,
+  });
+
+  final String imagePath;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final filename = imagePath.split(RegExp(r'[\\/]')).last;
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.image_outlined, size: 42, color: accentColor),
+          const SizedBox(height: 10),
+          Text(
+            filename,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: accentColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

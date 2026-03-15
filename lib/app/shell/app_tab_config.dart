@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_tab.dart';
-import 'package:gdgoc_2026_prototype/features/chat/presentation/chat_screen.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/diary_screen.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
 import 'package:gdgoc_2026_prototype/features/image/presentation/image_screen.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/settings_screen.dart';
-
-typedef AppTabSelection = void Function(AppTab tab);
 
 class AppTabConfig {
   AppTabConfig({required this.tab, required this.screen});
@@ -31,9 +28,7 @@ class AppTabConfig {
 
 List<AppTabConfig> buildAppTabConfigs({
   required BuildContext context,
-  required AppTabSelection onSelectTab,
-  required VoidCallback onStartHomeCall,
-  required String homeTranscriptText,
+  ValueChanged<HomeOverlayMode>? onHomeOverlayModeChanged,
 }) {
   void openSettings() {
     Navigator.of(
@@ -45,16 +40,8 @@ List<AppTabConfig> buildAppTabConfigs({
     AppTabConfig(
       tab: AppTab.home,
       screen: HomeScreen(
-        onStartCallTap: onStartHomeCall,
-        transcriptText: homeTranscriptText,
         onSettingsTap: openSettings,
-      ),
-    ),
-    AppTabConfig(
-      tab: AppTab.chat,
-      screen: ChatScreen(
-        onStartHomeCallTap: onStartHomeCall,
-        onSettingsTap: openSettings,
+        onOverlayModeChanged: onHomeOverlayModeChanged,
       ),
     ),
     AppTabConfig(
