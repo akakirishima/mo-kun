@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_tab.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_tab_config.dart';
 import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
+import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, this.initialTab = AppTab.home});
@@ -13,22 +14,25 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  static const _initialTranscript = 'マスター、今日はどんな日だった？\nここに Mori の文字起こしが残るよ。';
-  static const _activeTranscript = 'うん、ちゃんと聞こえてるよ。\n今日あったことを、ゆっくり聞かせて。';
   static const _pageAnimationDuration = Duration(milliseconds: 280);
+  static const _tabs = AppTab.navigationTabs;
 
   late final PageController _pageController;
   late AppTab _selectedTab;
   late double _pageProgress;
-  late String _homeTranscript;
+  HomeOverlayMode _homeOverlayMode = HomeOverlayMode.none;
+
+  bool get _shouldShowDock =>
+      _selectedTab != AppTab.home || _homeOverlayMode == HomeOverlayMode.none;
 
   @override
   void initState() {
     super.initState();
-    _selectedTab = widget.initialTab;
-    _pageProgress = widget.initialTab.index.toDouble();
-    _homeTranscript = _initialTranscript;
-    _pageController = PageController(initialPage: widget.initialTab.index)
+    _selectedTab = _tabs.contains(widget.initialTab)
+        ? widget.initialTab
+        : AppTab.home;
+    _pageProgress = _tabs.indexOf(_selectedTab).toDouble();
+    _pageController = PageController(initialPage: _tabs.indexOf(_selectedTab))
       ..addListener(_handlePageScroll);
   }
 
@@ -45,7 +49,8 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    final nextProgress = _pageController.page ?? _selectedTab.index.toDouble();
+    final nextProgress =
+        _pageController.page ?? _tabs.indexOf(_selectedTab).toDouble();
     if ((nextProgress - _pageProgress).abs() < 0.0001) {
       return;
     }
@@ -56,7 +61,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _animateToTab(AppTab tab) async {
-    final targetPage = tab.index;
+    final targetPage = _tabs.indexOf(tab);
     final isSettledOnTarget =
         _selectedTab == tab && (_pageProgress - targetPage).abs() < 0.001;
     if (isSettledOnTarget || !_pageController.hasClients) {
@@ -80,38 +85,38 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _handlePageChanged(int index) {
-    final tab = AppTab.values[index];
+    final tab = _tabs[index];
     setState(() {
       _selectedTab = tab;
       _pageProgress = index.toDouble();
     });
   }
 
-  void _startHomeCall() {
-    setState(() {
-      _homeTranscript = _activeTranscript;
-    });
-    _animateToTab(AppTab.home);
-  }
-
   @override
   Widget build(BuildContext context) {
     final configs = buildAppTabConfigs(
       context: context,
-      onSelectTab: _selectTab,
-      onStartHomeCall: _startHomeCall,
-      homeTranscriptText: _homeTranscript,
+      onHomeOverlayModeChanged: (mode) {
+        if (_homeOverlayMode == mode) {
+          return;
+        }
+        setState(() {
+          _homeOverlayMode = mode;
+        });
+      },
     );
     final mediaQuery = MediaQuery.of(context);
     final adjustedMediaQuery = mediaQuery.copyWith(
       padding: mediaQuery.padding.copyWith(
-        bottom:
-            mediaQuery.padding.bottom + GlassBottomDock.reservedBottomSpacing,
+        bottom: _shouldShowDock
+            ? mediaQuery.padding.bottom + GlassBottomDock.reservedBottomSpacing
+            : mediaQuery.padding.bottom,
       ),
       viewPadding: mediaQuery.viewPadding.copyWith(
-        bottom:
-            mediaQuery.viewPadding.bottom +
-            GlassBottomDock.reservedBottomSpacing,
+        bottom: _shouldShowDock
+            ? mediaQuery.viewPadding.bottom +
+                  GlassBottomDock.reservedBottomSpacing
+            : mediaQuery.viewPadding.bottom,
       ),
     );
 
@@ -136,17 +141,18 @@ class _AppShellState extends State<AppShell> {
               ),
             ),
           ),
-          Positioned.fill(
-            child: IgnorePointer(
-              ignoring: false,
-              child: GlassBottomDock(
-                tabs: [for (final config in configs) config.tab],
-                selectedTab: _selectedTab,
-                selectionProgress: _pageProgress,
-                onSelectTab: _selectTab,
+          if (_shouldShowDock)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: false,
+                child: GlassBottomDock(
+                  tabs: _tabs,
+                  selectedTab: _selectedTab,
+                  selectionProgress: _pageProgress,
+                  onSelectTab: _selectTab,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

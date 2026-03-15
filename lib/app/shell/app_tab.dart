@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 enum AppTab {
   home(
-    label: 'Home',
-    semanticLabel: 'Home tab',
+    label: 'Room',
+    semanticLabel: 'Room tab',
     icon: Icons.home_outlined,
     selectedIcon: Icons.home,
-    accentColor: Color(0xFFF2C6D7),
+    accentColor: Color(0xFFF3B4CB),
   ),
   chat(
     label: 'Chat',
@@ -44,13 +44,15 @@ enum AppTab {
   final IconData selectedIcon;
   final Color accentColor;
 
+  static const navigationTabs = [AppTab.home, AppTab.diary, AppTab.image];
+
   static AppTab fromName(String value) {
     final normalized = value.toLowerCase();
-    if (normalized == 'voice' || normalized == 'call') {
-      return AppTab.diary;
+    if (normalized == 'voice' || normalized == 'call' || normalized == 'chat') {
+      return AppTab.home;
     }
 
-    return AppTab.values.firstWhere(
+    return AppTab.navigationTabs.firstWhere(
       (tab) => tab.name == normalized,
       orElse: () => AppTab.home,
     );
