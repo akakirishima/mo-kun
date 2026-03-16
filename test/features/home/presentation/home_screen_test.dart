@@ -219,6 +219,40 @@ void main() {
     expect(find.text('home-camera.png'), findsOneWidget);
   });
 
+  testWidgets('restores a lost attachment into chat mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeScreen(
+            onSettingsTap: nullHandler,
+            retrieveLostData: () async =>
+                LostDataResponse(file: XFile('/tmp/restored-home.png')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-message-layer')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const ValueKey<String>('chat-input-send')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
   testWidgets('removes pending preview and disables send again', (
     WidgetTester tester,
   ) async {

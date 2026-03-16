@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_tab.dart';
@@ -540,18 +541,22 @@ class _DockLayoutMetrics {
     required double selectionProgress,
     required double availableWidth,
   }) {
-    final rowWidth =
-        availableWidth - (GlassBottomDock._dockHorizontalPadding * 2);
+    final rowWidth = math.max(
+      availableWidth - (GlassBottomDock._dockHorizontalPadding * 2),
+      0.0,
+    );
     final totalGap = GlassBottomDock._slotGap * (tabs.length - 1);
-    final slotWidth = (rowWidth - totalGap) / tabs.length;
+    final slotWidth = math.max((rowWidth - totalGap) / tabs.length, 0.0);
     final slotSpan = slotWidth + GlassBottomDock._slotGap;
     final slotWidths = [for (final _ in tabs) slotWidth];
-    final compactPillWidth = (slotWidth - 14)
-        .clamp(
-          GlassBottomDock._compactPillMinWidth,
-          GlassBottomDock._compactPillMaxWidth,
-        )
-        .toDouble();
+    final compactPillWidth = slotWidth <= 0
+        ? 0.0
+        : (slotWidth - 14)
+              .clamp(
+                GlassBottomDock._compactPillMinWidth,
+                GlassBottomDock._compactPillMaxWidth,
+              )
+              .toDouble();
 
     final clampedProgress = selectionProgress.clamp(0.0, tabs.length - 1.0);
     final leadingIndex = clampedProgress.floor();

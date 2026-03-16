@@ -6,12 +6,14 @@ import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/core/theme/app_theme.dart';
 
 class App extends StatefulWidget {
-  const App({super.key});
+  const App({super.key, this.appearanceController});
 
   static const _initialTabName = String.fromEnvironment(
     'INITIAL_TAB',
     defaultValue: 'home',
   );
+
+  final AppearanceController? appearanceController;
 
   @override
   State<App> createState() => _AppState();
@@ -23,7 +25,11 @@ class _AppState extends State<App> {
   @override
   void initState() {
     super.initState();
-    _appearanceController = AppearanceController()..load();
+    _appearanceController =
+        widget.appearanceController ?? AppearanceController();
+    if (widget.appearanceController == null) {
+      _appearanceController.load();
+    }
   }
 
   @override

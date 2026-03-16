@@ -10,6 +10,7 @@ import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_roo
 import 'package:image_picker/image_picker.dart';
 
 typedef HomeChatImagePicker = Future<XFile?> Function(ImageSource source);
+typedef HomeChatLostDataRetriever = Future<LostDataResponse> Function();
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -18,12 +19,14 @@ class HomeScreen extends StatefulWidget {
     this.onOverlayModeChanged,
     this.initialMoriMessage = '今日も会えて嬉しいな。\n一緒にお話ししよ！',
     this.pickImage,
+    this.retrieveLostData,
   });
 
   final VoidCallback onSettingsTap;
   final ValueChanged<HomeOverlayMode>? onOverlayModeChanged;
   final String initialMoriMessage;
   final HomeChatImagePicker? pickImage;
+  final HomeChatLostDataRetriever? retrieveLostData;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -53,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late final ScrollController _messageScrollController;
+  final ImagePicker _imagePicker = ImagePicker();
   final List<_HomeChatMessage> _messages = <_HomeChatMessage>[];
   String _draftText = '';
   XFile? _pendingAttachment;
@@ -70,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _controller = TextEditingController()..addListener(_handleInputChanged);
     _focusNode = FocusNode();
     _messageScrollController = ScrollController();
+    _restoreLostAttachmentIfNeeded();
   }
 
   @override
@@ -113,7 +118,48 @@ class _HomeScreenState extends State<HomeScreen> {
       return picker(source);
     }
 
-    return ImagePicker().pickImage(source: source, imageQuality: 85);
+    return _imagePicker.pickImage(source: source, imageQuality: 85);
+  }
+
+  Future<LostDataResponse> _retrieveLostData() {
+    final retriever = widget.retrieveLostData;
+    if (retriever != null) {
+      return retriever();
+    }
+
+    return _imagePicker.retrieveLostData();
+  }
+
+  Future<void> _restoreLostAttachmentIfNeeded() async {
+    final shouldAttemptRestore =
+        widget.retrieveLostData != null ||
+        (widget.pickImage == null && Platform.isAndroid);
+    if (!shouldAttemptRestore) {
+      return;
+    }
+
+    final response = await _retrieveLostData();
+    if (!mounted || response.isEmpty) {
+      return;
+    }
+
+    final files = response.files;
+    final restoredFile = files != null && files.isNotEmpty
+        ? files.first
+        : response.file;
+    if (restoredFile == null) {
+      return;
+    }
+
+    setState(() {
+      _pendingAttachment = restoredFile;
+    });
+    _setOverlayMode(HomeOverlayMode.chat);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   Future<void> _handleAttachmentTap(ImageSource source) async {
@@ -136,12 +182,11 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       _focusNode.requestFocus();
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+        });
       }
-      setState(() {
-        _isPickingImage = false;
-      });
     }
   }
 
@@ -226,11 +271,16 @@ class _HomeScreenState extends State<HomeScreen> {
         bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final maxStageWidth =
-                constraints.maxWidth - (_stageHorizontalPadding * 2);
-            final stageHeight = math.min(
-              maxStageWidth / 0.96,
-              constraints.maxHeight * 0.44,
+            final maxStageWidth = math.max(
+              constraints.maxWidth - (_stageHorizontalPadding * 2),
+              0.0,
+            );
+            final stageHeight = math.max(
+              math.min(
+                maxStageWidth / 0.96,
+                math.max(constraints.maxHeight * 0.44, 0.0),
+              ),
+              0.0,
             );
             final stageWidth = stageHeight * 0.96;
             final stageShell = SizedBox(
@@ -265,11 +315,34 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, stackConstraints) {
-                        final messageLayerTop = stageHeight * 0.52;
                         final messageLayerBottom =
                             _composerHeight + composerBottom + 12;
+                        final availableStageHeight = math.max(
+                          stackConstraints.maxHeight - messageLayerBottom,
+                          0.0,
+                        );
+                        final chatStageHeight = math.min(
+                          stageHeight,
+                          availableStageHeight,
+                        );
+                        final chatStageWidth = chatStageHeight * 0.96;
+                        final messageLayerTop = chatStageHeight * 0.52;
+                        final messageLayerHeight = math.max(
+                          stackConstraints.maxHeight -
+                              messageLayerTop -
+                              messageLayerBottom,
+                          1.0,
+                        );
                         final previewBottom =
                             composerBottom + _composerHeight + 10;
+                        final chatStageShell = SizedBox(
+                          key: const ValueKey<String>('home-room-stage-shell'),
+                          width: chatStageWidth,
+                          height: chatStageHeight,
+                          child: const HomeRoomStage(
+                            key: ValueKey<String>('home-room-stage'),
+                          ),
+                        );
 
                         return Stack(
                           clipBehavior: Clip.none,
@@ -278,46 +351,43 @@ class _HomeScreenState extends State<HomeScreen> {
                               top: 0,
                               left: 0,
                               right: 0,
-                              child: Center(child: stageShell),
+                              child: Center(child: chatStageShell),
                             ),
                             Positioned(
                               top: messageLayerTop,
                               left: 24,
                               right: 24,
-                              bottom: messageLayerBottom,
-                              child: ClipRect(
-                                child: ShaderMask(
-                                  shaderCallback: (bounds) {
-                                    return const LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Color(0x00FFFFFF),
-                                        Color(0x77FFFFFF),
-                                        Color(0xF2FFFFFF),
-                                        Color(0xFFFFFFFF),
-                                      ],
-                                      stops: [0, 0.12, 0.24, 1],
-                                    ).createShader(bounds);
-                                  },
-                                  blendMode: BlendMode.dstIn,
-                                  child: SingleChildScrollView(
-                                    key: const ValueKey<String>(
-                                      'home-message-layer',
-                                    ),
-                                    controller: _messageScrollController,
-                                    physics: const BouncingScrollPhysics(),
-                                    child: _MessageCanvas(
-                                      minHeight: math.max(
-                                        stackConstraints.maxHeight -
-                                            messageLayerTop -
-                                            messageLayerBottom,
-                                        1.0,
+                              child: SizedBox(
+                                height: messageLayerHeight,
+                                child: ClipRect(
+                                  child: ShaderMask(
+                                    shaderCallback: (bounds) {
+                                      return const LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Color(0x00FFFFFF),
+                                          Color(0x77FFFFFF),
+                                          Color(0xF2FFFFFF),
+                                          Color(0xFFFFFFFF),
+                                        ],
+                                        stops: [0, 0.12, 0.24, 1],
+                                      ).createShader(bounds);
+                                    },
+                                    blendMode: BlendMode.dstIn,
+                                    child: SingleChildScrollView(
+                                      key: const ValueKey<String>(
+                                        'home-message-layer',
                                       ),
-                                      padding: _messageLayerPadding,
-                                      messages: _messages,
-                                      includeKeys: true,
-                                      allowOverflow: false,
+                                      controller: _messageScrollController,
+                                      physics: const BouncingScrollPhysics(),
+                                      child: _MessageCanvas(
+                                        minHeight: messageLayerHeight,
+                                        padding: _messageLayerPadding,
+                                        messages: _messages,
+                                        includeKeys: true,
+                                        allowOverflow: false,
+                                      ),
                                     ),
                                   ),
                                 ),
