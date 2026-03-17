@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
@@ -34,12 +35,28 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
   }
 
   Future<void> _openDaySelector(DiaryMonthBook book) async {
-    final selectedPage = await showDiaryDaySelectorSheet(
+    final result = await showDiaryDaySelectorSheet(
       context: context,
       book: book,
       selectedIndex: _currentPage,
     );
-    if (!mounted || selectedPage == null || selectedPage == _currentPage) {
+    if (!mounted || result == null) {
+      return;
+    }
+
+    switch (result.action) {
+      case DiarySelectorAction.previousMonth:
+        _showPreviousMonth();
+        return;
+      case DiarySelectorAction.nextMonth:
+        _showNextMonth();
+        return;
+      case null:
+        break;
+    }
+
+    final selectedPage = result.pageIndex;
+    if (selectedPage == null || selectedPage == _currentPage) {
       return;
     }
     await _pageController.animateToPage(
@@ -49,14 +66,51 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
     );
   }
 
+  void _setMonth(DateTime month) {
+    ref.read(diaryMonthNavigationControllerProvider).setMonth(month);
+    _pageController.jumpToPage(0);
+    if (_currentPage != 0) {
+      setState(() {
+        _currentPage = 0;
+      });
+    }
+  }
+
+  void _showPreviousMonth() {
+    final selectedMonth = ref.read(selectedDiaryMonthProvider);
+    _setMonth(previousMonth(selectedMonth));
+  }
+
+  void _showNextMonth() {
+    final navigation = ref.read(diaryMonthNavigationControllerProvider);
+    if (!navigation.canShowNextMonth) {
+      return;
+    }
+    _setMonth(nextMonth(navigation.selectedMonth));
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).diary;
+    final appDate = ref.watch(currentAppDateProvider);
+    final selectedMonth = ref.watch(selectedDiaryMonthProvider);
     final session = ref.watch(sessionProvider).valueOrNull;
-    final summary = session == null
-        ? null
-        : ref.watch(dailySummaryProvider(session)).valueOrNull;
-    final book = _buildDiaryBook(summary);
+    final summaries = session == null
+        ? const <DailySummary>[]
+        : (ref.watch(monthlyDailySummariesProvider(session)).valueOrNull ??
+              const <DailySummary>[]);
+    final images = session == null
+        ? const <CharacterImageVersion>[]
+        : (ref.watch(diaryImageHistoryProvider(session)).valueOrNull ??
+              const <CharacterImageVersion>[]);
+    final currentMonth = ref.watch(currentDiaryMonthProvider);
+    final book = _buildDiaryBook(
+      appDate: appDate,
+      selectedMonth: selectedMonth,
+      currentMonth: currentMonth,
+      summaries: summaries,
+      images: images,
+    );
 
     return DecoratedBox(
       key: const ValueKey<String>('diary-background'),
@@ -89,6 +143,8 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                   dayPageBottomClearance:
                       GlassBottomDock.reservedBottomSpacing - 12,
                   onOpenSelector: () => _openDaySelector(book),
+                  onShowPreviousMonth: _showPreviousMonth,
+                  onShowNextMonth: _showNextMonth,
                   onSettingsTap: widget.onSettingsTap,
                   onPageChanged: (index) {
                     if (_currentPage == index) {
@@ -108,48 +164,129 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
   }
 }
 
-DiaryMonthBook _buildDiaryBook(DailySummary? summary) {
-  final now = DateTime.now();
-  final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
-  final entries = List<DiaryDayEntry>.generate(daysInMonth, (index) {
-    final date = DateTime(now.year, now.month, index + 1);
-    final isCurrentDay = date.day == now.day;
-    final body = !isCurrentDay || summary == null
-        ? 'まだ今日の会話要約はありません。Homeで報告すると、ここに1日のまとめが並びます。'
-        : [
-            summary.title,
-            '',
-            '気分: ${summary.mood}',
-            '',
-            'できたこと',
-            if (summary.doneThings.isEmpty)
-              '・まだ記録がありません'
-            else
-              ...summary.doneThings.map((item) => '・$item'),
-            '',
-            '振り返り',
-            summary.reflection,
-            '',
-            '明日のひとこと',
-            summary.tomorrowNote,
-          ].join('\n');
+DiaryMonthBook _buildDiaryBook({
+  required DateTime appDate,
+  required DateTime selectedMonth,
+  required DateTime currentMonth,
+  required List<DailySummary> summaries,
+  required List<CharacterImageVersion> images,
+}) {
+  final normalizedMonth = appMonthStart(selectedMonth);
+  final sortedSummaries = [...summaries]
+    ..sort((left, right) => left.dateKey.compareTo(right.dateKey));
+  final latestSummary = sortedSummaries.isEmpty ? null : sortedSummaries.last;
+  final sortedImages = [...images]
+    ..sort((left, right) => left.generatedAt.compareTo(right.generatedAt));
+
+  final entries = sortedSummaries.map((summary) {
+    final date = parseDateKey(summary.dateKey) ??
+        DateTime(normalizedMonth.year, normalizedMonth.month, 1);
+    final isCurrentDay = _isSameDay(date, appDate);
+    final image = _resolveImageForDate(sortedImages, summary.dateKey);
+
+    final body = [
+      summary.title,
+      '',
+      '気分: ${summary.mood}',
+      '',
+      'できたこと',
+      if (summary.doneThings.isEmpty)
+        '・まだ記録がありません'
+      else
+        ...summary.doneThings.map((item) => '・$item'),
+      '',
+      '振り返り',
+      summary.reflection,
+      '',
+      '明日のひとこと',
+      summary.tomorrowNote,
+    ].join('\n');
     return DiaryDayEntry(
       dayNumber: date.day,
       weekdayLabel: _weekdayLabel(date.weekday),
       body: body,
-      illustrationPalette: isCurrentDay
-          ? const [Color(0xFFEFC7A9), Color(0xFFDE8F73), Color(0xFFF9E4A6)]
-          : const [Color(0xFFF4D8C5), Color(0xFFE7BFA5), Color(0xFFF8E8B2)],
-      highlightLabel: isCurrentDay && summary != null ? summary.title : '準備中',
+      illustrationPalette: _illustrationPaletteForEntry(
+        isCurrentDay: isCurrentDay,
+        hasSummary: true,
+        isFutureDay: false,
+      ),
+      highlightLabel: summary.title,
+      imageUrl: image?.imageUrl,
     );
-  });
+  }).toList(growable: false);
 
   return DiaryMonthBook(
-    monthLabel: '${now.month}月',
+    monthLabel: '${normalizedMonth.month}月',
     coverTitle: 'AI Diary',
-    coverSubtitle: summary?.title ?? '今日の会話から1日を自動でまとめます',
+    coverSubtitle: _coverSubtitle(
+      appDate: normalizedMonth,
+      latestSummary: latestSummary,
+    ),
+    recordedDaysCount: summaries.length,
+    canShowPreviousMonth: true,
+    canShowNextMonth: normalizedMonth.isBefore(appMonthStart(currentMonth)),
     entries: entries,
   );
+}
+
+List<Color> _illustrationPaletteForEntry({
+  required bool isCurrentDay,
+  required bool hasSummary,
+  required bool isFutureDay,
+}) {
+  if (isCurrentDay && hasSummary) {
+    return const [Color(0xFFEFC7A9), Color(0xFFDE8F73), Color(0xFFF9E4A6)];
+  }
+  if (hasSummary) {
+    return const [Color(0xFFEBD6C6), Color(0xFFD69A80), Color(0xFFF6E0A4)];
+  }
+  if (isFutureDay) {
+    return const [Color(0xFFF4EBDD), Color(0xFFEADCC8), Color(0xFFF9F0CF)];
+  }
+  return const [Color(0xFFF4D8C5), Color(0xFFE7BFA5), Color(0xFFF8E8B2)];
+}
+
+String _coverSubtitle({
+  required DateTime appDate,
+  required DailySummary? latestSummary,
+}) {
+  if (latestSummary == null) {
+    return '会話から1日ごとの記録を少しずつためていきます';
+  }
+  final latestDate = parseDateKey(latestSummary.dateKey);
+  if (latestDate == null || latestDate.month == appDate.month) {
+    return latestSummary.title;
+  }
+  return '${latestDate.month}月${latestDate.day}日までの記録を見返せます';
+}
+
+bool _isSameDay(DateTime left, DateTime right) {
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+}
+
+String _dateKey(DateTime date) {
+  return buildAppDateKeyFromDateTime(date);
+}
+
+CharacterImageVersion? _resolveImageForDate(
+  List<CharacterImageVersion> images,
+  String dateKey,
+) {
+  CharacterImageVersion? candidate;
+  for (final image in images) {
+    final imageDateKey =
+        image.dateKey ?? buildAppDateKeyFromDateTime(image.generatedAt);
+    if (imageDateKey.compareTo(dateKey) > 0) {
+      break;
+    }
+    if ((image.imageUrl ?? '').isEmpty) {
+      continue;
+    }
+    candidate = image;
+  }
+  return candidate;
 }
 
 String _weekdayLabel(int weekday) {

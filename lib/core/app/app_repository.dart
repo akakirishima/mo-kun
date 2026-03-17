@@ -15,18 +15,25 @@ abstract class AppRepository {
     required String clientMessageId,
   });
 
-  Future<void> regenerateCharacterImage({
-    String? title,
-    String? reportText,
-  });
+  Future<void> regenerateCharacterImage({String? title, String? reportText});
 
   Stream<CharacterSnapshot?> watchCharacter(String characterId);
 
   Stream<List<CharacterImageVersion>> watchImageHistory(String characterId);
 
+  Stream<List<CharacterImageVersion>> watchDiaryImageHistory({
+    required String characterId,
+    required DateTime month,
+  });
+
   Stream<DailySummary?> watchDailySummary({
     required String userId,
     required String dateKey,
+  });
+
+  Stream<List<DailySummary>> watchMonthlyDailySummaries({
+    required String userId,
+    required DateTime month,
   });
 
   Future<void> dispose() async {}

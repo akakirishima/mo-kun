@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/app/bootstrap/app_bootstrap_screen.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
@@ -106,16 +107,12 @@ AppRepository _buildPreviewRepository() {
         promptExcerpt: '筋トレを頑張ったので少し引き締まった体つき',
         status: CharacterImageStatus.ready,
         generatedAt: now.subtract(const Duration(hours: 6)),
+        dateKey: _dateKey(now.subtract(const Duration(hours: 6))),
       ),
     ],
   );
 }
 
 String _dateKey(DateTime dateTime) {
-  final adjusted = dateTime.hour < 3
-      ? dateTime.subtract(const Duration(days: 1))
-      : dateTime;
-  final month = adjusted.month.toString().padLeft(2, '0');
-  final day = adjusted.day.toString().padLeft(2, '0');
-  return '${adjusted.year}-$month-$day';
+  return buildAppDateKeyFromDateTime(dateTime);
 }

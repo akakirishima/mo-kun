@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+const _diaryFontFamily = 'NotoSerifJP';
+
 class DiaryVerticalText extends StatelessWidget {
   const DiaryVerticalText({
     super.key,
@@ -84,7 +86,8 @@ class DiaryVerticalText extends StatelessWidget {
             child: Directionality(
               textDirection: TextDirection.rtl,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (var i = 0; i < columns.length; i += 1)
@@ -205,6 +208,7 @@ class _VerticalGlyph extends StatelessWidget {
             color: color,
             fontSize: fontSize,
             fontWeight: fontWeight,
+            fontFamily: _diaryFontFamily,
             height: 1,
           ),
         ),

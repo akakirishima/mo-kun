@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import { AppRepository } from "../repositories/app-repository.js";
 import { AiService } from "./ai-service.js";
 import { ImageDraft, StoredDailySummary } from "../types.js";
-
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
+import { buildAppDateKey } from "./app-date.js";
 
 export class CharacterImageService {
   constructor(
@@ -25,6 +24,11 @@ export class CharacterImageService {
     }
 
     const now = params.now ?? new Date();
+    const targetDateKey = params.todaySummary?.dateKey ?? buildAppDateKey(now);
+    const dayMessages = await this.repository.getMessagesForDateKey(
+      `${params.userId}_main`,
+      targetDateKey,
+    );
     const recentSummaries = await this.repository.listRecentDailySummaries(
       params.userId,
       7,
@@ -38,21 +42,28 @@ export class CharacterImageService {
     });
 
     const todaySummaryText = await this.resolveTodaySummaryText({
-      userId: params.userId,
       todaySummary: params.todaySummary,
       recentSummaries,
       now,
+      dayMessages,
+    });
+    const sceneItems = await this.aiService.generateRoomSceneItems({
+      todaySummary: todaySummaryText,
+      messages: dayMessages,
+      optionalNote: params.optionalNote,
     });
     const prompt = this.aiService.buildCharacterImagePrompt({
       characterName: String(character.name ?? "Mori"),
       visualPromptBase: String(character.visualPromptBase ?? ""),
       visualEvolutionMemo,
       todaySummary: todaySummaryText,
+      sceneItems,
       optionalNote: params.optionalNote,
     });
     const promptExcerpt = buildPromptExcerpt({
       visualEvolutionMemo,
       todaySummary: todaySummaryText,
+      sceneItems,
       optionalNote: params.optionalNote,
     });
 
@@ -67,6 +78,7 @@ export class CharacterImageService {
         title: params.title,
         promptExcerpt,
         imageUrl,
+        dateKey: targetDateKey,
       };
 
       await this.repository.saveCharacterImage({
@@ -74,6 +86,7 @@ export class CharacterImageService {
         image,
         status: "ready",
         visualEvolutionMemo,
+        dateKey: targetDateKey,
       });
       return image;
     } catch (error) {
@@ -83,19 +96,21 @@ export class CharacterImageService {
           title: params.title,
           promptExcerpt,
           imageUrl: null,
+          dateKey: targetDateKey,
         },
         status: "failed",
         visualEvolutionMemo,
+        dateKey: targetDateKey,
       });
       throw error;
     }
   }
 
   private async resolveTodaySummaryText(params: {
-    userId: string;
     recentSummaries: StoredDailySummary[];
     todaySummary?: StoredDailySummary;
     now: Date;
+    dayMessages: Array<{ role?: string; text?: string }>;
   }) {
     if (params.todaySummary) {
       return summarizeDailySummaryForImage(params.todaySummary);
@@ -109,17 +124,13 @@ export class CharacterImageService {
       return summarizeDailySummaryForImage(matchingSummary);
     }
 
-    const messages = await this.repository.getRecentMessages(
-      `${params.userId}_main`,
-      20,
-    );
-    if (messages.length === 0) {
+    if (params.dayMessages.length === 0) {
       return "今日の報告はまだ少なく、始まりの雰囲気を保っている。";
     }
 
-    const fallbackSummary = this.aiService.generateDailySummary({
+    const fallbackSummary = await this.aiService.generateDailySummary({
       dateKey: targetDateKey,
-      messages,
+      messages: params.dayMessages,
     });
     return summarizeDailySummaryForImage(fallbackSummary);
   }
@@ -177,14 +188,6 @@ export class CloudStorageImageStore implements ImageStore {
   }
 }
 
-export function buildAppDateKey(now: Date): string {
-  const adjusted = now.getHours() < 3 ? new Date(now.getTime() - DAY_IN_MS) : now;
-  const year = adjusted.getFullYear();
-  const month = `${adjusted.getMonth() + 1}`.padStart(2, "0");
-  const day = `${adjusted.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export function summarizeDailySummaryForImage(summary: StoredDailySummary): string {
   const doneThings = summary.doneThings.length > 0
     ? summary.doneThings.join(" / ")
@@ -202,11 +205,15 @@ export function summarizeDailySummaryForImage(summary: StoredDailySummary): stri
 export function buildPromptExcerpt(params: {
   visualEvolutionMemo: string;
   todaySummary: string;
+  sceneItems: string[];
   optionalNote?: string;
 }): string {
   const excerpt = [
     `growth=${params.visualEvolutionMemo.trim()}`,
     `today=${params.todaySummary.replace(/\n/g, " ").trim()}`,
+    params.sceneItems.length > 0
+      ? `roomItems=${params.sceneItems.join(", ")}`
+      : null,
     params.optionalNote?.trim()
       ? `note=${params.optionalNote.trim()}`
       : null,

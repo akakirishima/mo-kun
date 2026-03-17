@@ -8,6 +8,7 @@ import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/features/image/presentation/image_screen.dart';
 
 import '../../../test_support/fake_app.dart';
+import '../../../test_support/mock_network_images.dart';
 
 class _FakeImageUrlResolver extends ImageUrlResolver {
   _FakeImageUrlResolver(this.mapping);
@@ -64,47 +65,85 @@ FakeAppRepository _buildRepository({required String latestImageUrl}) {
   );
 }
 
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  int maxPumps = 20,
+}) async {
+  for (var index = 0; index < maxPumps; index += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (finder.evaluate().isNotEmpty) {
+      return;
+    }
+  }
+}
+
 void main() {
   testWidgets('renders the latest image status and history list', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        repository: _buildRepository(
-          latestImageUrl: 'https://example.com/generated/latest.png',
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(
+        wrapWithTestApp(
+          repository: _buildRepository(
+            latestImageUrl: 'https://example.com/generated/latest.png',
+          ),
+          child: ImageScreen(onSettingsTap: () {}),
         ),
-        child: ImageScreen(onSettingsTap: () {}),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pump();
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('image-latest-preview')),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('image-history-preview-0')),
+      );
 
-    expect(find.byKey(const ValueKey<String>('image-screen')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('image-latest-card')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('image-latest-status')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('image-latest-preview')),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey<String>('image-latest-status')))
-          .data,
-      '更新済み',
-    );
-    expect(
-      find.byKey(const ValueKey<String>('image-history-header')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('image-history-item-0')),
-      findsOneWidget,
-    );
+      expect(find.byKey(const ValueKey<String>('image-screen')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('image-latest-card')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('image-latest-status')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('image-latest-preview')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey<String>('image-latest-status')))
+            .data,
+        '更新済み',
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('image-history-header')),
+        240,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey<String>('image-history-header')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('image-history-item-0')),
+        findsOneWidget,
+      );
+      final latestImage = tester.widget<Image>(
+        find.byKey(const ValueKey<String>('image-latest-preview')),
+      );
+      expect(latestImage.fit, BoxFit.contain);
+
+      final latestMediaSize = tester.getSize(
+        find.byKey(const ValueKey<String>('image-latest-media')),
+      );
+      expect(latestMediaSize.width / latestMediaSize.height, closeTo(1.6, 0.05));
+    });
   });
 
   testWidgets('resolves gs urls before rendering the latest image', (
@@ -113,23 +152,30 @@ void main() {
     const rawUrl = 'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
     const resolvedUrl = 'https://example.com/resolved.png';
 
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        repository: _buildRepository(latestImageUrl: rawUrl),
-        overrides: [
-          imageUrlResolverProvider.overrideWithValue(
-            _FakeImageUrlResolver(const {rawUrl: resolvedUrl}),
-          ),
-        ],
-        child: ImageScreen(onSettingsTap: () {}),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(
+        wrapWithTestApp(
+          repository: _buildRepository(latestImageUrl: rawUrl),
+          overrides: [
+            imageUrlResolverProvider.overrideWithValue(
+              _FakeImageUrlResolver(const {rawUrl: resolvedUrl}),
+            ),
+          ],
+          child: ImageScreen(onSettingsTap: () {}),
+        ),
+      );
+      await tester.pump();
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('image-latest-preview')),
+      );
 
-    final image = tester.widget<Image>(
-      find.byKey(const ValueKey<String>('image-latest-preview')),
-    );
-    expect((image.image as NetworkImage).url, resolvedUrl);
+      final image = tester.widget<Image>(
+        find.byKey(const ValueKey<String>('image-latest-preview')),
+      );
+      expect((image.image as NetworkImage).url, resolvedUrl);
+      expect(image.fit, BoxFit.contain);
+    });
   });
 
   testWidgets('floating action button opens regenerate sheet and submits', (
@@ -145,10 +191,12 @@ void main() {
         child: ImageScreen(onSettingsTap: () {}),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     await tester.tap(find.byKey(const ValueKey<String>('image-post-fab')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
 
     expect(
       find.byKey(const ValueKey<String>('image-regenerate-sheet')),
@@ -161,7 +209,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey<String>('image-regenerate-submit')));
     await tester.pump();
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('画像の再生成を開始しました'), findsOneWidget);
     expect(

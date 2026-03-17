@@ -20,6 +20,7 @@ export type ImageDraft = {
   title: string;
   promptExcerpt: string;
   imageUrl?: string | null;
+  dateKey?: string;
 };
 
 export type DailySummaryDraft = {

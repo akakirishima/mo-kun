@@ -6,10 +6,10 @@ import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
 import { AppRepository } from "./repositories/app-repository.js";
 import { AiService, AiServiceError } from "./services/ai-service.js";
 import {
-  buildAppDateKey,
   CharacterImageService,
   CloudStorageImageStore,
 } from "./services/character-image-service.js";
+import { buildAppDateKey } from "./services/app-date.js";
 
 const config = loadConfig();
 const app = express();
@@ -126,6 +126,13 @@ app.post("/v1/chat/messages", requireAuth, async (request, response) => {
       clientMessageId,
       assistantText,
     });
+    const dateKey = buildAppDateKey(new Date());
+    const dayMessages = await repository.getMessagesForDateKey(threadId, dateKey);
+    const summary = await aiService.generateDailySummary({
+      dateKey,
+      messages: dayMessages,
+    });
+    await repository.saveDailySummary(authedRequest.user.uid, summary);
 
     response.json({
       threadId,
@@ -188,8 +195,8 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
     const users = await repository.listUsersForRefresh();
     for (const userId of users) {
       const threadId = `${userId}_main`;
-      const messages = await repository.getRecentMessages(threadId, 40);
-      const summary = aiService.generateDailySummary({
+      const messages = await repository.getMessagesForDateKey(threadId, targetDate);
+      const summary = await aiService.generateDailySummary({
         dateKey: targetDate,
         messages,
       });

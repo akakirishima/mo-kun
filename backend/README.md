@@ -37,12 +37,15 @@ npm run dev
 
 ## Notes
 - chat は `gemini-2.5-flash`、image は `gemini-2.5-flash-image` を前提にしています。
-- `POST /v1/chat/messages` は Gemini chat を返します。
+- `POST /v1/chat/messages` は Gemini chat を返し、その時点で当日の daily summary も再生成します。
 - `POST /v1/characters/image` は Gemini image generation を呼びます。
 - `POST /v1/jobs/daily-refresh` は `03:00 JST` 基準で daily summary と画像更新を行う想定です。
 - 画像は Cloud Storage の `characters/{uid}/...` 配下へ保存します。
-- 画像生成は `visualPromptBase + visualEvolutionMemo + 今日の summary + optional note` で組み立てます。
+- 画像生成は `visualPromptBase + visualEvolutionMemo + 今日の summary + scene items + optional note` で組み立てます。
+- scene items は当日の summary / user message から抽出した、部屋の中に置ける具体物です。
+- 画像構図は「固定レイアウトの可愛い room template + 中央のキャラクター + 横長構図」を前提にしています。
 - `visualEvolutionMemo` は直近 7 日分の daily summary から再構築し、`characters/{uid}` に保存します。
+- `dailySummaries/{dateKey}` と `imageHistory.dateKey` はどちらも `03:00 JST` cutover で揃えています。
 - Firestore 書き込みと Firebase ID token 検証の構造は本番用に分けてあります。
 
 ## Deploy
@@ -58,5 +61,11 @@ gcloud run deploy mo-kun-api --source backend --region asia-northeast1 --allow-u
 
 ```powershell
 firebase deploy --project <project-id> --only "firestore:rules,storage"
+```
+
+Flutter から Cloud Run を使う場合:
+
+```powershell
+flutter run --dart-define=BACKEND_BASE_URL=https://<cloud-run-url>
 ```
 

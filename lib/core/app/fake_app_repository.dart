@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 
@@ -9,27 +10,32 @@ class FakeAppRepository implements AppRepository {
     CharacterSnapshot? initialCharacter,
     List<ChatMessage>? initialMessages,
     DailySummary? initialSummary,
+    List<DailySummary>? initialSummaries,
     List<CharacterImageVersion>? initialImageHistory,
   }) : _session =
            initialSession ??
            const AppSession(userId: 'demo-user', needsOnboarding: true) {
     _character = initialCharacter;
     _messages = initialMessages ?? <ChatMessage>[];
-    _summary = initialSummary;
+    _summaries = _mergeSummaries(
+      primary: initialSummary,
+      additional: initialSummaries,
+    );
     _imageHistory = initialImageHistory ?? <CharacterImageVersion>[];
     _emitAll();
   }
 
   final _chatController = StreamController<List<ChatMessage>>.broadcast();
   final _characterController = StreamController<CharacterSnapshot?>.broadcast();
-  final _summaryController = StreamController<DailySummary?>.broadcast();
+  final _dailySummariesController =
+      StreamController<List<DailySummary>>.broadcast();
   final _imageHistoryController =
       StreamController<List<CharacterImageVersion>>.broadcast();
 
   AppSession _session;
   CharacterSnapshot? _character;
   List<ChatMessage> _messages = <ChatMessage>[];
-  DailySummary? _summary;
+  List<DailySummary> _summaries = <DailySummary>[];
   List<CharacterImageVersion> _imageHistory = <CharacterImageVersion>[];
 
   @override
@@ -58,14 +64,16 @@ class FakeAppRepository implements AppRepository {
         createdAt: now,
       ),
     ];
-    _summary = DailySummary(
-      dateKey: _dateKey(now),
-      title: 'はじまりの日',
-      mood: 'わくわく',
-      doneThings: ['プロフィールを登録した', '相棒を迎えた'],
-      reflection: '最初の一歩を踏み出した日。',
-      tomorrowNote: 'まずは小さな報告を1つ送ってみよう。',
-      generatedAt: now,
+    _upsertSummary(
+      DailySummary(
+        dateKey: _dateKey(now),
+        title: 'はじまりの日',
+        mood: 'わくわく',
+        doneThings: ['プロフィールを登録した', '相棒を迎えた'],
+        reflection: '最初の一歩を踏み出した日。',
+        tomorrowNote: 'まずは小さな報告を1つ送ってみよう。',
+        generatedAt: now,
+      ),
     );
     _imageHistory = <CharacterImageVersion>[
       CharacterImageVersion(
@@ -74,6 +82,7 @@ class FakeAppRepository implements AppRepository {
         promptExcerpt: input.goal,
         status: CharacterImageStatus.ready,
         generatedAt: now,
+        dateKey: _dateKey(now),
       ),
     ];
     _session = _session.copyWith(
@@ -108,14 +117,18 @@ class FakeAppRepository implements AppRepository {
         clientMessageId: clientMessageId,
       ),
     ];
-    _summary = DailySummary(
-      dateKey: _dateKey(now),
-      title: '今日のまとめ',
-      mood: '前向き',
-      doneThings: [...?_summary?.doneThings, text],
-      reflection: '会話から今日の行動を整理した。',
-      tomorrowNote: '続けて1つだけ報告する。',
-      generatedAt: now,
+    final todayDateKey = _dateKey(now);
+    final existingSummary = _summaryForDate(todayDateKey);
+    _upsertSummary(
+      DailySummary(
+        dateKey: todayDateKey,
+        title: existingSummary == null ? '今日のまとめ' : '会話を重ねた日',
+        mood: '前向き',
+        doneThings: [...?existingSummary?.doneThings, text],
+        reflection: '会話から今日の行動を整理した。',
+        tomorrowNote: '続けて1つだけ報告する。',
+        generatedAt: now,
+      ),
     );
     _imageHistory = [
       CharacterImageVersion(
@@ -124,6 +137,7 @@ class FakeAppRepository implements AppRepository {
         promptExcerpt: text,
         status: CharacterImageStatus.ready,
         generatedAt: now,
+        dateKey: todayDateKey,
       ),
       ..._imageHistory,
     ];
@@ -174,6 +188,7 @@ class FakeAppRepository implements AppRepository {
         status: CharacterImageStatus.ready,
         generatedAt: now,
         imageUrl: imageUrl,
+        dateKey: _dateKey(now),
       ),
       ..._imageHistory,
     ];
@@ -205,46 +220,118 @@ class FakeAppRepository implements AppRepository {
   }
 
   @override
+  Stream<List<CharacterImageVersion>> watchDiaryImageHistory({
+    required String characterId,
+    required DateTime month,
+  }) async* {
+    yield _imageHistoryForMonth(month);
+    yield* _imageHistoryController.stream.map(
+      (_) => _imageHistoryForMonth(month),
+    );
+  }
+
+  @override
   Stream<DailySummary?> watchDailySummary({
     required String userId,
     required String dateKey,
   }) async* {
-    if (_summary != null && _summary!.dateKey == dateKey) {
-      yield _summary;
-    } else {
-      yield null;
-    }
-    yield* _summaryController.stream.map((summary) {
-      if (summary == null || summary.dateKey != dateKey) {
-        return null;
-      }
-      return summary;
-    });
+    yield _summaryForDate(dateKey);
+    yield* _dailySummariesController.stream.map(
+      (summaries) => _findSummaryByDate(summaries, dateKey),
+    );
+  }
+
+  @override
+  Stream<List<DailySummary>> watchMonthlyDailySummaries({
+    required String userId,
+    required DateTime month,
+  }) async* {
+    yield _summariesForMonth(month);
+    yield* _dailySummariesController.stream.map(
+      (_) => _summariesForMonth(month),
+    );
   }
 
   @override
   Future<void> dispose() async {
     await _chatController.close();
     await _characterController.close();
-    await _summaryController.close();
+    await _dailySummariesController.close();
     await _imageHistoryController.close();
   }
 
   void _emitAll() {
     _chatController.add(List<ChatMessage>.unmodifiable(_messages));
     _characterController.add(_character);
-    _summaryController.add(_summary);
+    _dailySummariesController.add(List<DailySummary>.unmodifiable(_summaries));
     _imageHistoryController.add(
       List<CharacterImageVersion>.unmodifiable(_imageHistory),
     );
   }
 
+  DailySummary? _summaryForDate(String dateKey) {
+    return _findSummaryByDate(_summaries, dateKey);
+  }
+
+  List<DailySummary> _summariesForMonth(DateTime month) {
+    return List<DailySummary>.unmodifiable(
+      _summaries.where(
+        (summary) => summary.dateKey.startsWith(_monthKey(month)),
+      ),
+    );
+  }
+
+  List<CharacterImageVersion> _imageHistoryForMonth(DateTime month) {
+    final cutoff = appDayBoundaryUtc(DateTime(month.year, month.month + 1, 1));
+    final filtered =
+        _imageHistory
+            .where((image) => image.generatedAt.toUtc().isBefore(cutoff))
+            .toList()
+          ..sort(
+            (left, right) => left.generatedAt.compareTo(right.generatedAt),
+          );
+    return List<CharacterImageVersion>.unmodifiable(filtered);
+  }
+
+  void _upsertSummary(DailySummary summary) {
+    _summaries = [
+      for (final existing in _summaries)
+        if (existing.dateKey != summary.dateKey) existing,
+      summary,
+    ]..sort((left, right) => left.dateKey.compareTo(right.dateKey));
+  }
+
+  static List<DailySummary> _mergeSummaries({
+    DailySummary? primary,
+    List<DailySummary>? additional,
+  }) {
+    final merged = <DailySummary>[...?additional, if (primary != null) primary];
+    final deduped = <String, DailySummary>{};
+    for (final summary in merged) {
+      deduped[summary.dateKey] = summary;
+    }
+    final values = deduped.values.toList()
+      ..sort((a, b) => a.dateKey.compareTo(b.dateKey));
+    return values;
+  }
+
+  DailySummary? _findSummaryByDate(
+    Iterable<DailySummary> summaries,
+    String dateKey,
+  ) {
+    for (final summary in summaries) {
+      if (summary.dateKey == dateKey) {
+        return summary;
+      }
+    }
+    return null;
+  }
+
   String _dateKey(DateTime dateTime) {
-    final adjusted = dateTime.hour < 3
-        ? dateTime.subtract(const Duration(days: 1))
-        : dateTime;
-    final month = adjusted.month.toString().padLeft(2, '0');
-    final day = adjusted.day.toString().padLeft(2, '0');
-    return '${adjusted.year}-$month-$day';
+    return buildAppDateKeyFromDateTime(dateTime);
+  }
+
+  String _monthKey(DateTime dateTime) {
+    return monthKey(dateTime);
   }
 }

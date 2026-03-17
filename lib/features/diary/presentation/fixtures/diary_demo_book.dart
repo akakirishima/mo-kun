@@ -5,6 +5,9 @@ final demoMarchDiaryBook = DiaryMonthBook(
   monthLabel: '2026年3月',
   coverTitle: 'March Memory Book',
   coverSubtitle: '一日の手ざわりを、ゆっくりめくって思い出すための一冊。',
+  recordedDaysCount: _entryBodies.length,
+  canShowPreviousMonth: true,
+  canShowNextMonth: false,
   entries: List<DiaryDayEntry>.generate(
     _entryBodies.length,
     (index) => DiaryDayEntry(
@@ -14,6 +17,7 @@ final demoMarchDiaryBook = DiaryMonthBook(
       illustrationPalette:
           _illustrationPalettes[index % _illustrationPalettes.length],
       highlightLabel: _highlightLabels[index],
+      imageUrl: null,
     ),
   ),
 );

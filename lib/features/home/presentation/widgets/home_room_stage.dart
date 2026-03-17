@@ -18,6 +18,8 @@ class HomeRoomStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasGeneratedImage = characterImageUrl != null && characterImageUrl!.isNotEmpty;
+
     return Container(
       key: const ValueKey<String>('home-room-stage'),
       decoration: BoxDecoration(
@@ -40,18 +42,19 @@ class HomeRoomStage extends StatelessWidget {
           aspectRatio: 0.96,
           child: Stack(
             children: [
-              const Positioned.fill(
-                child: CustomPaint(painter: _RoomPainter()),
-              ),
+              if (!hasGeneratedImage)
+                const Positioned.fill(
+                  child: CustomPaint(painter: _RoomPainter()),
+                ),
               Positioned(
                 left: 0,
                 right: 0,
                 top: 0,
                 bottom: 0,
                 child: Align(
-                  alignment: const Alignment(0, 0.18),
+                  alignment: const Alignment(0, 0.02),
                   child: Transform.translate(
-                    offset: const Offset(0, -10),
+                    offset: const Offset(0, -2),
                     child: _StageCharacter(
                       imageUrl: characterImageUrl,
                       isResolvingImage: isResolvingImage,
@@ -97,32 +100,20 @@ class _StageCharacter extends StatelessWidget {
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(28),
       child: SizedBox(
-        width: 168,
-        height: 216,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.22),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x221F1A1E),
-                blurRadius: 20,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Image.network(
-            imageUrl!,
-            key: const ValueKey<String>('home-room-stage-image'),
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return const _MoriSprite(
-                key: ValueKey<String>('home-room-stage-fallback'),
-              );
-            },
-          ),
+        width: 320,
+        height: 320,
+        child: Image.network(
+          imageUrl!,
+          key: const ValueKey<String>('home-room-stage-image'),
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          errorBuilder: (context, error, stackTrace) {
+            return const _MoriSprite(
+              key: ValueKey<String>('home-room-stage-fallback'),
+            );
+          },
         ),
       ),
     );

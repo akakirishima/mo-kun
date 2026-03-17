@@ -229,11 +229,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
 
     final session = await ref.read(sessionProvider.future);
-    if (message.isNotEmpty && mounted) {
+    final backendMessage = message.isNotEmpty
+        ? message
+        : (attachment != null ? '画像を1枚送った' : '');
+    if (backendMessage.isNotEmpty && mounted) {
       try {
         await ref
             .read(sendChatMessageControllerProvider)
-            .send(session: session, text: message);
+            .send(session: session, text: backendMessage);
       } catch (_) {}
     }
 

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
-  buildAppDateKey,
   buildPromptExcerpt,
   CharacterImageService,
 } from "./character-image-service.js";
+import { buildAppDateKey, buildAppDateWindow } from "./app-date.js";
 import { StoredDailySummary } from "../types.js";
 
 class FakeRepository {
@@ -29,7 +29,9 @@ class FakeRepository {
     status: string;
     image: {
       imageUrl?: string | null;
+      dateKey?: string;
     };
+    dateKey?: string;
   }> = [];
 
   async getCharacterContext() {
@@ -48,18 +50,21 @@ class FakeRepository {
     status: string;
     image: {
       imageUrl?: string | null;
+      dateKey?: string;
     };
+    dateKey?: string;
   }) {
     this.savedImages.push(params);
   }
 
-  async getRecentMessages() {
+  async getMessagesForDateKey() {
     return this.recentMessages;
   }
 }
 
 class FakeAiService {
   generatedPrompt = "";
+  generatedSceneItems: string[] = [];
 
   async generateVisualEvolutionMemo() {
     return "表情に少し自信がにじみ、姿勢もわずかに伸びてきた。";
@@ -68,14 +73,21 @@ class FakeAiService {
   buildCharacterImagePrompt(params: {
     visualEvolutionMemo: string;
     todaySummary: string;
+    sceneItems: string[];
     optionalNote?: string;
   }) {
+    this.generatedSceneItems = params.sceneItems;
     this.generatedPrompt = [
       params.visualEvolutionMemo,
       params.todaySummary,
+      params.sceneItems.join(", "),
       params.optionalNote ?? "",
     ].join("\n");
     return this.generatedPrompt;
+  }
+
+  async generateRoomSceneItems() {
+    return ["ダンベル", "水筒"];
   }
 
   async generateCharacterImage(): Promise<{
@@ -136,8 +148,10 @@ assert.equal(
 assert.equal(repository.markedGenerating.length, 1);
 assert.equal(repository.savedImages.length, 1);
 assert.equal(repository.savedImages[0].status, "ready");
+assert.equal(repository.savedImages[0].dateKey, buildAppDateKey(new Date()));
 assert.match(aiService.generatedPrompt, /表情に少し自信/);
 assert.match(aiService.generatedPrompt, /小さく前進した日|日付:/);
+assert.deepEqual(aiService.generatedSceneItems, ["ダンベル", "水筒"]);
 assert.match(aiService.generatedPrompt, /少し春っぽく/);
 
 const failedRepository = new FakeRepository();
@@ -156,18 +170,27 @@ await assert.rejects(() =>
 assert.equal(failedRepository.savedImages.length, 1);
 assert.equal(failedRepository.savedImages[0].status, "failed");
 assert.equal(failedRepository.savedImages[0].image.imageUrl, null);
+assert.equal(failedRepository.savedImages[0].dateKey, buildAppDateKey(new Date()));
 
 assert.equal(buildAppDateKey(new Date("2026-03-17T02:59:00+09:00")), "2026-03-16");
 assert.equal(buildAppDateKey(new Date("2026-03-17T03:00:00+09:00")), "2026-03-17");
+assert.equal(buildAppDateKey(new Date("2026-03-17T17:59:00Z")), "2026-03-17");
+assert.equal(buildAppDateKey(new Date("2026-03-17T18:00:00Z")), "2026-03-18");
+
+const appDateWindow = buildAppDateWindow("2026-03-17");
+assert.equal(appDateWindow.startAt.toISOString(), "2026-03-16T18:00:00.000Z");
+assert.equal(appDateWindow.endAt.toISOString(), "2026-03-17T18:00:00.000Z");
 
 const excerpt = buildPromptExcerpt({
   visualEvolutionMemo: "表情に少し自信がにじんでいる。",
   todaySummary: "日付: 2026-03-16\nやったこと: UI を整えた",
+  sceneItems: ["ダンベル", "水筒"],
   optionalNote: "少し春っぽい",
 });
 
 assert.match(excerpt, /growth=/);
 assert.match(excerpt, /today=/);
+assert.match(excerpt, /roomItems=ダンベル, 水筒/);
 assert.match(excerpt, /note=/);
 
 console.log("character-image-service tests passed");
