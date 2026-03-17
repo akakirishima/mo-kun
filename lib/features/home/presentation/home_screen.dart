@@ -3,16 +3,20 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_input_bar.dart';
+import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_message_bubble.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
 import 'package:image_picker/image_picker.dart';
 
 typedef HomeChatImagePicker = Future<XFile?> Function(ImageSource source);
 typedef HomeChatLostDataRetriever = Future<LostDataResponse> Function();
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     super.key,
     required this.onSettingsTap,
@@ -29,12 +33,12 @@ class HomeScreen extends StatefulWidget {
   final HomeChatLostDataRetriever? retrieveLostData;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
 enum HomeOverlayMode { none, phone, photo, chat }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _headerTop = 14.0;
   static const _stageActionGap = 16.0;
   static const _actionBarHeight = 92.0;
@@ -57,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final FocusNode _focusNode;
   late final ScrollController _messageScrollController;
   final ImagePicker _imagePicker = ImagePicker();
-  final List<_HomeChatMessage> _messages = <_HomeChatMessage>[];
+  final List<_HomeChatMessage> _localMessages = <_HomeChatMessage>[];
   String _draftText = '';
   XFile? _pendingAttachment;
   bool _isPickingImage = false;
@@ -200,26 +204,22 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final message = _draftText.trim();
     final attachment = _pendingAttachment;
     if (message.isEmpty && attachment == null) {
       return;
     }
 
+    final createdAt = DateTime.now();
     setState(() {
       if (attachment != null) {
-        _messages.add(
+        _localMessages.add(
           _HomeChatMessage(
             imagePath: attachment.path,
-            timestamp: _timestampLabel(),
+            createdAt: createdAt,
+            isCurrentUser: true,
           ),
-        );
-      }
-
-      if (message.isNotEmpty) {
-        _messages.add(
-          _HomeChatMessage(text: message, timestamp: _timestampLabel()),
         );
       }
 
@@ -227,6 +227,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _draftText = '';
       _pendingAttachment = null;
     });
+
+    final session = await ref.read(sessionProvider.future);
+    if (message.isNotEmpty && mounted) {
+      try {
+        await ref
+            .read(sendChatMessageControllerProvider)
+            .send(session: session, text: message);
+      } catch (_) {}
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messageScrollController.hasClients) {
@@ -242,11 +251,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _focusNode.requestFocus();
   }
 
-  String _timestampLabel() {
-    final now = DateTime.now();
-    final hour = now.hour.toString().padLeft(2, '0');
-    final minute = now.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
+  void _handleSendTap() {
+    _sendMessage();
   }
 
   @override
@@ -257,6 +263,42 @@ class _HomeScreenState extends State<HomeScreen> {
     final composerBottom = isImmersiveMode
         ? _immersiveBottomSpacing
         : _dockedBottomSpacing;
+    final session = ref.watch(sessionProvider).valueOrNull;
+    final threadId = session?.threadId;
+    final characterId = session?.characterId;
+    final serverMessages = threadId == null
+        ? const <ChatMessage>[]
+        : ref.watch(chatMessagesProvider(threadId)).valueOrNull ??
+              const <ChatMessage>[];
+    if (threadId != null) {
+      ref.listen<AsyncValue<List<ChatMessage>>>(
+        chatMessagesProvider(threadId),
+        (previous, next) {
+          final resolvedClientIds =
+              next.valueOrNull
+                  ?.map((message) => message.clientMessageId)
+                  .whereType<String>() ??
+              const Iterable<String>.empty();
+          ref
+              .read(pendingMessagesProvider.notifier)
+              .markCompleted(resolvedClientIds);
+        },
+      );
+    }
+    final pendingMessages = threadId == null
+        ? const <PendingChatMessage>[]
+        : ref
+              .watch(pendingMessagesProvider)
+              .where((message) => message.threadId == threadId)
+              .toList(growable: false);
+    final timelineMessages = _buildTimelineMessages(
+      serverMessages: serverMessages,
+      pendingMessages: pendingMessages,
+      localMessages: _localMessages,
+    );
+    final character = characterId == null
+        ? null
+        : ref.watch(characterProvider(characterId)).valueOrNull;
 
     return DecoratedBox(
       key: const ValueKey<String>('home-background'),
@@ -304,7 +346,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     0,
                   ),
                   child: _MoriHeaderCard(
-                    message: widget.initialMoriMessage,
+                    message:
+                        character?.starterGreeting ?? widget.initialMoriMessage,
                     onSettingsTap: widget.onSettingsTap,
                     showBackButton: isImmersiveMode,
                     onBackTap: _exitImmersiveMode,
@@ -384,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       child: _MessageCanvas(
                                         minHeight: messageLayerHeight,
                                         padding: _messageLayerPadding,
-                                        messages: _messages,
+                                        messages: timelineMessages,
                                         includeKeys: true,
                                         allowOverflow: false,
                                       ),
@@ -415,8 +458,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 focusNode: _focusNode,
                                 hintText: 'メッセージ',
                                 sendEnabled: _canSend,
-                                onSubmitted: (_) => _sendMessage(),
-                                onSendTap: _sendMessage,
+                                onSubmitted: (_) => _handleSendTap(),
+                                onSendTap: _handleSendTap,
                                 onCameraTap: () =>
                                     _handleAttachmentTap(ImageSource.camera),
                                 onImageTap: () =>
@@ -463,6 +506,46 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+List<_HomeChatMessage> _buildTimelineMessages({
+  required List<ChatMessage> serverMessages,
+  required List<PendingChatMessage> pendingMessages,
+  required List<_HomeChatMessage> localMessages,
+}) {
+  final timeline = <_HomeChatMessage>[
+    ...localMessages,
+    for (final message in serverMessages)
+      _HomeChatMessage(
+        text: message.text,
+        createdAt: message.createdAt,
+        isCurrentUser: message.role == ChatRole.user,
+        senderName: message.role == ChatRole.assistant ? 'Mori' : null,
+      ),
+    for (final message in pendingMessages)
+      _HomeChatMessage(
+        text: message.text,
+        createdAt: message.createdAt,
+        isCurrentUser: true,
+        statusLabel: message.failed ? '再送待ち' : '送信中',
+      ),
+  ]..sort((left, right) {
+    final timestampComparison = left.createdAt.compareTo(right.createdAt);
+    if (timestampComparison != 0) {
+      return timestampComparison;
+    }
+    if (left.isCurrentUser == right.isCurrentUser) {
+      return 0;
+    }
+    return left.isCurrentUser ? -1 : 1;
+  });
+  return timeline;
+}
+
+String _timestampFromDateTime(DateTime dateTime) {
+  final hour = dateTime.hour.toString().padLeft(2, '0');
+  final minute = dateTime.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
 }
 
 class _RoomActionBar extends StatelessWidget {
@@ -773,69 +856,6 @@ class _MoriBadgeAvatar extends StatelessWidget {
   }
 }
 
-class _UserMessageBubble extends StatelessWidget {
-  const _UserMessageBubble({super.key, this.text, this.imagePath});
-
-  final String? text;
-  final String? imagePath;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = imagePath != null && imagePath!.isNotEmpty;
-    final hasText = text != null && text!.isNotEmpty;
-
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 270),
-      padding: EdgeInsets.symmetric(
-        horizontal: hasImage ? 8 : 16,
-        vertical: hasImage ? 8 : 14,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFFBFE3B4).withValues(alpha: 0.78),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(8),
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
-        ),
-        border: Border.all(color: const Color(0xFF5B9661), width: 2.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x1A2F5E38),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hasImage)
-            _HomeChatImageAttachment(
-              imagePath: imagePath!,
-              imageKey: key is ValueKey<String>
-                  ? ValueKey<String>(
-                      '${(key! as ValueKey<String>).value}-image',
-                    )
-                  : null,
-            ),
-          if (hasImage && hasText) const SizedBox(height: 10),
-          if (hasText)
-            Text(
-              text!,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: const Color(0xFF1F3726),
-                fontWeight: FontWeight.w700,
-                height: 1.24,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MessageCanvas extends StatelessWidget {
   const _MessageCanvas({
     required this.minHeight,
@@ -892,17 +912,36 @@ class _MessageColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var userBubbleIndex = 0;
+    var assistantBubbleIndex = 0;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var index = 0; index < messages.length; index++) ...[
-          _UserMessageBubble(
+          ChatMessageBubble(
             key: includeKeys
-                ? ValueKey<String>('home-user-bubble-$index')
+                ? ValueKey<String>(
+                    messages[index].isCurrentUser
+                        ? 'home-user-bubble-${userBubbleIndex++}'
+                        : 'home-assistant-bubble-${assistantBubbleIndex++}',
+                  )
                 : null,
             text: messages[index].text,
             imagePath: messages[index].imagePath,
+            imageKey: includeKeys && messages[index].imagePath != null
+                ? ValueKey<String>(
+                    messages[index].isCurrentUser
+                        ? 'home-user-bubble-${userBubbleIndex - 1}-image'
+                        : 'home-assistant-bubble-${assistantBubbleIndex - 1}-image',
+                  )
+                : null,
+            isCurrentUser: messages[index].isCurrentUser,
+            senderName: messages[index].senderName,
+            showAvatar: !messages[index].isCurrentUser,
+            timestamp: _timestampFromDateTime(messages[index].createdAt),
+            statusLabel: messages[index].statusLabel,
           ),
           if (index != messages.length - 1)
             const SizedBox(height: _HomeScreenState._messageSpacing),
@@ -942,7 +981,7 @@ class _HomePendingAttachmentPreview extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              attachment.name,
+              attachment.path.split(RegExp(r'[\\/]')).last,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -989,68 +1028,20 @@ class _HomePendingAttachmentThumbnail extends StatelessWidget {
   }
 }
 
-class _HomeChatImageAttachment extends StatelessWidget {
-  const _HomeChatImageAttachment({required this.imagePath, this.imageKey});
-
-  final String imagePath;
-  final Key? imageKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final file = File(imagePath);
-    final hasFile = file.existsSync();
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        key: imageKey,
-        width: 188,
-        height: 188,
-        color: const Color(0xFFBFE3B4).withValues(alpha: 0.42),
-        child: hasFile
-            ? Image.file(file, fit: BoxFit.cover)
-            : _MissingHomeChatImagePlaceholder(imagePath: imagePath),
-      ),
-    );
-  }
-}
-
-class _MissingHomeChatImagePlaceholder extends StatelessWidget {
-  const _MissingHomeChatImagePlaceholder({required this.imagePath});
-
-  final String imagePath;
-
-  @override
-  Widget build(BuildContext context) {
-    final filename = imagePath.split(RegExp(r'[\\/]')).last;
-
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.image_outlined, size: 42, color: Color(0xFF35683E)),
-          const SizedBox(height: 10),
-          Text(
-            filename,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF1F3726),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _HomeChatMessage {
-  const _HomeChatMessage({this.text, this.imagePath, this.timestamp});
+  const _HomeChatMessage({
+    this.text,
+    this.imagePath,
+    required this.createdAt,
+    required this.isCurrentUser,
+    this.senderName,
+    this.statusLabel,
+  });
 
   final String? text;
   final String? imagePath;
-  final String? timestamp;
+  final DateTime createdAt;
+  final bool isCurrentUser;
+  final String? senderName;
+  final String? statusLabel;
 }
