@@ -14,6 +14,8 @@ class DiaryBookViewport extends StatelessWidget {
     required this.controller,
     required this.onPageChanged,
     required this.onOpenSelector,
+    required this.onShowPreviousMonth,
+    required this.onShowNextMonth,
     required this.onSettingsTap,
     required this.dayPageBottomClearance,
   });
@@ -22,6 +24,8 @@ class DiaryBookViewport extends StatelessWidget {
   final PageController controller;
   final ValueChanged<int> onPageChanged;
   final VoidCallback onOpenSelector;
+  final VoidCallback onShowPreviousMonth;
+  final VoidCallback onShowNextMonth;
   final VoidCallback onSettingsTap;
   final double dayPageBottomClearance;
 
@@ -84,6 +88,8 @@ class DiaryBookViewport extends StatelessWidget {
                           ? DiaryCoverPage(
                               book: book,
                               onSelectorTap: onOpenSelector,
+                              onPreviousMonthTap: onShowPreviousMonth,
+                              onNextMonthTap: onShowNextMonth,
                             )
                           : DiaryDayPage(
                               entry: entry,

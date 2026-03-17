@@ -304,9 +304,9 @@ class _LatestImageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 220,
-            width: double.infinity,
+          AspectRatio(
+            key: const ValueKey<String>('image-latest-media'),
+            aspectRatio: 16 / 10,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(22),
               child: DecoratedBox(
@@ -322,17 +322,23 @@ class _LatestImageCard extends StatelessWidget {
                         widgetKey: ValueKey<String>('image-latest-placeholder'),
                       );
                     }
-                    return Image.network(
-                      resolvedUrl,
-                      key: const ValueKey<String>('image-latest-preview'),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const _ImagePlaceholder(
-                          icon: Icons.broken_image_outlined,
-                          label: '画像を読み込めませんでした',
-                          widgetKey: ValueKey<String>('image-latest-error'),
-                        );
-                      },
+                    return ColoredBox(
+                      color: const Color(0xFFF7EEE8),
+                      child: Center(
+                        child: Image.network(
+                          resolvedUrl,
+                          key: const ValueKey<String>('image-latest-preview'),
+                          fit: BoxFit.contain,
+                          alignment: Alignment.center,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const _ImagePlaceholder(
+                              icon: Icons.broken_image_outlined,
+                              label: '画像を読み込めませんでした',
+                              widgetKey: ValueKey<String>('image-latest-error'),
+                            );
+                          },
+                        ),
+                      ),
                     );
                   },
                   loading: () => const Center(
@@ -412,14 +418,14 @@ class _ImagePlaceholder extends StatelessWidget {
   }
 }
 
-class _ImageHistoryTile extends StatelessWidget {
+class _ImageHistoryTile extends ConsumerWidget {
   const _ImageHistoryTile({required this.item, required this.index});
 
   final CharacterImageVersion item;
   final int index;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = AppearanceScope.paletteOf(context).image;
     final statusLabel = switch (item.status) {
       CharacterImageStatus.generating => '生成中',
@@ -427,6 +433,7 @@ class _ImageHistoryTile extends StatelessWidget {
       CharacterImageStatus.ready => '更新済み',
       _ => '未生成',
     };
+    final resolvedImageUrl = ref.watch(resolvedImageUrlProvider(item.imageUrl));
 
     return Container(
       key: ValueKey<String>('image-history-item-$index'),
@@ -438,18 +445,56 @@ class _ImageHistoryTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFCDA18A), Color(0xFFF0DED1)],
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: SizedBox(
+              width: 108,
+              height: 72,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFFCDA18A), Color(0xFFF0DED1)],
+                  ),
+                ),
+                child: resolvedImageUrl.when(
+                  data: (resolvedUrl) {
+                    if (resolvedUrl == null || resolvedUrl.isEmpty) {
+                      return const _HistoryThumbnailPlaceholder(
+                        widgetKey: ValueKey<String>('image-history-placeholder'),
+                      );
+                    }
+                    return ColoredBox(
+                      color: const Color(0xFFF7EEE8),
+                      child: Center(
+                        child: Image.network(
+                          resolvedUrl,
+                          key: ValueKey<String>('image-history-preview-$index'),
+                          fit: BoxFit.contain,
+                          alignment: Alignment.center,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const _HistoryThumbnailPlaceholder(
+                              widgetKey: ValueKey<String>('image-history-error'),
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  loading: () => const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  error: (_, __) => const _HistoryThumbnailPlaceholder(
+                    widgetKey: ValueKey<String>('image-history-error'),
+                  ),
+                ),
               ),
             ),
-            child: const Icon(Icons.auto_awesome_rounded),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -490,6 +535,23 @@ class _ImageHistoryTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _HistoryThumbnailPlaceholder extends StatelessWidget {
+  const _HistoryThumbnailPlaceholder({required this.widgetKey});
+
+  final Key widgetKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Icon(
+        Icons.auto_awesome_rounded,
+        key: widgetKey,
+        color: Colors.black54,
       ),
     );
   }

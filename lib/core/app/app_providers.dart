@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
@@ -15,13 +16,57 @@ final sessionProvider = FutureProvider<AppSession>((ref) {
   return ref.watch(appRepositoryProvider).initializeSession();
 });
 
-final currentDateKeyProvider = Provider<String>((ref) {
-  final now = DateTime.now();
-  final adjusted = now.hour < 3 ? now.subtract(const Duration(days: 1)) : now;
-  final month = adjusted.month.toString().padLeft(2, '0');
-  final day = adjusted.day.toString().padLeft(2, '0');
-  return '${adjusted.year}-$month-$day';
+final currentAppDateProvider = Provider<DateTime>((ref) {
+  return resolveAppDate(DateTime.now());
 });
+
+final currentDateKeyProvider = Provider<String>((ref) {
+  return buildAppDateKeyFromDateTime(DateTime.now());
+});
+
+final currentDiaryMonthProvider = Provider<DateTime>((ref) {
+  final appDate = ref.watch(currentAppDateProvider);
+  return appMonthStart(appDate);
+});
+
+final selectedDiaryMonthProvider = StateProvider<DateTime>((ref) {
+  return ref.watch(currentDiaryMonthProvider);
+});
+
+final diaryMonthNavigationControllerProvider =
+    Provider<DiaryMonthNavigationController>(
+      (ref) => DiaryMonthNavigationController(ref),
+    );
+
+class DiaryMonthNavigationController {
+  DiaryMonthNavigationController(this._ref);
+
+  final Ref _ref;
+
+  DateTime get currentMonth => _ref.read(currentDiaryMonthProvider);
+
+  DateTime get selectedMonth =>
+      appMonthStart(_ref.read(selectedDiaryMonthProvider));
+
+  bool get canShowNextMonth => selectedMonth.isBefore(currentMonth);
+
+  void setMonth(DateTime month) {
+    final normalized = appMonthStart(month);
+    _ref.read(selectedDiaryMonthProvider.notifier).state =
+        normalized.isAfter(currentMonth) ? currentMonth : normalized;
+  }
+
+  void showPreviousMonth() {
+    setMonth(previousMonth(selectedMonth));
+  }
+
+  void showNextMonth() {
+    if (!canShowNextMonth) {
+      return;
+    }
+    setMonth(nextMonth(selectedMonth));
+  }
+}
 
 final characterProvider = StreamProvider.family<CharacterSnapshot?, String>((
   ref,
@@ -63,6 +108,33 @@ final dailySummaryProvider = StreamProvider.family<DailySummary?, AppSession>((
         dateKey: ref.watch(currentDateKeyProvider),
       );
 });
+
+final monthlyDailySummariesProvider =
+    StreamProvider.family<List<DailySummary>, AppSession>((ref, session) {
+      return ref
+          .watch(appRepositoryProvider)
+          .watchMonthlyDailySummaries(
+            userId: session.userId,
+            month: ref.watch(selectedDiaryMonthProvider),
+          );
+    });
+
+final diaryImageHistoryProvider =
+    StreamProvider.family<List<CharacterImageVersion>, AppSession>((
+      ref,
+      session,
+    ) {
+      final characterId = session.characterId;
+      if (characterId == null) {
+        return Stream.value(const <CharacterImageVersion>[]);
+      }
+      return ref
+          .watch(appRepositoryProvider)
+          .watchDiaryImageHistory(
+            characterId: characterId,
+            month: ref.watch(selectedDiaryMonthProvider),
+          );
+    });
 
 final pendingMessagesProvider =
     StateNotifierProvider<PendingMessagesController, List<PendingChatMessage>>((
@@ -165,10 +237,7 @@ class RegenerateCharacterImageController {
 
   final Ref _ref;
 
-  Future<void> regenerate({
-    String? title,
-    String? reportText,
-  }) {
+  Future<void> regenerate({String? title, String? reportText}) {
     return _ref
         .read(appRepositoryProvider)
         .regenerateCharacterImage(title: title, reportText: reportText);

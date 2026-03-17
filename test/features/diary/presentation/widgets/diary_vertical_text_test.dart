@@ -74,4 +74,37 @@ void main() {
     expect(thirdColumnText.first, isNot('、'));
     expect(thirdColumnText, contains('、'));
   });
+
+  testWidgets('keeps columns aligned on a fixed right-side pitch', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 220,
+              height: 180,
+              child: DiaryVerticalText(
+                text: 'あいうえおかきくけこさしすせそ',
+                color: Colors.black,
+                fontSize: 20,
+                columnPitch: 36,
+                rowPitch: 24,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final firstColumn = tester.getTopLeft(
+      find.byKey(const ValueKey<String>('diary-vertical-column-0')),
+    );
+    final secondColumn = tester.getTopLeft(
+      find.byKey(const ValueKey<String>('diary-vertical-column-1')),
+    );
+
+    expect((secondColumn.dx - firstColumn.dx).abs(), closeTo(36, 0.1));
+  });
 }

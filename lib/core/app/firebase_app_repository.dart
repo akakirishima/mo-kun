@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 import 'package:gdgoc_2026_prototype/firebase_options.dart';
@@ -142,20 +143,32 @@ class FirebaseAppRepository implements AppRepository {
         .limit(12)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
-              .map((doc) {
-                final data = doc.data();
-                return CharacterImageVersion(
-                  id: doc.id,
-                  title: data['title'] as String? ?? 'AI refresh',
-                  promptExcerpt: data['promptExcerpt'] as String? ?? '',
-                  status: _parseImageStatus(data['status'] as String?),
-                  generatedAt:
-                      _parseTimestamp(data['generatedAt']) ?? DateTime.now(),
-                  imageUrl: data['imageUrl'] as String?,
-                );
-              })
-              .toList(growable: false);
+          return snapshot.docs.map(_mapImageHistory).toList(growable: false);
+        });
+  }
+
+  @override
+  Stream<List<CharacterImageVersion>> watchDiaryImageHistory({
+    required String characterId,
+    required DateTime month,
+  }) {
+    final endBoundary = appDayBoundaryUtc(
+      DateTime(month.year, month.month + 1, 1),
+    );
+
+    return firestore
+        .collection('characters')
+        .doc(characterId)
+        .collection('imageHistory')
+        .orderBy('generatedAt')
+        .endAt([
+          Timestamp.fromDate(
+            endBoundary.subtract(const Duration(milliseconds: 1)),
+          ),
+        ])
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map(_mapImageHistory).toList(growable: false);
         });
   }
 
@@ -174,18 +187,28 @@ class FirebaseAppRepository implements AppRepository {
           if (!snapshot.exists) {
             return null;
           }
-          final data = snapshot.data()!;
-          return DailySummary(
-            dateKey: snapshot.id,
-            title: data['title'] as String? ?? '今日のまとめ',
-            mood: data['mood'] as String? ?? '',
-            doneThings: List<String>.from(
-              data['doneThings'] as List? ?? const [],
-            ),
-            reflection: data['reflection'] as String? ?? '',
-            tomorrowNote: data['tomorrowNote'] as String? ?? '',
-            generatedAt: _parseTimestamp(data['generatedAt']),
-          );
+          return _mapDailySummary(snapshot);
+        });
+  }
+
+  @override
+  Stream<List<DailySummary>> watchMonthlyDailySummaries({
+    required String userId,
+    required DateTime month,
+  }) {
+    final firstDay = DateTime(month.year, month.month);
+    final lastDay = DateTime(month.year, month.month + 1, 0);
+
+    return firestore
+        .collection('users')
+        .doc(userId)
+        .collection('dailySummaries')
+        .orderBy(FieldPath.documentId)
+        .startAt([_dateKey(firstDay)])
+        .endAt([_dateKey(lastDay)])
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map(_mapDailySummary).toList(growable: false);
         });
   }
 
@@ -253,5 +276,44 @@ class FirebaseAppRepository implements AppRepository {
       return DateTime.tryParse(value);
     }
     return null;
+  }
+
+  DailySummary _mapDailySummary(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final data = snapshot.data() ?? const <String, dynamic>{};
+    return DailySummary(
+      dateKey: snapshot.id,
+      title: data['title'] as String? ?? '今日のまとめ',
+      mood: data['mood'] as String? ?? '',
+      doneThings: List<String>.from(data['doneThings'] as List? ?? const []),
+      reflection: data['reflection'] as String? ?? '',
+      tomorrowNote: data['tomorrowNote'] as String? ?? '',
+      generatedAt: _parseTimestamp(data['generatedAt']),
+    );
+  }
+
+  String _dateKey(DateTime dateTime) {
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    return '${dateTime.year}-$month-$day';
+  }
+
+  CharacterImageVersion _mapImageHistory(
+    QueryDocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final data = snapshot.data();
+    final generatedAt = _parseTimestamp(data['generatedAt']) ?? DateTime.now();
+    return CharacterImageVersion(
+      id: snapshot.id,
+      title: data['title'] as String? ?? 'AI refresh',
+      promptExcerpt: data['promptExcerpt'] as String? ?? '',
+      status: _parseImageStatus(data['status'] as String?),
+      generatedAt: generatedAt,
+      imageUrl: data['imageUrl'] as String?,
+      dateKey:
+          data['dateKey'] as String? ??
+          buildAppDateKeyFromDateTime(generatedAt),
+    );
   }
 }

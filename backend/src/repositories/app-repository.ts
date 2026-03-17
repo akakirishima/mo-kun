@@ -7,6 +7,7 @@ import {
   SessionResponse,
   StoredDailySummary,
 } from "../types.js";
+import { buildAppDateWindow } from "../services/app-date.js";
 
 export type StoredMessage = {
   id: string;
@@ -146,6 +147,19 @@ export class AppRepository {
       .reverse();
   }
 
+  async getMessagesForDateKey(threadId: string, dateKey: string) {
+    const { startAt, endAt } = buildAppDateWindow(dateKey);
+    const snapshot = await this.db
+      .collection("chatThreads")
+      .doc(threadId)
+      .collection("messages")
+      .where("createdAt", ">=", Timestamp.fromDate(startAt))
+      .where("createdAt", "<", Timestamp.fromDate(endAt))
+      .orderBy("createdAt", "asc")
+      .get();
+    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as StoredMessage);
+  }
+
   async appendConversation(params: {
     threadId: string;
     userId: string;
@@ -195,6 +209,7 @@ export class AppRepository {
     image: ImageDraft;
     status?: "idle" | "generating" | "ready" | "failed";
     visualEvolutionMemo?: string;
+    dateKey?: string;
   }) {
     const now = Timestamp.now();
     const characterRef = this.db.collection("characters").doc(params.userId);
@@ -223,6 +238,7 @@ export class AppRepository {
         imageUrl: params.image.imageUrl ?? null,
         status: params.status ?? "ready",
         generatedAt: now,
+        dateKey: params.dateKey ?? params.image.dateKey ?? null,
       });
     });
   }

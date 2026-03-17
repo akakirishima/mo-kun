@@ -136,6 +136,7 @@ class CharacterImageVersion {
     required this.status,
     required this.generatedAt,
     this.imageUrl,
+    this.dateKey,
   });
 
   final String id;
@@ -144,4 +145,5 @@ class CharacterImageVersion {
   final CharacterImageStatus status;
   final DateTime generatedAt;
   final String? imageUrl;
+  final String? dateKey;
 }

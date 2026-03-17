@@ -1,4 +1,5 @@
 import { CharacterDraft } from "../types.js";
+import { DEFAULT_ROOM_VISUAL_PROMPT_BASE } from "./ai-service.js";
 
 export class CharacterService {
   async createDraft(input: {
@@ -20,10 +21,10 @@ export class CharacterService {
         weakPoints,
       ].join("\n"),
       visualPromptBase: [
-        `${input.displayName}の分身キャラクター`,
-        `${input.goal}に向かう途中`,
-        "やわらかいアニメ調",
-      ].join(", "),
+        DEFAULT_ROOM_VISUAL_PROMPT_BASE,
+        input.goal ? `goal mood hint: ${input.goal}` : null,
+        input.partnerStyle ? `companion tone hint: ${input.partnerStyle}` : null,
+      ].filter((value): value is string => value != null && value.length > 0).join(", "),
       starterGreeting: `${input.displayName}、今日から一緒に${input.goal}へ向かおう。`,
     };
   }

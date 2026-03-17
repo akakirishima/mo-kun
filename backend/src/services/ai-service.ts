@@ -21,8 +21,59 @@ type ImagePromptContext = {
   visualPromptBase: string;
   visualEvolutionMemo: string;
   todaySummary: string;
+  sceneItems: string[];
   optionalNote?: string;
 };
+
+type DailySummaryCandidate = {
+  title?: unknown;
+  mood?: unknown;
+  doneThings?: unknown;
+  reflection?: unknown;
+  tomorrowNote?: unknown;
+};
+
+type RoomSceneItemsCandidate = {
+  items?: unknown;
+};
+
+const DAILY_SUMMARY_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "mood", "doneThings", "reflection", "tomorrowNote"],
+  properties: {
+    title: { type: "string" },
+    mood: { type: "string" },
+    doneThings: {
+      type: "array",
+      items: { type: "string" },
+    },
+    reflection: { type: "string" },
+    tomorrowNote: { type: "string" },
+  },
+};
+
+const ROOM_SCENE_ITEMS_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["items"],
+  properties: {
+    items: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+};
+
+export const DEFAULT_ROOM_VISUAL_PROMPT_BASE = [
+  "cute pastel pixel-art isometric room",
+  "fixed cozy bedroom layout viewed from a slightly top-down angle",
+  "pink walls, mint furniture, warm wooden floor, soft daylight",
+  "bed on the left, desk and computer on the back wall, two windows, round rug, small table, sofa, cabinet, framed wall art",
+  "the same room layout stays consistent across daily updates",
+  "a cute companion character stays near the center of the room as the main focus",
+  "wide horizontal composition showing the whole room",
+].join(", ");
 
 export class AiServiceError extends Error {
   constructor(message: string, cause?: unknown) {
@@ -57,11 +108,10 @@ export class AiService {
         `注意点: ${weakPoints}`,
       ].join("\n"),
       visualPromptBase: [
-        "soft illustrated companion",
-        `goal: ${profile.goal}`,
-        `tone: ${profile.partnerStyle}`,
-        "keep the same core identity across daily updates",
-      ].join(", "),
+        DEFAULT_ROOM_VISUAL_PROMPT_BASE,
+        profile.goal ? `goal mood hint: ${profile.goal}` : null,
+        profile.partnerStyle ? `companion tone hint: ${profile.partnerStyle}` : null,
+      ].filter((value): value is string => value != null && value.length > 0).join(", "),
       starterGreeting: `${profile.displayName || "きみ"}、今日から一緒に進もう。まずは今日のことを聞かせて。`,
     };
   }
@@ -144,6 +194,37 @@ export class AiService {
     return buildCharacterImagePrompt(params);
   }
 
+  async generateRoomSceneItems(params: {
+    todaySummary: string;
+    messages: MessageContext;
+    optionalNote?: string;
+  }): Promise<string[]> {
+    const fallback = buildFallbackRoomSceneItems(params);
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.config.geminiModel,
+        contents: buildRoomSceneItemsPrompt(params),
+        config: {
+          systemInstruction: buildRoomSceneItemsSystemInstruction(),
+          temperature: 0.2,
+          maxOutputTokens: 180,
+          responseMimeType: "application/json",
+          responseJsonSchema: ROOM_SCENE_ITEMS_RESPONSE_JSON_SCHEMA,
+        },
+      });
+      return normalizeGeneratedRoomSceneItems(response.text, fallback);
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Gemini room scene item extraction failed", {
+        model: this.config.geminiModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      return fallback;
+    }
+  }
+
   async generateCharacterImage(params: {
     prompt: string;
   }): Promise<GeneratedImageAsset> {
@@ -170,25 +251,46 @@ export class AiService {
     }
   }
 
-  generateDailySummary(params: {
+  async generateDailySummary(params: {
     dateKey: string;
     messages: MessageContext;
-  }): DailySummaryDraft {
-    const userMessages = params.messages
-      .filter((message) => message.role === "user" && !!message.text)
-      .map((message) => message.text!.trim())
-      .filter((text) => text.length > 0);
-    const doneThings = userMessages.slice(0, 3);
-    const lead = doneThings.length === 0 ? "まだ報告がありません" : doneThings[0];
+  }): Promise<DailySummaryDraft> {
+    const fallback = buildFallbackDailySummary(params);
 
-    return {
-      dateKey: params.dateKey,
-      title: "AIがまとめた今日の記録",
-      mood: doneThings.length === 0 ? "静か" : "前向き",
-      doneThings,
-      reflection: `今日の流れは「${lead}」を中心に整理された。`,
-      tomorrowNote: "明日は一言だけでも進捗を送って流れを続ける。",
-    };
+    if (!hasUserMessage(params.messages)) {
+      return fallback;
+    }
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.config.geminiModel,
+        contents: buildDailySummaryPrompt(params),
+        config: {
+          systemInstruction: buildDailySummarySystemInstruction(),
+          temperature: 0.35,
+          maxOutputTokens: 320,
+          responseMimeType: "application/json",
+          responseJsonSchema: DAILY_SUMMARY_RESPONSE_JSON_SCHEMA,
+        },
+      });
+      const normalized = normalizeGeneratedDailySummary({
+        dateKey: params.dateKey,
+        rawText: response.text,
+        fallback,
+      });
+      if (!normalized) {
+        throw new AiServiceError("daily_summary_empty");
+      }
+      return normalized;
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Gemini daily summary generation failed", {
+        model: this.config.geminiModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      return fallback;
+    }
   }
 }
 
@@ -270,6 +372,63 @@ export function buildVisualEvolutionPrompt(recentSummaries: StoredDailySummary[]
   ].join("\n");
 }
 
+export function buildDailySummarySystemInstruction(): string {
+  return [
+    "あなたは日次ダイアリー用の要約を作るアシスタントです。",
+    "会話ログを読み、ユーザーが実際に話した事実だけをもとに1日の記録をまとめてください。",
+    "出力ルール:",
+    "- 日本語で自然な表現にする",
+    "- assistant の発話は文脈としてだけ使い、成果として書かない",
+    "- ユーザーが言っていない事実を補わない",
+    "- title は短い日記見出しにする",
+    "- mood は 1 語から短いフレーズで表す",
+    "- doneThings は 0〜4 件の短い文字列にする",
+    "- reflection は 1〜2 文で静かに振り返る",
+    "- tomorrowNote は次につながる短い一言にする",
+    "- 情報が少ない日は、少ないこと自体をやわらかく表現する",
+    "- JSON 以外を返さない",
+  ].join("\n");
+}
+
+export function buildDailySummaryPrompt(params: {
+  dateKey: string;
+  messages: MessageContext;
+}): string {
+  const historyLines = params.messages
+    .map((message) => {
+      const text = normalizePromptText(message.text);
+      if (!text) {
+        return null;
+      }
+
+      if (message.role === "assistant") {
+        return `assistant: ${text}`;
+      }
+
+      if (message.role === "user") {
+        return `user: ${text}`;
+      }
+
+      return null;
+    })
+    .filter((line): line is string => line != null)
+    .slice(-28);
+
+  return [
+    `対象日: ${params.dateKey}`,
+    "以下はその日の会話ログです。ユーザーの発言を中心に日次サマリーを作成してください。",
+    "会話ログ:",
+    historyLines.length > 0 ? historyLines.join("\n") : "履歴なし",
+    "",
+    "JSON の各キー:",
+    "- title",
+    "- mood",
+    "- doneThings",
+    "- reflection",
+    "- tomorrowNote",
+  ].join("\n");
+}
+
 export function buildVisualEvolutionSystemInstruction(): string {
   return [
     "あなたはキャラクターデザイン用の要約メモを作るアシスタントです。",
@@ -283,15 +442,75 @@ export function buildVisualEvolutionSystemInstruction(): string {
   ].join("\n");
 }
 
+export function buildRoomSceneItemsSystemInstruction(): string {
+  return [
+    "あなたは1枚絵の室内小物を決めるアシスタントです。",
+    "入力された日次サマリーと会話から、その人の1日を部屋の中に置ける具体物へ変換してください。",
+    "出力ルール:",
+    "- 日本語で返す",
+    "- JSON 以外を返さない",
+    "- items は 0〜4 件",
+    "- 抽象語ではなく、部屋に置ける具体物だけにする",
+    "- 同じ意味の重複を避ける",
+    "- 家具そのものや部屋全体の説明は書かない",
+    "- キャラクターが持つより、部屋に置かれている小物を優先する",
+    "- 例: 筋トレ -> ダンベル, 水筒, トレーニングマット",
+    "- 例: ゲーム -> ゲームコントローラー, 携帯ゲーム機, ゲームソフト",
+  ].join("\n");
+}
+
+export function buildRoomSceneItemsPrompt(params: {
+  todaySummary: string;
+  messages: MessageContext;
+  optionalNote?: string;
+}): string {
+  const historyLines = params.messages
+    .map((message) => {
+      const text = normalizePromptText(message.text);
+      if (!text || message.role !== "user") {
+        return null;
+      }
+      return `user: ${text}`;
+    })
+    .filter((line): line is string => line != null)
+    .slice(-16);
+
+  return [
+    "次の情報から、部屋の中に置ける小物だけを抽出してください。",
+    "",
+    "今日の要約:",
+    params.todaySummary.trim(),
+    "",
+    "ユーザー発話:",
+    historyLines.length > 0 ? historyLines.join("\n") : "会話なし",
+    "",
+    "補足メモ:",
+    params.optionalNote?.trim() || "補足なし",
+    "",
+    "JSON のキー:",
+    "- items",
+  ].join("\n");
+}
+
 export function buildCharacterImagePrompt(params: ImagePromptContext): string {
   const optionalNote = params.optionalNote?.trim();
+  const roomPromptBase = resolveRoomVisualPromptBase(params.visualPromptBase);
+  const sceneItemLines = assignRoomSceneSlots(params.sceneItems).map(
+    (assignment) => `- ${assignment.slot}: ${assignment.item}`,
+  );
 
   return [
     `あなたは${params.characterName}という同一キャラクターの最新ビジュアルを生成する。`,
-    "以下の情報をすべて守って、1枚の縦長イラストとして描写する。",
+    "以下の情報をすべて守って、1枚の横長ピクセルアートとして描写する。",
     "",
-    "固定設定:",
-    params.visualPromptBase.trim() || "soft illustrated companion",
+    "画風と部屋の固定設定:",
+    roomPromptBase,
+    "- pixel-art isometric room illustration",
+    "- cute pastel palette close to a cozy kawaii bedroom reference",
+    "- wide horizontal composition, show the whole room",
+    "- fixed one-room layout from a slightly top-down angle",
+    "- left side bed, back wall desk and monitor, two windows, round rug, small table, sofa, cabinet, wall frames",
+    "- character stands or sits near the center of the room and is the clear main focus",
     "",
     "直近7日間の成長メモ:",
     params.visualEvolutionMemo.trim(),
@@ -299,16 +518,33 @@ export function buildCharacterImagePrompt(params: ImagePromptContext): string {
     "今日の振り返り:",
     params.todaySummary.trim(),
     "",
+    "今日の部屋アイテム:",
+    sceneItemLines.length > 0
+      ? sceneItemLines.join("\n")
+      : "- room items: 今日は特別な小物を増やさず、整った定常部屋のままにする",
+    "",
     "今回だけの補足:",
     optionalNote && optionalNote.length > 0 ? optionalNote : "補足なし",
+    "",
+    "構図ルール:",
+    "- 部屋の大枠レイアウトは毎回ほぼ同じに保つ",
+    "- 部屋全景を見せ、家具の位置関係を崩さない",
+    "- キャラクターを中央から大きく外さない",
+    "- キャラクターの周囲を小物で塞がない",
     "",
     "連続性ルール:",
     "- 同一キャラクターとして継続性を保つ",
     "- 変化は1日ぶんとして自然で小さく積み上げる",
-    "- 努力は表情、姿勢、服装ディテール、雰囲気で表現する",
-    "- トロフィーや数値のような露骨な記号化は避ける",
+    "- 努力は表情、髪、服装ディテール、姿勢、雰囲気で表現する",
+    "- 報告内容はトロフィーや数値ではなく、部屋の具体物としてにじませる",
     "- 画面内に文字を入れない",
     "- 暴力的、性的、過度に誇張された表現を避ける",
+    "",
+    "避けること:",
+    "- 縦長の人物ポートレートにしない",
+    "- 抽象背景や空だけの背景にしない",
+    "- 部屋のレイアウトを大きく変えない",
+    "- キャラクターを部屋の端に寄せない",
   ].join("\n");
 }
 
@@ -322,6 +558,67 @@ export function summarizeDailySummary(summary: StoredDailySummary): string {
     `振り返り: ${summary.reflection}`,
     `明日メモ: ${summary.tomorrowNote}`,
   ].join("\n");
+}
+
+export function buildFallbackDailySummary(params: {
+  dateKey: string;
+  messages: MessageContext;
+}): DailySummaryDraft {
+  const userMessages = params.messages
+    .filter((message) => message.role === "user" && !!message.text)
+    .map((message) => compactSummaryText(message.text))
+    .filter((text): text is string => text != null)
+    .slice(-3);
+  const lead = userMessages.at(-1);
+
+  return {
+    dateKey: params.dateKey,
+    title: userMessages.length >= 2 ? "少し前に進めた日" : "言葉にして整えた日",
+    mood: inferFallbackMood(userMessages),
+    doneThings: userMessages,
+    reflection: lead
+      ? `「${lead}」を中心に、その日の流れを言葉にして残せた。`
+      : "まだ記録は少ないが、その日の空気を静かに残した。",
+    tomorrowNote: lead
+      ? "明日は続きか次の一歩を一言だけでも残してみる。"
+      : "明日は短いひとことだけでも残して流れをつなぐ。",
+  };
+}
+
+export function normalizeGeneratedDailySummary(params: {
+  dateKey: string;
+  rawText?: string | null;
+  fallback: DailySummaryDraft;
+}): DailySummaryDraft | null {
+  const candidate = parseDailySummaryCandidate(params.rawText);
+  if (!candidate) {
+    return null;
+  }
+
+  const doneThings = normalizeDoneThings(candidate.doneThings);
+
+  return {
+    dateKey: params.dateKey,
+    title: normalizeSummaryField(candidate.title, 32) ?? params.fallback.title,
+    mood: normalizeSummaryField(candidate.mood, 16) ?? params.fallback.mood,
+    doneThings: doneThings ?? params.fallback.doneThings,
+    reflection:
+      normalizeSummaryField(candidate.reflection, 120) ?? params.fallback.reflection,
+    tomorrowNote:
+      normalizeSummaryField(candidate.tomorrowNote, 72) ?? params.fallback.tomorrowNote,
+  };
+}
+
+export function normalizeGeneratedRoomSceneItems(
+  rawText?: string | null,
+  fallback: string[] = [],
+): string[] {
+  const candidate = parseRoomSceneItemsCandidate(rawText);
+  const normalized = normalizeRoomSceneItems(candidate?.items);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+  return normalizeRoomSceneItems(fallback);
 }
 
 export function normalizeAssistantReply(text?: string): string | null {
@@ -378,6 +675,208 @@ function extractResponseParts(
 function normalizePromptText(text?: string): string | null {
   const normalized = text?.trim();
   return normalized ? normalized : null;
+}
+
+function hasUserMessage(messages: MessageContext): boolean {
+  return messages.some(
+    (message) =>
+      message.role === "user" &&
+      typeof message.text === "string" &&
+      message.text.trim().length > 0,
+  );
+}
+
+function compactSummaryText(text?: string): string | null {
+  const normalized = normalizePromptText(text)?.replace(/\s+/g, " ");
+  if (!normalized) {
+    return null;
+  }
+  return normalized.length <= 36 ? normalized : `${normalized.slice(0, 33).trimEnd()}...`;
+}
+
+function inferFallbackMood(userMessages: string[]): string {
+  const combined = userMessages.join(" ");
+  if (!combined) {
+    return "静か";
+  }
+  if (/(疲|つかれ|眠|しんど|不安|落ち|できな)/.test(combined)) {
+    return "ゆらぎ";
+  }
+  if (/(できた|進ん|進め|終わ|達成|うれし|楽し|頑張)/.test(combined)) {
+    return "前向き";
+  }
+  return "穏やか";
+}
+
+function parseRoomSceneItemsCandidate(
+  rawText?: string | null,
+): RoomSceneItemsCandidate | null {
+  const normalized = rawText?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const jsonText = normalized
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as RoomSceneItemsCandidate;
+  } catch {
+    return null;
+  }
+}
+
+function parseDailySummaryCandidate(rawText?: string | null): DailySummaryCandidate | null {
+  const normalized = rawText?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const jsonText = normalized
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as DailySummaryCandidate;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSummaryField(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function normalizeDoneThings(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const uniqueItems: string[] = [];
+  for (const item of value) {
+    const normalized = normalizeSummaryField(item, 40);
+    if (!normalized || uniqueItems.includes(normalized)) {
+      continue;
+    }
+    uniqueItems.push(normalized);
+    if (uniqueItems.length >= 4) {
+      break;
+    }
+  }
+  return uniqueItems;
+}
+
+function normalizeRoomSceneItems(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalizedItems: string[] = [];
+  for (const item of value) {
+    const normalized = normalizeSummaryField(item, 24);
+    if (!normalized || isAbstractSceneItem(normalized) || normalizedItems.includes(normalized)) {
+      continue;
+    }
+    normalizedItems.push(normalized);
+    if (normalizedItems.length >= 4) {
+      break;
+    }
+  }
+  return normalizedItems;
+}
+
+function isAbstractSceneItem(value: string): boolean {
+  return /^(頑張り|努力|成長|気持ち|雰囲気|空気感|記録|報告|予定|目標)$/.test(value);
+}
+
+function buildFallbackRoomSceneItems(params: {
+  todaySummary: string;
+  messages: MessageContext;
+  optionalNote?: string;
+}): string[] {
+  const userText = params.messages
+    .filter((message) => message.role === "user")
+    .map((message) => normalizePromptText(message.text))
+    .filter((value): value is string => value != null)
+    .join("\n");
+  const source = [params.todaySummary, userText, params.optionalNote?.trim() || ""].join("\n");
+
+  const matches: string[] = [];
+  const keywordMap: Array<{ pattern: RegExp; items: string[] }> = [
+    { pattern: /(筋トレ|トレーニング|ダンベル|運動)/, items: ["ダンベル", "水筒", "トレーニングマット"] },
+    { pattern: /(ゲーム|ゲーミング|コントローラー)/, items: ["ゲームコントローラー", "携帯ゲーム機", "ゲームソフト"] },
+    { pattern: /(読書|本|小説|漫画)/, items: ["単行本", "しおり"] },
+    { pattern: /(勉強|学習|授業|講義)/, items: ["ノート", "教科書", "ペン立て"] },
+    { pattern: /(開発|コーディング|実装|デバッグ|プログラミング|UI)/, items: ["ノートPC", "キーボード", "付せんメモ"] },
+    { pattern: /(ランニング|散歩|ジョギング)/, items: ["ランニングシューズ", "スポーツタオル"] },
+    { pattern: /(音楽|作曲|ピアノ|ギター|歌)/, items: ["ヘッドホン", "楽譜ノート"] },
+    { pattern: /(コーヒー|カフェ|お茶|紅茶)/, items: ["マグカップ", "ティーポット"] },
+  ];
+
+  for (const entry of keywordMap) {
+    if (!entry.pattern.test(source)) {
+      continue;
+    }
+    for (const item of entry.items) {
+      if (matches.includes(item)) {
+        continue;
+      }
+      matches.push(item);
+      if (matches.length >= 4) {
+        return matches;
+      }
+    }
+  }
+
+  return matches;
+}
+
+function assignRoomSceneSlots(items: string[]): Array<{ slot: string; item: string }> {
+  const slotLabels = [
+    "desk top item",
+    "rug-side floor item",
+    "wall shelf item",
+    "bedside item",
+  ];
+  return items.slice(0, slotLabels.length).map((item, index) => ({
+    slot: slotLabels[index],
+    item,
+  }));
+}
+
+function resolveRoomVisualPromptBase(visualPromptBase: string): string {
+  const normalized = visualPromptBase.trim();
+  if (!normalized) {
+    return DEFAULT_ROOM_VISUAL_PROMPT_BASE;
+  }
+  if (/(soft illustrated companion|やわらかいアニメ調|会話内容に応じて見た目が少し変わる相棒)/i.test(normalized)) {
+    return DEFAULT_ROOM_VISUAL_PROMPT_BASE;
+  }
+  return normalized;
 }
 
 function finalizeAssistantReply(text: string): string {

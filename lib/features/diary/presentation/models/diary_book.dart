@@ -7,12 +7,18 @@ class DiaryMonthBook {
     required this.monthLabel,
     required this.coverTitle,
     required this.coverSubtitle,
+    required this.recordedDaysCount,
+    required this.canShowPreviousMonth,
+    required this.canShowNextMonth,
     required this.entries,
   });
 
   final String monthLabel;
   final String coverTitle;
   final String coverSubtitle;
+  final int recordedDaysCount;
+  final bool canShowPreviousMonth;
+  final bool canShowNextMonth;
   final List<DiaryDayEntry> entries;
 
   int get pageCount => entries.length + 1;
@@ -44,6 +50,7 @@ class DiaryDayEntry {
     required this.body,
     required this.illustrationPalette,
     required this.highlightLabel,
+    this.imageUrl,
   });
 
   final int dayNumber;
@@ -51,4 +58,5 @@ class DiaryDayEntry {
   final String body;
   final List<Color> illustrationPalette;
   final String highlightLabel;
+  final String? imageUrl;
 }

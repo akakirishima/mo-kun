@@ -9,6 +9,7 @@ import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart
 import 'package:image_picker/image_picker.dart';
 
 import '../../../test_support/fake_app.dart';
+import '../../../test_support/mock_network_images.dart';
 
 class _FakeImageUrlResolver extends ImageUrlResolver {
   _FakeImageUrlResolver(this.mapping);
@@ -87,23 +88,34 @@ void main() {
     const rawUrl = 'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
     const resolvedUrl = 'https://example.com/resolved-home-stage.png';
 
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        repository: _buildRepository(latestImageUrl: rawUrl),
-        overrides: [
-          imageUrlResolverProvider.overrideWithValue(
-            _FakeImageUrlResolver(const {rawUrl: resolvedUrl}),
-          ),
-        ],
-        child: HomeScreen(onSettingsTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await mockNetworkImages(() async {
+      await tester.pumpWidget(
+        wrapWithTestApp(
+          repository: _buildRepository(latestImageUrl: rawUrl),
+          overrides: [
+            imageUrlResolverProvider.overrideWithValue(
+              _FakeImageUrlResolver(const {rawUrl: resolvedUrl}),
+            ),
+          ],
+          child: HomeScreen(onSettingsTap: nullHandler),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    final image = tester.widget<Image>(
-      find.byKey(const ValueKey<String>('home-room-stage-image')),
-    );
-    expect((image.image as NetworkImage).url, resolvedUrl);
+      final image = tester.widget<Image>(
+        find.byKey(const ValueKey<String>('home-room-stage-image')),
+      );
+      expect((image.image as NetworkImage).url, resolvedUrl);
+      expect(image.fit, BoxFit.contain);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('home-room-stage')),
+          matching: find.byType(CustomPaint),
+        ),
+        findsNothing,
+      );
+    });
   });
 
   testWidgets('shows assistant history and sends a new pending message', (

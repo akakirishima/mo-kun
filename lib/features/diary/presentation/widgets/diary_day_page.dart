@@ -1,12 +1,16 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/models/diary_book.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_day_selector.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_vertical_text.dart';
 
-class DiaryDayPage extends StatelessWidget {
+const _writingPaperPadding = EdgeInsets.fromLTRB(16, 14, 12, 14);
+
+class DiaryDayPage extends ConsumerWidget {
   static const double writingColumnPitch = 36.0;
   static const double writingRowPitch = 25.0;
 
@@ -26,8 +30,11 @@ class DiaryDayPage extends StatelessWidget {
   final double bottomClearance;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = AppearanceScope.paletteOf(context).diary;
+    final resolvedImageUrl = ref.watch(
+      resolvedImageUrlProvider(entry.imageUrl),
+    );
 
     return Container(
       key: ValueKey<String>('diary-entry-page-${entry.dayNumber}'),
@@ -114,11 +121,9 @@ class DiaryDayPage extends StatelessWidget {
                         padding: const EdgeInsets.all(14),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(24),
-                          child: CustomPaint(
-                            painter: _DiarySketchPainter(
-                              palette: entry.illustrationPalette,
-                            ),
-                            child: const SizedBox.expand(),
+                          child: _DiaryEntryIllustration(
+                            entry: entry,
+                            resolvedImageUrl: resolvedImageUrl,
                           ),
                         ),
                       ),
@@ -139,9 +144,10 @@ class DiaryDayPage extends StatelessWidget {
                       child: CustomPaint(
                         painter: _WritingPaperPainter(
                           ruleColor: palette.ruleLine,
+                          contentPadding: _writingPaperPadding,
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                          padding: _writingPaperPadding,
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -199,9 +205,13 @@ String _entryDateMetaText(DiaryDayEntry entry, {required String monthNumber}) {
 }
 
 class _WritingPaperPainter extends CustomPainter {
-  const _WritingPaperPainter({required this.ruleColor});
+  const _WritingPaperPainter({
+    required this.ruleColor,
+    required this.contentPadding,
+  });
 
   final Color ruleColor;
+  final EdgeInsets contentPadding;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -209,9 +219,9 @@ class _WritingPaperPainter extends CustomPainter {
       ..color = ruleColor.withValues(alpha: 0.68)
       ..strokeWidth = 1.4;
     const spacing = DiaryDayPage.writingColumnPitch;
-    final startOffset = size.width % spacing;
+    final startX = size.width - contentPadding.right - (spacing / 2);
 
-    for (var x = startOffset; x <= size.width; x += spacing) {
+    for (var x = startX; x >= contentPadding.left; x -= spacing) {
       for (var y = 8.0; y < size.height - 8; y += 11) {
         final segmentEnd = math.min(y + 5, size.height - 8);
         canvas.drawLine(Offset(x, y), Offset(x, segmentEnd), guidePaint);
@@ -221,7 +231,117 @@ class _WritingPaperPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WritingPaperPainter oldDelegate) {
-    return oldDelegate.ruleColor != ruleColor;
+    return oldDelegate.ruleColor != ruleColor ||
+        oldDelegate.contentPadding != contentPadding;
+  }
+}
+
+class _DiaryEntryIllustration extends StatelessWidget {
+  const _DiaryEntryIllustration({
+    required this.entry,
+    required this.resolvedImageUrl,
+  });
+
+  final DiaryDayEntry entry;
+  final AsyncValue<String?> resolvedImageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                entry.illustrationPalette[0],
+                entry.illustrationPalette[1].withValues(alpha: 0.78),
+              ],
+            ),
+          ),
+          child: resolvedImageUrl.when(
+            data: (url) {
+              if (url == null || url.isEmpty) {
+                return _DiarySketchPlaceholder(
+                  dayNumber: entry.dayNumber,
+                  palette: entry.illustrationPalette,
+                );
+              }
+              return ColoredBox(
+                color: Colors.white.withValues(alpha: 0.22),
+                child: Center(
+                  child: Image.network(
+                    url,
+                    key: ValueKey<String>('diary-entry-image-${entry.dayNumber}'),
+                    fit: BoxFit.contain,
+                    alignment: Alignment.center,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _DiarySketchPlaceholder(
+                        dayNumber: entry.dayNumber,
+                        palette: entry.illustrationPalette,
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+            loading: () => Center(
+              child: CircularProgressIndicator(
+                key: ValueKey<String>(
+                  'diary-entry-image-loading-${entry.dayNumber}',
+                ),
+                strokeWidth: 2,
+              ),
+            ),
+            error: (_, __) => _DiarySketchPlaceholder(
+              dayNumber: entry.dayNumber,
+              palette: entry.illustrationPalette,
+            ),
+          ),
+        ),
+        Positioned(
+          left: 14,
+          bottom: 14,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                entry.highlightLabel,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DiarySketchPlaceholder extends StatelessWidget {
+  const _DiarySketchPlaceholder({
+    required this.dayNumber,
+    required this.palette,
+  });
+
+  final int dayNumber;
+  final List<Color> palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      key: ValueKey<String>('diary-entry-image-placeholder-$dayNumber'),
+      painter: _DiarySketchPainter(palette: palette),
+      child: const SizedBox.expand(),
+    );
   }
 }
 

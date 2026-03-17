@@ -10,10 +10,14 @@ class DiaryCoverPage extends StatelessWidget {
     super.key,
     required this.book,
     required this.onSelectorTap,
+    required this.onPreviousMonthTap,
+    required this.onNextMonthTap,
   });
 
   final DiaryMonthBook book;
   final VoidCallback onSelectorTap;
+  final VoidCallback onPreviousMonthTap;
+  final VoidCallback onNextMonthTap;
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +107,16 @@ class DiaryCoverPage extends StatelessWidget {
                           children: [
                             Row(
                               children: [
+                                _MonthArrowButton(
+                                  widgetKey: const ValueKey<String>(
+                                    'diary-cover-previous-month',
+                                  ),
+                                  icon: Icons.chevron_left_rounded,
+                                  onTap: book.canShowPreviousMonth
+                                      ? onPreviousMonthTap
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
                                 DiaryInlineSelector(
                                   key: const ValueKey<String>(
                                     'diary-cover-selector',
@@ -128,7 +142,15 @@ class DiaryCoverPage extends StatelessWidget {
                                   ),
                                 ),
                                 const Spacer(),
-                                const SizedBox(width: 40),
+                                _MonthArrowButton(
+                                  widgetKey: const ValueKey<String>(
+                                    'diary-cover-next-month',
+                                  ),
+                                  icon: Icons.chevron_right_rounded,
+                                  onTap: book.canShowNextMonth
+                                      ? onNextMonthTap
+                                      : null,
+                                ),
                               ],
                             ),
                             const Spacer(),
@@ -157,14 +179,14 @@ class DiaryCoverPage extends StatelessWidget {
                               runSpacing: 10,
                               children: [
                                 _CoverBadge(
-                                  label: '31 Days',
+                                  label: '${book.entries.length} Days',
                                   color: palette.paperFill.withValues(
                                     alpha: 0.16,
                                   ),
                                   textColor: palette.paperFill,
                                 ),
                                 _CoverBadge(
-                                  label: 'Swipe to Open',
+                                  label: '${book.recordedDaysCount} Entries',
                                   color: Colors.white.withValues(alpha: 0.28),
                                   textColor: palette.paperFill,
                                 ),
@@ -180,6 +202,36 @@ class DiaryCoverPage extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _MonthArrowButton extends StatelessWidget {
+  const _MonthArrowButton({
+    required this.widgetKey,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final Key widgetKey;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).diary;
+    return Material(
+      color: Colors.white.withValues(alpha: onTap == null ? 0.12 : 0.22),
+      shape: const CircleBorder(),
+      child: InkWell(
+        key: widgetKey,
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, color: palette.paperFill, size: 18),
+        ),
       ),
     );
   }
