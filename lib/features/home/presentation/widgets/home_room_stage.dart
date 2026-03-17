@@ -3,15 +3,23 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 class HomeRoomStage extends StatelessWidget {
-  const HomeRoomStage({super.key});
+  const HomeRoomStage({
+    super.key,
+    this.characterImageUrl,
+    this.isResolvingImage = false,
+  });
 
   static const _frameFill = Color(0xFFFFEAF2);
   static const _frameBorder = Color(0xFFD2F4FF);
   static const _frameOutline = Color(0xFFE8A0C4);
 
+  final String? characterImageUrl;
+  final bool isResolvingImage;
+
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: const ValueKey<String>('home-room-stage'),
       decoration: BoxDecoration(
         color: _frameFill,
         borderRadius: BorderRadius.circular(28),
@@ -44,7 +52,10 @@ class HomeRoomStage extends StatelessWidget {
                   alignment: const Alignment(0, 0.18),
                   child: Transform.translate(
                     offset: const Offset(0, -10),
-                    child: const _MoriSprite(),
+                    child: _StageCharacter(
+                      imageUrl: characterImageUrl,
+                      isResolvingImage: isResolvingImage,
+                    ),
                   ),
                 ),
               ),
@@ -56,8 +67,70 @@ class HomeRoomStage extends StatelessWidget {
   }
 }
 
+class _StageCharacter extends StatelessWidget {
+  const _StageCharacter({required this.imageUrl, required this.isResolvingImage});
+
+  final String? imageUrl;
+  final bool isResolvingImage;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isResolvingImage) {
+      return const SizedBox(
+        width: 96,
+        height: 132,
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              key: ValueKey<String>('home-room-stage-loading'),
+              strokeWidth: 2.4,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (imageUrl == null || imageUrl!.isEmpty) {
+      return const _MoriSprite(key: ValueKey<String>('home-room-stage-fallback'));
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: SizedBox(
+        width: 168,
+        height: 216,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x221F1A1E),
+                blurRadius: 20,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Image.network(
+            imageUrl!,
+            key: const ValueKey<String>('home-room-stage-image'),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const _MoriSprite(
+                key: ValueKey<String>('home-room-stage-fallback'),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MoriSprite extends StatelessWidget {
-  const _MoriSprite();
+  const _MoriSprite({super.key});
 
   @override
   Widget build(BuildContext context) {

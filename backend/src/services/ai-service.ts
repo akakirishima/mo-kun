@@ -1,6 +1,6 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { loadConfig, type AppConfig } from "../config.js";
-import { CharacterDraft, DailySummaryDraft, ImageDraft } from "../types.js";
+import { CharacterDraft, DailySummaryDraft, StoredDailySummary } from "../types.js";
 
 type CharacterProfileInput = {
   displayName: string;
@@ -10,6 +10,19 @@ type CharacterProfileInput = {
 };
 
 type MessageContext = Array<{ role?: string; text?: string }>;
+
+type GeneratedImageAsset = {
+  mimeType: string;
+  imageBytes: Buffer;
+};
+
+type ImagePromptContext = {
+  characterName: string;
+  visualPromptBase: string;
+  visualEvolutionMemo: string;
+  todaySummary: string;
+  optionalNote?: string;
+};
 
 export class AiServiceError extends Error {
   constructor(message: string, cause?: unknown) {
@@ -47,6 +60,7 @@ export class AiService {
         "soft illustrated companion",
         `goal: ${profile.goal}`,
         `tone: ${profile.partnerStyle}`,
+        "keep the same core identity across daily updates",
       ].join(", "),
       starterGreeting: `${profile.displayName || "きみ"}、今日から一緒に進もう。まずは今日のことを聞かせて。`,
     };
@@ -90,18 +104,70 @@ export class AiService {
     }
   }
 
-  generateImageDraft(params: {
-    title: string;
-    visualPromptBase: string;
-    reportText: string;
-    userId: string;
-  }): ImageDraft {
-    const slug = Date.now().toString();
-    return {
-      title: params.title,
-      promptExcerpt: `${params.visualPromptBase} / ${params.reportText}`.trim(),
-      imageUrl: `https://example.com/generated/${params.userId}/${slug}.png`,
-    };
+  async generateVisualEvolutionMemo(params: {
+    recentSummaries: StoredDailySummary[];
+  }): Promise<string> {
+    if (params.recentSummaries.length === 0) {
+      return "まだ大きな変化は少なく、始まりの印象を保ちながら静かに成長している。";
+    }
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.config.geminiModel,
+        contents: buildVisualEvolutionPrompt(params.recentSummaries),
+        config: {
+          systemInstruction: buildVisualEvolutionSystemInstruction(),
+          temperature: 0.35,
+          maxOutputTokens: 180,
+        },
+      });
+      const normalized = normalizeAssistantReply(response.text);
+      if (!normalized) {
+        throw new AiServiceError("visual_evolution_memo_empty");
+      }
+      return normalized;
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Gemini visual memo generation failed", {
+        model: this.config.geminiModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      if (error instanceof AiServiceError) {
+        throw error;
+      }
+      throw new AiServiceError(`visual_evolution_memo_failed: ${detail}`, error);
+    }
+  }
+
+  buildCharacterImagePrompt(params: ImagePromptContext): string {
+    return buildCharacterImagePrompt(params);
+  }
+
+  async generateCharacterImage(params: {
+    prompt: string;
+  }): Promise<GeneratedImageAsset> {
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.config.geminiImageModel,
+        contents: params.prompt,
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        },
+      });
+      return extractGeneratedImage(response);
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Gemini image generation failed", {
+        model: this.config.geminiImageModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      if (error instanceof AiServiceError) {
+        throw error;
+      }
+      throw new AiServiceError(`gemini_image_generation_failed: ${detail}`, error);
+    }
   }
 
   generateDailySummary(params: {
@@ -181,6 +247,83 @@ export function buildAssistantPrompt(
   ].join("\n");
 }
 
+export function buildVisualEvolutionPrompt(recentSummaries: StoredDailySummary[]): string {
+  const summaryLines = recentSummaries
+    .map((summary, index) => {
+      const doneThings = summary.doneThings.length > 0 ? summary.doneThings.join(" / ") : "報告なし";
+      return [
+        `#${index + 1} date: ${summary.dateKey}`,
+        `title: ${summary.title}`,
+        `mood: ${summary.mood}`,
+        `done: ${doneThings}`,
+        `reflection: ${summary.reflection}`,
+        `tomorrow: ${summary.tomorrowNote}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  return [
+    "直近7日分の振り返りから、相棒キャラクターの見た目ににじむ成長だけを短く要約してください。",
+    "数値や実績を直接書かず、表情・姿勢・雰囲気・服装ディテールに落ちる変化だけをまとめてください。",
+    "",
+    summaryLines,
+  ].join("\n");
+}
+
+export function buildVisualEvolutionSystemInstruction(): string {
+  return [
+    "あなたはキャラクターデザイン用の要約メモを作るアシスタントです。",
+    "出力ルール:",
+    "- 日本語で2〜4文に収める",
+    "- 同一キャラクターの連続性を保つ方向で書く",
+    "- 変化は自然で小さく積み上がるものだけを書く",
+    "- 努力は表情、姿勢、服装ディテール、雰囲気に翻訳する",
+    "- トロフィーや数値のような露骨な記号化は避ける",
+    "- 箇条書きにしない",
+  ].join("\n");
+}
+
+export function buildCharacterImagePrompt(params: ImagePromptContext): string {
+  const optionalNote = params.optionalNote?.trim();
+
+  return [
+    `あなたは${params.characterName}という同一キャラクターの最新ビジュアルを生成する。`,
+    "以下の情報をすべて守って、1枚の縦長イラストとして描写する。",
+    "",
+    "固定設定:",
+    params.visualPromptBase.trim() || "soft illustrated companion",
+    "",
+    "直近7日間の成長メモ:",
+    params.visualEvolutionMemo.trim(),
+    "",
+    "今日の振り返り:",
+    params.todaySummary.trim(),
+    "",
+    "今回だけの補足:",
+    optionalNote && optionalNote.length > 0 ? optionalNote : "補足なし",
+    "",
+    "連続性ルール:",
+    "- 同一キャラクターとして継続性を保つ",
+    "- 変化は1日ぶんとして自然で小さく積み上げる",
+    "- 努力は表情、姿勢、服装ディテール、雰囲気で表現する",
+    "- トロフィーや数値のような露骨な記号化は避ける",
+    "- 画面内に文字を入れない",
+    "- 暴力的、性的、過度に誇張された表現を避ける",
+  ].join("\n");
+}
+
+export function summarizeDailySummary(summary: StoredDailySummary): string {
+  const doneThings = summary.doneThings.length > 0 ? summary.doneThings.join(" / ") : "報告なし";
+  return [
+    `日付: ${summary.dateKey}`,
+    `タイトル: ${summary.title}`,
+    `気分: ${summary.mood}`,
+    `やったこと: ${doneThings}`,
+    `振り返り: ${summary.reflection}`,
+    `明日メモ: ${summary.tomorrowNote}`,
+  ].join("\n");
+}
+
 export function normalizeAssistantReply(text?: string): string | null {
   if (!text) {
     return null;
@@ -196,6 +339,40 @@ export function normalizeAssistantReply(text?: string): string | null {
   }
 
   return finalizeAssistantReply(normalized.slice(0, 597).trimEnd());
+}
+
+export function extractGeneratedImage(response: unknown): GeneratedImageAsset {
+  const parts = extractResponseParts(response);
+  for (const part of parts) {
+    const inlineData = part.inlineData;
+    if (!inlineData?.data || !inlineData.mimeType?.startsWith("image/")) {
+      continue;
+    }
+    return {
+      mimeType: inlineData.mimeType,
+      imageBytes: Buffer.from(inlineData.data, "base64"),
+    };
+  }
+
+  throw new AiServiceError("gemini_image_response_missing_inline_data");
+}
+
+function extractResponseParts(
+  response: unknown,
+): Array<{ inlineData?: { data?: string; mimeType?: string } }> {
+  if (typeof response !== "object" || response == null) {
+    return [];
+  }
+
+  const candidateContainer = response as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }>;
+      };
+    }>;
+  };
+
+  return candidateContainer.candidates?.flatMap((candidate) => candidate.content?.parts ?? []) ?? [];
 }
 
 function normalizePromptText(text?: string): string | null {

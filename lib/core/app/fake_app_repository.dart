@@ -153,6 +153,44 @@ class FakeAppRepository implements AppRepository {
   }
 
   @override
+  Future<void> regenerateCharacterImage({
+    String? title,
+    String? reportText,
+  }) async {
+    final now = DateTime.now();
+    final prompt = [
+      '直近7日で少しずつ自信がついてきた',
+      '今日は表情が少し明るい',
+      if (reportText != null && reportText.trim().isNotEmpty) reportText.trim(),
+    ].join(' / ');
+    final imageUrl =
+        'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.png';
+
+    _imageHistory = [
+      CharacterImageVersion(
+        id: 'image-${now.microsecondsSinceEpoch}',
+        title: title ?? '更新した姿',
+        promptExcerpt: prompt,
+        status: CharacterImageStatus.ready,
+        generatedAt: now,
+        imageUrl: imageUrl,
+      ),
+      ..._imageHistory,
+    ];
+    _character = CharacterSnapshot(
+      id: _character?.id ?? 'character-${_session.userId}',
+      name: _character?.name ?? 'Mori',
+      personaPrompt: _character?.personaPrompt ?? '',
+      visualPromptBase: _character?.visualPromptBase ?? '',
+      imageStatus: CharacterImageStatus.ready,
+      latestImageUrl: imageUrl,
+      lastGeneratedAt: now,
+      starterGreeting: _character?.starterGreeting,
+    );
+    _emitAll();
+  }
+
+  @override
   Stream<CharacterSnapshot?> watchCharacter(String characterId) async* {
     yield _character;
     yield* _characterController.stream;

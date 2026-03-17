@@ -8,7 +8,8 @@ import 'package:gdgoc_2026_prototype/core/theme/appearance_controller.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 
 FakeAppRepository buildFakeRepository() {
-  final now = DateTime(2026, 3, 16, 10, 0);
+  final now = DateTime.now();
+  final dateKey = _dateKey(now);
   return FakeAppRepository(
     initialSession: const AppSession(
       userId: 'test-user',
@@ -34,7 +35,7 @@ FakeAppRepository buildFakeRepository() {
       ),
     ],
     initialSummary: DailySummary(
-      dateKey: '2026-03-16',
+      dateKey: dateKey,
       title: '小さく前進した日',
       mood: '前向き',
       doneThings: const <String>['報告を1つ送った', 'UIを整えた'],
@@ -54,12 +55,28 @@ FakeAppRepository buildFakeRepository() {
   );
 }
 
-Widget wrapWithTestApp({required Widget child, FakeAppRepository? repository}) {
+String _dateKey(DateTime dateTime) {
+  final adjusted = dateTime.hour < 3
+      ? dateTime.subtract(const Duration(days: 1))
+      : dateTime;
+  final month = adjusted.month.toString().padLeft(2, '0');
+  final day = adjusted.day.toString().padLeft(2, '0');
+  return '${adjusted.year}-$month-$day';
+}
+
+Widget wrapWithTestApp({
+  required Widget child,
+  FakeAppRepository? repository,
+  List<Override> overrides = const <Override>[],
+}) {
   final appearanceController = AppearanceController();
   final repo = repository ?? buildFakeRepository();
 
   return ProviderScope(
-    overrides: [appRepositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      appRepositoryProvider.overrideWithValue(repo),
+      ...overrides,
+    ],
     child: AppearanceScope(
       controller: appearanceController,
       child: MaterialApp(

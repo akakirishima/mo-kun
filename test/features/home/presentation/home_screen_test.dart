@@ -1,9 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
+import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
+import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../test_support/fake_app.dart';
+
+class _FakeImageUrlResolver extends ImageUrlResolver {
+  _FakeImageUrlResolver(this.mapping);
+
+  final Map<String, String> mapping;
+
+  @override
+  Future<String?> resolve(String? rawUrl) async {
+    if (rawUrl == null) {
+      return null;
+    }
+    return mapping[rawUrl] ?? rawUrl;
+  }
+}
+
+FakeAppRepository _buildRepository({required String latestImageUrl}) {
+  final now = DateTime(2026, 3, 18, 10, 0);
+  return FakeAppRepository(
+    initialSession: const AppSession(
+      userId: 'test-user',
+      needsOnboarding: false,
+      characterId: 'test-character',
+      threadId: 'test-thread',
+    ),
+    initialCharacter: CharacterSnapshot(
+      id: 'test-character',
+      name: 'Mori',
+      personaPrompt: 'やわらかく励ます相棒。',
+      visualPromptBase: '会話内容に応じて見た目が少し変わる相棒。',
+      imageStatus: CharacterImageStatus.ready,
+      latestImageUrl: latestImageUrl,
+      lastGeneratedAt: now,
+      starterGreeting: '今日も会えて嬉しいな。\n一緒にお話ししよ！',
+    ),
+    initialMessages: <ChatMessage>[
+      ChatMessage(
+        id: 'assistant-1',
+        role: ChatRole.assistant,
+        text: 'おはよう。昨日の積み上げ、ちゃんと覚えてるよ。',
+        createdAt: now.subtract(const Duration(minutes: 3)),
+      ),
+    ],
+  );
+}
 
 void main() {
   testWidgets('renders the Mori card, room stage, and action buttons', (
@@ -30,6 +79,31 @@ void main() {
       find.byKey(const ValueKey<String>('home-action-chat')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('renders the generated character image when available', (
+    WidgetTester tester,
+  ) async {
+    const rawUrl = 'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
+    const resolvedUrl = 'https://example.com/resolved-home-stage.png';
+
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        repository: _buildRepository(latestImageUrl: rawUrl),
+        overrides: [
+          imageUrlResolverProvider.overrideWithValue(
+            _FakeImageUrlResolver(const {rawUrl: resolvedUrl}),
+          ),
+        ],
+        child: HomeScreen(onSettingsTap: nullHandler),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final image = tester.widget<Image>(
+      find.byKey(const ValueKey<String>('home-room-stage-image')),
+    );
+    expect((image.image as NetworkImage).url, resolvedUrl);
   });
 
   testWidgets('shows assistant history and sends a new pending message', (
