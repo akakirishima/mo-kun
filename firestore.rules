@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{userId} {
+      allow read, write: if ownsUser(userId);
+
+      match /dailySummaries/{dateKey} {
+        allow read: if ownsUser(userId);
+        allow write: if false;
+      }
+    }
+
+    match /characters/{characterId} {
+      allow read, write: if ownsUser(characterId);
+
+      match /imageHistory/{imageId} {
+        allow read: if ownsUser(characterId);
+        allow write: if false;
+      }
+    }
+
+    match /chatThreads/{threadId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+
+      match /messages/{messageId} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/chatThreads/$(threadId)).data.userId == request.auth.uid;
+        allow write: if false;
+      }
+    }
+  }
+}
+

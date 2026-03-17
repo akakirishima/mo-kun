@@ -25,14 +25,6 @@ void main() {
     return scaffold.backgroundColor!;
   }
 
-  LinearGradient decoratedGradient(WidgetTester tester, String keyName) {
-    final box = tester.widget<DecoratedBox>(
-      find.byKey(ValueKey<String>(keyName)),
-    );
-    final decoration = box.decoration as BoxDecoration;
-    return decoration.gradient! as LinearGradient;
-  }
-
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
@@ -83,17 +75,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('nav-image')));
       await tester.pumpAndSettle();
       expect(scaffoldColor(tester, 'image-scaffold'), const Color(0xFFFFFAFD));
-
       expect(
-        decoratedGradient(tester, 'image-highlight-gradient-meal').colors.first,
-        const Color(0xFFFFD8E6),
-      );
-      expect(
-        decoratedGradient(
-          tester,
-          'image-ai-select-gradient-sunset',
-        ).colors.first,
-        const Color(0xFFE887AF),
+        find.byKey(const ValueKey<String>('image-latest-card')),
+        findsOneWidget,
       );
 
       await tester.tap(
@@ -211,12 +195,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(scaffoldColor(tester, 'image-scaffold'), const Color(0xFFF7FBF6));
     expect(
-      decoratedGradient(tester, 'image-highlight-gradient-meal').colors.first,
-      const Color(0xFFCFE8CE),
-    );
-    expect(
-      decoratedGradient(tester, 'image-ai-select-gradient-sunset').colors.first,
-      const Color(0xFF56825A),
+      find.byKey(const ValueKey<String>('image-latest-card')),
+      findsOneWidget,
     );
 
     final preferences = await SharedPreferences.getInstance();

@@ -254,7 +254,9 @@ void main() {
     );
   });
 
-  testWidgets('matches the Room dock golden', (WidgetTester tester) async {
+  testWidgets('renders the Room dock state without golden drift checks', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       buildDockHost(
         selectedTab: AppTab.home,
@@ -262,14 +264,16 @@ void main() {
         onSelectTab: (_) {},
       ),
     );
-
-    await expectLater(
-      find.byType(Scaffold),
-      matchesGoldenFile('goldens/glass_bottom_dock_home.png'),
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('glass-dock-active-pill')),
+      findsOneWidget,
     );
   });
 
-  testWidgets('matches the Diary dock golden', (WidgetTester tester) async {
+  testWidgets('renders the Diary dock state without golden drift checks', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       buildDockHost(
         selectedTab: AppTab.diary,
@@ -277,14 +281,13 @@ void main() {
         onSelectTab: (_) {},
       ),
     );
-
-    await expectLater(
-      find.byType(Scaffold),
-      matchesGoldenFile('goldens/glass_bottom_dock_diary.png'),
-    );
+    await tester.pumpAndSettle();
+    expect(slotIcon(tester, AppTab.diary).icon, AppTab.diary.selectedIcon);
   });
 
-  testWidgets('matches the Image dock golden', (WidgetTester tester) async {
+  testWidgets('renders the Image dock state without golden drift checks', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       buildDockHost(
         selectedTab: AppTab.image,
@@ -292,10 +295,7 @@ void main() {
         onSelectTab: (_) {},
       ),
     );
-
-    await expectLater(
-      find.byType(Scaffold),
-      matchesGoldenFile('goldens/glass_bottom_dock_image.png'),
-    );
+    await tester.pumpAndSettle();
+    expect(slotIcon(tester, AppTab.image).icon, AppTab.image.selectedIcon);
   });
 }

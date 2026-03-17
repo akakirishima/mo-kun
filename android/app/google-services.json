@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "922529284142",
+    "project_id": "gdgoc-2026-mo-kun",
+    "storage_bucket": "gdgoc-2026-mo-kun.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:922529284142:android:3a7eb17a91153ae65a9fbf",
+        "android_client_info": {
+          "package_name": "dev.gdgoc.gdgoc_2026_prototype"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeS0_QnAAIS4srrMPK24oYbrRtb5ADyJw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
