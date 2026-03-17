@@ -4,13 +4,65 @@ import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 
-class ImageScreen extends ConsumerWidget {
+class ImageScreen extends ConsumerStatefulWidget {
   const ImageScreen({super.key, required this.onSettingsTap});
 
   final VoidCallback onSettingsTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ImageScreen> createState() => _ImageScreenState();
+}
+
+class _ImageScreenState extends ConsumerState<ImageScreen> {
+  bool _isSubmitting = false;
+
+  Future<void> _handleRegenerateTap() async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    final note = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _RegenerateImageSheet(),
+    );
+
+    if (!mounted || note == null) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await ref
+          .read(regenerateCharacterImageControllerProvider)
+          .regenerate(reportText: note, title: '更新した姿');
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('画像の再生成を開始しました')));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('画像の再生成に失敗しました')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).image;
     final session = ref.watch(sessionProvider).valueOrNull;
     final characterId = session?.characterId;
@@ -21,6 +73,9 @@ class ImageScreen extends ConsumerWidget {
         ? const <CharacterImageVersion>[]
         : ref.watch(imageHistoryProvider(characterId)).valueOrNull ??
               const <CharacterImageVersion>[];
+    final latestImageUrl = ref.watch(
+      resolvedImageUrlProvider(character?.latestImageUrl),
+    );
 
     return Scaffold(
       key: const ValueKey<String>('image-scaffold'),
@@ -50,7 +105,7 @@ class ImageScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '昨日の報告から更新された姿',
+                            '直近7日分の積み上がりから更新された姿',
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(color: palette.subtitleText),
                           ),
@@ -59,7 +114,7 @@ class ImageScreen extends ConsumerWidget {
                     ),
                     IconButton(
                       key: const ValueKey<String>('image-settings-button'),
-                      onPressed: onSettingsTap,
+                      onPressed: widget.onSettingsTap,
                       icon: const Icon(Icons.settings_outlined),
                       tooltip: '設定',
                       color: palette.settingsIcon,
@@ -71,7 +126,10 @@ class ImageScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                child: _LatestImageCard(character: character),
+                child: _LatestImageCard(
+                  character: character,
+                  latestImageUrl: latestImageUrl,
+                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -105,27 +163,119 @@ class ImageScreen extends ConsumerWidget {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: FloatingActionButton(
         key: const ValueKey<String>('image-post-fab'),
-        onPressed: () {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              const SnackBar(content: Text('画像の手動再生成は backend 実装後に追加します')),
-            );
-        },
+        onPressed: _isSubmitting ? null : _handleRegenerateTap,
         heroTag: 'image-post-fab',
         tooltip: '再生成',
         backgroundColor: palette.fabFill,
         foregroundColor: palette.fabForeground,
-        child: const Icon(Icons.refresh_rounded, size: 28),
+        child: _isSubmitting
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : const Icon(Icons.refresh_rounded, size: 28),
+      ),
+    );
+  }
+}
+
+class _RegenerateImageSheet extends StatefulWidget {
+  const _RegenerateImageSheet();
+
+  @override
+  State<_RegenerateImageSheet> createState() => _RegenerateImageSheetState();
+}
+
+class _RegenerateImageSheetState extends State<_RegenerateImageSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).image;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          key: const ValueKey<String>('image-regenerate-sheet'),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '再生成メモ',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: palette.titleText,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '今回だけ反映したい雰囲気や補足を短く入れます。',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: palette.subtitleText),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              key: const ValueKey<String>('image-regenerate-input'),
+              controller: _controller,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: '少し春っぽい空気感にしたい、など',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('閉じる'),
+                ),
+                const Spacer(),
+                FilledButton(
+                  key: const ValueKey<String>('image-regenerate-submit'),
+                  onPressed: () {
+                    Navigator.of(context).pop(_controller.text.trim());
+                  },
+                  child: const Text('再生成'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _LatestImageCard extends StatelessWidget {
-  const _LatestImageCard({required this.character});
+  const _LatestImageCard({
+    required this.character,
+    required this.latestImageUrl,
+  });
 
   final CharacterSnapshot? character;
+  final AsyncValue<String?> latestImageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +304,52 @@ class _LatestImageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SizedBox(
+            height: 220,
+            width: double.infinity,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.38),
+                ),
+                child: latestImageUrl.when(
+                  data: (resolvedUrl) {
+                    if (resolvedUrl == null || resolvedUrl.isEmpty) {
+                      return const _ImagePlaceholder(
+                        icon: Icons.auto_awesome_rounded,
+                        label: '最新画像はまだありません',
+                        widgetKey: ValueKey<String>('image-latest-placeholder'),
+                      );
+                    }
+                    return Image.network(
+                      resolvedUrl,
+                      key: const ValueKey<String>('image-latest-preview'),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const _ImagePlaceholder(
+                          icon: Icons.broken_image_outlined,
+                          label: '画像を読み込めませんでした',
+                          widgetKey: ValueKey<String>('image-latest-error'),
+                        );
+                      },
+                    );
+                  },
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(
+                      key: ValueKey<String>('image-latest-loading'),
+                    ),
+                  ),
+                  error: (_, __) => const _ImagePlaceholder(
+                    icon: Icons.broken_image_outlined,
+                    label: '画像 URL の解決に失敗しました',
+                    widgetKey: ValueKey<String>('image-latest-error'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
           Text(
             character?.name ?? 'Mori',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -183,6 +379,39 @@ class _LatestImageCard extends StatelessWidget {
   }
 }
 
+class _ImagePlaceholder extends StatelessWidget {
+  const _ImagePlaceholder({
+    required this.icon,
+    required this.label,
+    required this.widgetKey,
+  });
+
+  final IconData icon;
+  final String label;
+  final Key widgetKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        key: widgetKey,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 48, color: Colors.black54),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.black54,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ImageHistoryTile extends StatelessWidget {
   const _ImageHistoryTile({required this.item, required this.index});
 
@@ -192,6 +421,13 @@ class _ImageHistoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).image;
+    final statusLabel = switch (item.status) {
+      CharacterImageStatus.generating => '生成中',
+      CharacterImageStatus.failed => '失敗',
+      CharacterImageStatus.ready => '更新済み',
+      _ => '未生成',
+    };
+
     return Container(
       key: ValueKey<String>('image-history-item-$index'),
       padding: const EdgeInsets.all(16),
@@ -220,17 +456,31 @@ class _ImageHistoryTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: palette.titleText,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: palette.titleText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      statusLabel,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: palette.subtitleText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
                   item.promptExcerpt,
-                  maxLines: 2,
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(
                     context,

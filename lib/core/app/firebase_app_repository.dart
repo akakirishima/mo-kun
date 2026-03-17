@@ -98,6 +98,17 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
+  Future<void> regenerateCharacterImage({
+    String? title,
+    String? reportText,
+  }) async {
+    await _post('/v1/characters/image', {
+      if (title != null && title.isNotEmpty) 'title': title,
+      if (reportText != null && reportText.isNotEmpty) 'reportText': reportText,
+    });
+  }
+
+  @override
   Stream<CharacterSnapshot?> watchCharacter(String characterId) {
     return firestore.collection('characters').doc(characterId).snapshots().map((
       snapshot,

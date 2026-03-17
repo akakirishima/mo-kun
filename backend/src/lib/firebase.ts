@@ -1,6 +1,7 @@
 import { App, applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
 import { Auth, getAuth } from "firebase-admin/auth";
 import { Firestore, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getStorage, Storage } from "firebase-admin/storage";
 
 let cachedApp: App | null = null;
 
@@ -37,6 +38,10 @@ export function getAuthClient(): Auth {
 
 export function getDb(): Firestore {
   return getFirestore(getFirebaseApp());
+}
+
+export function getStorageClient(): Storage {
+  return getStorage(getFirebaseApp());
 }
 
 export { Timestamp };

@@ -15,6 +15,11 @@ abstract class AppRepository {
     required String clientMessageId,
   });
 
+  Future<void> regenerateCharacterImage({
+    String? title,
+    String? reportText,
+  });
+
   Stream<CharacterSnapshot?> watchCharacter(String characterId);
 
   Stream<List<CharacterImageVersion>> watchImageHistory(String characterId);

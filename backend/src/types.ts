@@ -19,7 +19,7 @@ export type CharacterDraft = {
 export type ImageDraft = {
   title: string;
   promptExcerpt: string;
-  imageUrl: string;
+  imageUrl?: string | null;
 };
 
 export type DailySummaryDraft = {
@@ -29,5 +29,9 @@ export type DailySummaryDraft = {
   doneThings: string[];
   reflection: string;
   tomorrowNote: string;
+};
+
+export type StoredDailySummary = DailySummaryDraft & {
+  generatedAt?: unknown;
 };
 

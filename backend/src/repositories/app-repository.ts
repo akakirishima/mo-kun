@@ -1,6 +1,12 @@
 import { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "../lib/firebase.js";
-import { CharacterDraft, DailySummaryDraft, ImageDraft, SessionResponse } from "../types.js";
+import {
+  CharacterDraft,
+  DailySummaryDraft,
+  ImageDraft,
+  SessionResponse,
+  StoredDailySummary,
+} from "../types.js";
 
 export type StoredMessage = {
   id: string;
@@ -102,6 +108,21 @@ export class AppRepository {
     return characterDoc.data() ?? null;
   }
 
+  async updateVisualEvolutionMemo(params: {
+    userId: string;
+    visualEvolutionMemo: string;
+  }) {
+    const now = Timestamp.now();
+    await this.db.collection("characters").doc(params.userId).set(
+      {
+        visualEvolutionMemo: params.visualEvolutionMemo,
+        visualEvolutionUpdatedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+  }
+
   async getThreadOwner(threadId: string): Promise<string | null> {
     const threadDoc = await this.db.collection("chatThreads").doc(threadId).get();
     if (!threadDoc.exists) {
@@ -173,30 +194,54 @@ export class AppRepository {
     userId: string;
     image: ImageDraft;
     status?: "idle" | "generating" | "ready" | "failed";
+    visualEvolutionMemo?: string;
   }) {
     const now = Timestamp.now();
     const characterRef = this.db.collection("characters").doc(params.userId);
     const historyRef = characterRef.collection("imageHistory").doc();
+    const characterUpdate: Record<string, unknown> = {
+      imageGenerationStatus: params.status ?? "ready",
+      updatedAt: now,
+    };
+
+    if (params.visualEvolutionMemo != null) {
+      characterUpdate.visualEvolutionMemo = params.visualEvolutionMemo;
+      characterUpdate.visualEvolutionUpdatedAt = now;
+    }
+
+    if ((params.status ?? "ready") === "ready") {
+      characterUpdate.lastGeneratedImageUrl = params.image.imageUrl ?? null;
+      characterUpdate.lastImageGeneratedAt = now;
+      characterUpdate.lastVisualPrompt = params.image.promptExcerpt;
+    }
 
     await this.db.runTransaction(async (transaction) => {
-      transaction.set(
-        characterRef,
-        {
-          lastGeneratedImageUrl: params.image.imageUrl,
-          lastImageGeneratedAt: now,
-          lastVisualPrompt: params.image.promptExcerpt,
-          imageGenerationStatus: params.status ?? "ready",
-          updatedAt: now,
-        },
-        { merge: true },
-      );
+      transaction.set(characterRef, characterUpdate, { merge: true });
       transaction.set(historyRef, {
         title: params.image.title,
         promptExcerpt: params.image.promptExcerpt,
-        imageUrl: params.image.imageUrl,
+        imageUrl: params.image.imageUrl ?? null,
         status: params.status ?? "ready",
         generatedAt: now,
       });
+    });
+  }
+
+  async markCharacterImageGenerating(params: {
+    userId: string;
+    visualEvolutionMemo?: string;
+  }) {
+    const now = Timestamp.now();
+    const update: Record<string, unknown> = {
+      imageGenerationStatus: "generating",
+      updatedAt: now,
+    };
+    if (params.visualEvolutionMemo != null) {
+      update.visualEvolutionMemo = params.visualEvolutionMemo;
+      update.visualEvolutionUpdatedAt = now;
+    }
+    await this.db.collection("characters").doc(params.userId).set(update, {
+      merge: true,
     });
   }
 
@@ -210,6 +255,18 @@ export class AppRepository {
       ...summary,
       generatedAt: Timestamp.now(),
     });
+  }
+
+  async listRecentDailySummaries(userId: string, limit = 7): Promise<StoredDailySummary[]> {
+    const snapshot = await this.db
+      .collection("users")
+      .doc(userId)
+      .collection("dailySummaries")
+      .orderBy("generatedAt", "desc")
+      .limit(limit)
+      .get();
+
+    return snapshot.docs.map((doc) => ({ ...doc.data(), dateKey: doc.id }) as StoredDailySummary);
   }
 
   async listUsersForRefresh() {

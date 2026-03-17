@@ -1,15 +1,25 @@
 import cors from "cors";
 import express from "express";
 import { loadConfig } from "./config.js";
-import { getDb } from "./lib/firebase.js";
+import { getDb, getStorageClient } from "./lib/firebase.js";
 import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
 import { AppRepository } from "./repositories/app-repository.js";
 import { AiService, AiServiceError } from "./services/ai-service.js";
+import {
+  buildAppDateKey,
+  CharacterImageService,
+  CloudStorageImageStore,
+} from "./services/character-image-service.js";
 
 const config = loadConfig();
 const app = express();
 const repository = new AppRepository(getDb());
 const aiService = new AiService(config);
+const imageService = new CharacterImageService(
+  repository,
+  aiService,
+  new CloudStorageImageStore(getStorageClient().bucket(config.imageBucket)),
+);
 
 app.use(express.json());
 app.use(cors());
@@ -54,16 +64,10 @@ app.post("/v1/characters", requireAuth, async (request, response) => {
       profile,
       character,
     });
-    const initialImage = aiService.generateImageDraft({
+    await imageService.generateAndPersist({
+      userId: authedRequest.user.uid,
       title: "最初の姿",
-      visualPromptBase: character.visualPromptBase,
-      reportText: profile.goal,
-      userId: authedRequest.user.uid,
-    });
-    await repository.saveCharacterImage({
-      userId: authedRequest.user.uid,
-      image: initialImage,
-      status: "ready",
+      optionalNote: profile.goal,
     });
 
     response.json({
@@ -148,25 +152,24 @@ app.post("/v1/characters/image", requireAuth, async (request, response) => {
     const authedRequest = request as AuthedRequest;
     const title = String(request.body.title ?? "更新した姿");
     const reportText = String(request.body.reportText ?? "").trim();
-    const character = await repository.getCharacterContext(authedRequest.user.uid);
-    if (!character) {
-      response.status(404).json({ error: "character_not_found" });
-      return;
-    }
-
-    const image = aiService.generateImageDraft({
+    const image = await imageService.generateAndPersist({
+      userId: authedRequest.user.uid,
       title,
-      visualPromptBase: String(character.visualPromptBase ?? ""),
-      reportText,
-      userId: authedRequest.user.uid,
-    });
-    await repository.saveCharacterImage({
-      userId: authedRequest.user.uid,
-      image,
-      status: "ready",
+      optionalNote: reportText,
     });
     response.json(image);
   } catch (error) {
+    if (error instanceof AiServiceError) {
+      response.status(503).json({
+        error: "generate_image_failed",
+        detail: error.message,
+      });
+      return;
+    }
+    if (error instanceof Error && error.message === "character_not_found") {
+      response.status(404).json({ error: "character_not_found" });
+      return;
+    }
     response.status(500).json({
       error: "generate_image_failed",
       detail: error instanceof Error ? error.message : "unknown_error",
@@ -181,7 +184,7 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
   }
 
   try {
-    const targetDate = buildTargetDateKey(new Date());
+    const targetDate = buildAppDateKey(new Date());
     const users = await repository.listUsersForRefresh();
     for (const userId of users) {
       const threadId = `${userId}_main`;
@@ -191,21 +194,10 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
         messages,
       });
       await repository.saveDailySummary(userId, summary);
-
-      const character = await repository.getCharacterContext(userId);
-      if (!character) {
-        continue;
-      }
-      const image = aiService.generateImageDraft({
+      await imageService.generateAndPersist({
+        userId,
         title: "昨日の報告を反映した姿",
-        visualPromptBase: String(character.visualPromptBase ?? ""),
-        reportText: summary.doneThings.join(" / "),
-        userId,
-      });
-      await repository.saveCharacterImage({
-        userId,
-        image,
-        status: "ready",
+        todaySummary: summary,
       });
     }
 
@@ -221,12 +213,3 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
 app.listen(config.port, () => {
   console.log(`mo-kun backend listening on ${config.port}`);
 });
-
-function buildTargetDateKey(now: Date): string {
-  const shifted = new Date(now);
-  shifted.setMinutes(shifted.getMinutes() - 185);
-  const year = shifted.getFullYear();
-  const month = `${shifted.getMonth() + 1}`.padStart(2, "0");
-  const day = `${shifted.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}

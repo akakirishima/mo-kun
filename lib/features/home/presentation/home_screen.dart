@@ -299,6 +299,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final character = characterId == null
         ? null
         : ref.watch(characterProvider(characterId)).valueOrNull;
+    final resolvedCharacterImageUrl = ref.watch(
+      resolvedImageUrlProvider(character?.latestImageUrl),
+    );
 
     return DecoratedBox(
       key: const ValueKey<String>('home-background'),
@@ -329,8 +332,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               key: const ValueKey<String>('home-room-stage-shell'),
               width: stageWidth,
               height: stageHeight,
-              child: const HomeRoomStage(
-                key: ValueKey<String>('home-room-stage'),
+              child: HomeRoomStage(
+                characterImageUrl: resolvedCharacterImageUrl.valueOrNull,
+                isResolvingImage: resolvedCharacterImageUrl.isLoading,
               ),
             );
 
@@ -382,8 +386,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           key: const ValueKey<String>('home-room-stage-shell'),
                           width: chatStageWidth,
                           height: chatStageHeight,
-                          child: const HomeRoomStage(
-                            key: ValueKey<String>('home-room-stage'),
+                          child: HomeRoomStage(
+                            characterImageUrl:
+                                resolvedCharacterImageUrl.valueOrNull,
+                            isResolvingImage: resolvedCharacterImageUrl.isLoading,
                           ),
                         );
 

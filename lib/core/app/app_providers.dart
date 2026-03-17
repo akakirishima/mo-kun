@@ -1,9 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
+import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 
 final appRepositoryProvider = Provider<AppRepository>((ref) {
   throw UnimplementedError('AppRepository must be overridden.');
+});
+
+final imageUrlResolverProvider = Provider<ImageUrlResolver>((ref) {
+  return ImageUrlResolver();
 });
 
 final sessionProvider = FutureProvider<AppSession>((ref) {
@@ -39,6 +44,13 @@ final imageHistoryProvider =
     ) {
       return ref.watch(appRepositoryProvider).watchImageHistory(characterId);
     });
+
+final resolvedImageUrlProvider = FutureProvider.family<String?, String?>((
+  ref,
+  rawUrl,
+) {
+  return ref.watch(imageUrlResolverProvider).resolve(rawUrl);
+});
 
 final dailySummaryProvider = StreamProvider.family<DailySummary?, AppSession>((
   ref,
@@ -140,5 +152,25 @@ class SendChatMessageController {
       _ref.read(pendingMessagesProvider.notifier).markFailed(clientMessageId);
       rethrow;
     }
+  }
+}
+
+final regenerateCharacterImageControllerProvider =
+    Provider<RegenerateCharacterImageController>(
+      (ref) => RegenerateCharacterImageController(ref),
+    );
+
+class RegenerateCharacterImageController {
+  RegenerateCharacterImageController(this._ref);
+
+  final Ref _ref;
+
+  Future<void> regenerate({
+    String? title,
+    String? reportText,
+  }) {
+    return _ref
+        .read(appRepositoryProvider)
+        .regenerateCharacterImage(title: title, reportText: reportText);
   }
 }
