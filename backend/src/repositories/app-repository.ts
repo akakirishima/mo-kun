@@ -102,6 +102,16 @@ export class AppRepository {
     return characterDoc.data() ?? null;
   }
 
+  async getThreadOwner(threadId: string): Promise<string | null> {
+    const threadDoc = await this.db.collection("chatThreads").doc(threadId).get();
+    if (!threadDoc.exists) {
+      return null;
+    }
+
+    const userId = threadDoc.get("userId");
+    return typeof userId === "string" ? userId : null;
+  }
+
   async getRecentMessages(threadId: string, limit = 20) {
     const snapshot = await this.db
       .collection("chatThreads")
