@@ -4,12 +4,12 @@ import { loadConfig } from "./config.js";
 import { getDb } from "./lib/firebase.js";
 import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
 import { AppRepository } from "./repositories/app-repository.js";
-import { AiService } from "./services/ai-service.js";
+import { AiService, AiServiceError } from "./services/ai-service.js";
 
 const config = loadConfig();
 const app = express();
 const repository = new AppRepository(getDb());
-const aiService = new AiService();
+const aiService = new AiService(config);
 
 app.use(express.json());
 app.use(cors());
@@ -90,10 +90,28 @@ app.post("/v1/chat/messages", requireAuth, async (request, response) => {
       return;
     }
 
+    const threadOwner = await repository.getThreadOwner(threadId);
+    if (!threadOwner) {
+      response.status(404).json({ error: "thread_not_found" });
+      return;
+    }
+
+    if (threadOwner !== authedRequest.user.uid) {
+      response.status(403).json({ error: "forbidden_thread_access" });
+      return;
+    }
+
     const character = await repository.getCharacterContext(authedRequest.user.uid);
+    if (!character) {
+      response.status(404).json({ error: "character_not_found" });
+      return;
+    }
+
     const recentMessages = await repository.getRecentMessages(threadId);
-    const assistantText = aiService.generateAssistantReply({
-      characterName: String(character?.name ?? "Mori"),
+    const assistantText = await aiService.generateAssistantReply({
+      characterName: String(character.name ?? "Mori"),
+      personaPrompt:
+        typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
       recentMessages,
       userText: text,
     });
@@ -110,6 +128,14 @@ app.post("/v1/chat/messages", requireAuth, async (request, response) => {
       ...saved,
     });
   } catch (error) {
+    if (error instanceof AiServiceError) {
+      response.status(503).json({
+        error: "assistant_generation_failed",
+        detail: error.message,
+      });
+      return;
+    }
+
     response.status(500).json({
       error: "send_message_failed",
       detail: error instanceof Error ? error.message : "unknown_error",
