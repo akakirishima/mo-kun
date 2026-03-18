@@ -34,6 +34,7 @@ export class DailyRefreshService {
       await this.repository.saveDailySummary(userId, {
         dateKey,
         title: "会話からまとめた一日",
+        diaryBody: `今日は${recentUserTexts.slice(-2).join("、")}。\n明日はもう少し続きを進められたらいいな。`,
         mood: "前進中",
         doneThings: recentUserTexts.slice(-3),
         reflection: await this.chatService.reply({

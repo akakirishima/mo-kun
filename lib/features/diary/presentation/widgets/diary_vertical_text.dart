@@ -138,6 +138,18 @@ const Set<String> _kinsokuForbiddenLineStart = <String>{
   '；',
 };
 
+const Set<String> _kinsokuForbiddenLineEnd = <String>{
+  '「',
+  '『',
+  '（',
+  '【',
+  '〈',
+  '《',
+  '［',
+  '｛',
+  '〔',
+};
+
 List<List<String>> _buildColumns(List<String> units, int rowsPerColumn) {
   final columns = <List<String>>[<String>[]];
 
@@ -151,6 +163,13 @@ List<List<String>> _buildColumns(List<String> units, int rowsPerColumn) {
 
     var currentColumn = columns.last;
     if (currentColumn.length >= rowsPerColumn) {
+      columns.add(<String>[]);
+      currentColumn = columns.last;
+    }
+
+    if (currentColumn.length == rowsPerColumn - 1 &&
+        _kinsokuForbiddenLineEnd.contains(unit) &&
+        currentColumn.isNotEmpty) {
       columns.add(<String>[]);
       currentColumn = columns.last;
     }

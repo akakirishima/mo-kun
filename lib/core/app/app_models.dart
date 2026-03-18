@@ -112,6 +112,7 @@ class DailySummary {
   const DailySummary({
     required this.dateKey,
     required this.title,
+    required this.diaryBody,
     required this.mood,
     required this.doneThings,
     required this.reflection,
@@ -121,6 +122,7 @@ class DailySummary {
 
   final String dateKey;
   final String title;
+  final String diaryBody;
   final String mood;
   final List<String> doneThings;
   final String reflection;

@@ -41,6 +41,8 @@ FakeAppRepository buildFakeRepository() {
     initialSummary: DailySummary(
       dateKey: dateKey,
       title: '小さく前進した日',
+      diaryBody: '今日は報告を1つ送って、UIを整えた。'
+          '\n明日は朝に短く報告して流れを作れたらいいな。',
       mood: '前向き',
       doneThings: const <String>['報告を1つ送った', 'UIを整えた'],
       reflection: 'やることを言葉にすると次の動きが見えた。',
@@ -51,6 +53,8 @@ FakeAppRepository buildFakeRepository() {
       DailySummary(
         dateKey: previousDateKey,
         title: '言葉を整えた日',
+        diaryBody: '今日は会話を読み返して、明日の段取りを書いた。'
+            '\n明日はやったことを一言で残せたらいいな。',
         mood: '穏やか',
         doneThings: const <String>['会話を読み返した', '明日の段取りを書いた'],
         reflection: '短い記録でも見返すと流れがつながった。',
@@ -60,6 +64,8 @@ FakeAppRepository buildFakeRepository() {
       DailySummary(
         dateKey: previousMonthDateKey,
         title: '先月の積み上げ',
+        diaryBody: '今日は習慣を少し続けられた。'
+            '\n次の月も同じ速度で進められたらいいな。',
         mood: '静かな達成',
         doneThings: const <String>['習慣を少し続けた'],
         reflection: '無理なく続いたことが形になってきた。',

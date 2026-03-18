@@ -107,4 +107,42 @@ void main() {
 
     expect((secondColumn.dx - firstColumn.dx).abs(), closeTo(36, 0.1));
   });
+
+  testWidgets('avoids opening quotes at the bottom of a wrapped column', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 220,
+              height: 126,
+              child: DiaryVerticalText(
+                text: 'あいうえお「かきくけこ」',
+                color: Colors.black,
+                fontSize: 20,
+                columnPitch: 36,
+                rowPitch: 24,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final secondColumnText = tester
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byKey(const ValueKey<String>('diary-vertical-column-1')),
+            matching: find.byType(Text),
+          ),
+        )
+        .map((widget) => widget.data)
+        .whereType<String>()
+        .toList();
+
+    expect(secondColumnText.last, isNot('「'));
+    expect(secondColumnText, contains('「'));
+  });
 }

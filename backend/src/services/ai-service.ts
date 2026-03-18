@@ -27,6 +27,7 @@ type ImagePromptContext = {
 
 type DailySummaryCandidate = {
   title?: unknown;
+  diaryBody?: unknown;
   mood?: unknown;
   doneThings?: unknown;
   reflection?: unknown;
@@ -40,9 +41,10 @@ type RoomSceneItemsCandidate = {
 const DAILY_SUMMARY_RESPONSE_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["title", "mood", "doneThings", "reflection", "tomorrowNote"],
+  required: ["title", "diaryBody", "mood", "doneThings", "reflection", "tomorrowNote"],
   properties: {
     title: { type: "string" },
+    diaryBody: { type: "string" },
     mood: { type: "string" },
     doneThings: {
       type: "array",
@@ -381,6 +383,9 @@ export function buildDailySummarySystemInstruction(): string {
     "- assistant の発話は文脈としてだけ使い、成果として書かない",
     "- ユーザーが言っていない事実を補わない",
     "- title は短い日記見出しにする",
+    "- diaryBody は日記本文として 2〜3 文の自然な文章にする",
+    "- diaryBody では『今日は〜した。明日は〜できたらいいな。』のように、日記として素直に読める文体を優先する",
+    "- diaryBody にラベルや箇条書きや JSON 的な列挙感を入れない",
     "- mood は 1 語から短いフレーズで表す",
     "- doneThings は 0〜4 件の短い文字列にする",
     "- reflection は 1〜2 文で静かに振り返る",
@@ -422,6 +427,7 @@ export function buildDailySummaryPrompt(params: {
     "",
     "JSON の各キー:",
     "- title",
+    "- diaryBody",
     "- mood",
     "- doneThings",
     "- reflection",
@@ -553,6 +559,7 @@ export function summarizeDailySummary(summary: StoredDailySummary): string {
   return [
     `日付: ${summary.dateKey}`,
     `タイトル: ${summary.title}`,
+    `日記: ${summary.diaryBody}`,
     `気分: ${summary.mood}`,
     `やったこと: ${doneThings}`,
     `振り返り: ${summary.reflection}`,
@@ -574,6 +581,10 @@ export function buildFallbackDailySummary(params: {
   return {
     dateKey: params.dateKey,
     title: userMessages.length >= 2 ? "少し前に進めた日" : "言葉にして整えた日",
+    diaryBody: buildFallbackDiaryBody({
+      doneThings: userMessages,
+      lead,
+    }),
     mood: inferFallbackMood(userMessages),
     doneThings: userMessages,
     reflection: lead
@@ -600,6 +611,8 @@ export function normalizeGeneratedDailySummary(params: {
   return {
     dateKey: params.dateKey,
     title: normalizeSummaryField(candidate.title, 32) ?? params.fallback.title,
+    diaryBody:
+      normalizeDiaryBody(candidate.diaryBody) ?? params.fallback.diaryBody,
     mood: normalizeSummaryField(candidate.mood, 16) ?? params.fallback.mood,
     doneThings: doneThings ?? params.fallback.doneThings,
     reflection:
@@ -708,6 +721,26 @@ function inferFallbackMood(userMessages: string[]): string {
   return "穏やか";
 }
 
+function buildFallbackDiaryBody(params: {
+  doneThings: string[];
+  lead?: string;
+}): string {
+  const doneThings = params.doneThings
+    .map((item) => normalizeSummaryField(item, 28))
+    .filter((item): item is string => item != null)
+    .slice(0, 3);
+
+  const todaySentence = doneThings.length > 0
+    ? `今日は${doneThings.join("、")}。`
+    : "今日は少しずつ言葉にしながら一日を過ごした。";
+
+  const tomorrowSentence = params.lead
+    ? "明日はこの続きを少しでも進められたらいいな。"
+    : "明日はひとことだけでも記録を残せたらいいな。";
+
+  return `${todaySentence}\n${tomorrowSentence}`;
+}
+
 function parseRoomSceneItemsCandidate(
   rawText?: string | null,
 ): RoomSceneItemsCandidate | null {
@@ -769,6 +802,29 @@ function normalizeSummaryField(value: unknown, maxLength: number): string | null
   return normalized.length <= maxLength
     ? normalized
     : `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function normalizeDiaryBody(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 0)
+    .slice(0, 3)
+    .join("\n");
+
+  if (!normalized) {
+    return null;
+  }
+
+  const compact = normalized.length <= 180
+    ? normalized
+    : `${normalized.slice(0, 179).trimEnd()}…`;
+  return compact;
 }
 
 function normalizeDoneThings(value: unknown): string[] | null {

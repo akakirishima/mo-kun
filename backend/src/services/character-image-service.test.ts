@@ -16,6 +16,7 @@ class FakeRepository {
     {
       dateKey: "2026-03-16",
       title: "小さく前進した日",
+      diaryBody: "今日はUI を整えた。\n明日も少し進められたらいいな。",
       mood: "前向き",
       doneThings: ["UI を整えた"],
       reflection: "形になってきた。",
@@ -104,6 +105,7 @@ class FakeAiService {
     return {
       dateKey: params.dateKey,
       title: "fallback",
+      diaryBody: "今日は会話から補完した。\n明日はもう少し進められたらいいな。",
       mood: "静か",
       doneThings: ["会話から補完した"],
       reflection: "fallback reflection",

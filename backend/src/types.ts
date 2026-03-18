@@ -26,6 +26,7 @@ export type ImageDraft = {
 export type DailySummaryDraft = {
   dateKey: string;
   title: string;
+  diaryBody: string;
   mood: string;
   doneThings: string[];
   reflection: string;

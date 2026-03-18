@@ -68,6 +68,8 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: _dateKey(now),
         title: 'はじまりの日',
+        diaryBody: '今日はプロフィールを登録して、相棒を迎えた。'
+            '\n明日はまず小さな報告を1つ送れたらいいな。',
         mood: 'わくわく',
         doneThings: ['プロフィールを登録した', '相棒を迎えた'],
         reflection: '最初の一歩を踏み出した日。',
@@ -123,6 +125,9 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: todayDateKey,
         title: existingSummary == null ? '今日のまとめ' : '会話を重ねた日',
+        diaryBody:
+            '今日は$text。'
+            '\n明日はこの続きを少しでも話せたらいいな。',
         mood: '前向き',
         doneThings: [...?existingSummary?.doneThings, text],
         reflection: '会話から今日の行動を整理した。',
