@@ -190,11 +190,12 @@ class _CharacterAvatar extends StatelessWidget {
         border: Border.all(color: palette.avatarBorder, width: 2),
       ),
       alignment: Alignment.center,
-      child: Text(
-        'M',
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+      child: Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
           color: palette.avatarText,
-          fontWeight: FontWeight.w800,
+          shape: BoxShape.circle,
         ),
       ),
     );

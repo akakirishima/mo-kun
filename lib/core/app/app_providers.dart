@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
@@ -104,6 +106,18 @@ final dailySummaryProvider = StreamProvider.family<DailySummary?, AppSession>((
   return ref
       .watch(appRepositoryProvider)
       .watchDailySummary(
+        userId: session.userId,
+        dateKey: ref.watch(currentDateKeyProvider),
+      );
+});
+
+final dailyBubbleProvider = StreamProvider.family<DailyBubble?, AppSession>((
+  ref,
+  session,
+) {
+  return ref
+      .watch(appRepositoryProvider)
+      .watchDailyBubble(
         userId: session.userId,
         dateKey: ref.watch(currentDateKeyProvider),
       );
@@ -241,5 +255,37 @@ class RegenerateCharacterImageController {
     return _ref
         .read(appRepositoryProvider)
         .regenerateCharacterImage(title: title, reportText: reportText);
+  }
+}
+
+final sendVoiceMessageControllerProvider = Provider<SendVoiceMessageController>(
+  (ref) => SendVoiceMessageController(ref),
+);
+
+class SendVoiceMessageController {
+  SendVoiceMessageController(this._ref);
+
+  final Ref _ref;
+
+  Future<VoiceChatResult> send({
+    required AppSession session,
+    required Uint8List audioBytes,
+    required String mimeType,
+    required int durationMs,
+  }) {
+    final threadId = session.threadId;
+    if (threadId == null) {
+      throw StateError('Missing thread id.');
+    }
+    final now = DateTime.now();
+    return _ref
+        .read(appRepositoryProvider)
+        .sendVoiceMessage(
+          threadId: threadId,
+          audioBytes: audioBytes,
+          mimeType: mimeType,
+          durationMs: durationMs,
+          clientMessageId: 'voice-${now.microsecondsSinceEpoch}',
+        );
   }
 }

@@ -53,7 +53,7 @@ export class CharacterImageService {
       optionalNote: params.optionalNote,
     });
     const prompt = this.aiService.buildCharacterImagePrompt({
-      characterName: String(character.name ?? "Mori"),
+      characterName: String(character.name ?? "Self"),
       visualPromptBase: String(character.visualPromptBase ?? ""),
       visualEvolutionMemo,
       todaySummary: todaySummaryText,

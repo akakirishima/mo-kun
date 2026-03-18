@@ -7,14 +7,12 @@ GDGoC Japan Hackathon 2026 参加プロジェクト
 日々の行動をシステムに報告することで、生成 AI が内容を解析し、会話、日次サマリー、キャラクター画像の変化に反映します。
 
 ## Current Product Shape
-- `HomeScreen` が現在の本番 chat UI です。`ChatScreen` は旧 UI のため本導線では使っていません。
+- `HomeScreen` が現在の本番 chat UI です。会話導線は `Home` に統合しています。
 - `Home` では Gemini 連携済みの chat を利用できます。
 - `Diary` では月送りで daily summary を見返せます。表示対象は記録がある日だけです。
 - `Image` では Gemini で生成したキャラクター画像の最新状態と履歴を表示し、手動再生成できます。
 - `Home` 画面中央も、生成済みの最新キャラクター画像を優先表示します。
 - アプリ全体は日本語フォントを assets 化しており、Diary 本文だけ別フォントを使います。
-
-画面詳細は [`docs/ui/current-ui-prototype.md`](docs/ui/current-ui-prototype.md) を参照してください。
 
 ## Tech Stack
 - Frontend: Flutter 3.41.2 (stable)

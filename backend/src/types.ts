@@ -37,3 +37,13 @@ export type StoredDailySummary = DailySummaryDraft & {
   generatedAt?: unknown;
 };
 
+export type DailyBubbleDraft = {
+  dateKey: string;
+  text: string;
+  sourceDateKey?: string | null;
+};
+
+export type StoredDailyBubble = DailyBubbleDraft & {
+  generatedAt?: unknown;
+};
+

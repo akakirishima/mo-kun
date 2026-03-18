@@ -1,11 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
+import 'package:gdgoc_2026_prototype/features/home/presentation/home_voice.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../test_support/fake_app.dart';
@@ -25,6 +27,54 @@ class _FakeImageUrlResolver extends ImageUrlResolver {
   }
 }
 
+class _FakeVoiceRecorder implements VoiceRecorderController {
+  bool _isRecording = false;
+
+  @override
+  Future<void> cancel() async {
+    _isRecording = false;
+  }
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<bool> ensurePermission() async => true;
+
+  @override
+  Future<void> start() async {
+    _isRecording = true;
+  }
+
+  @override
+  Future<RecordedVoiceClip?> stop() async {
+    if (!_isRecording) {
+      return null;
+    }
+    _isRecording = false;
+    return RecordedVoiceClip(
+      audioBytes: Uint8List.fromList(const <int>[1, 2, 3, 4]),
+      mimeType: 'audio/wav',
+      durationMs: 1200,
+    );
+  }
+}
+
+class _FakeVoicePlayer implements VoicePlayerController {
+  int playCount = 0;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> play(Uint8List audioBytes, {required String mimeType}) async {
+    playCount += 1;
+  }
+
+  @override
+  Future<void> stop() async {}
+}
+
 FakeAppRepository _buildRepository({required String latestImageUrl}) {
   final now = DateTime(2026, 3, 18, 10, 0);
   return FakeAppRepository(
@@ -36,13 +86,19 @@ FakeAppRepository _buildRepository({required String latestImageUrl}) {
     ),
     initialCharacter: CharacterSnapshot(
       id: 'test-character',
-      name: 'Mori',
-      personaPrompt: 'やわらかく励ます相棒。',
-      visualPromptBase: '会話内容に応じて見た目が少し変わる相棒。',
+      name: 'Self',
+      personaPrompt: '自分の流れを静かに整理して返す内なる声。',
+      visualPromptBase: '会話内容に応じて見た目が少し変わる自己投影キャラクター。',
       imageStatus: CharacterImageStatus.ready,
       latestImageUrl: latestImageUrl,
       lastGeneratedAt: now,
-      starterGreeting: '今日も会えて嬉しいな。\n一緒にお話ししよ！',
+      starterGreeting: '今日は何を残したい？',
+    ),
+    initialDailyBubble: DailyBubble(
+      dateKey: '2026-03-18',
+      text: '昨日の段取りは残っている。今日はひとつだけ進めよう、自分。',
+      generatedAt: now,
+      sourceDateKey: '2026-03-17',
     ),
     initialMessages: <ChatMessage>[
       ChatMessage(
@@ -69,7 +125,7 @@ Future<void> _pumpUntilFound(
 }
 
 void main() {
-  testWidgets('renders the Mori card, room stage, and action buttons', (
+  testWidgets('renders the daily bubble, room stage, and action buttons', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -78,15 +134,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('home-mori-card')),
+      find.byKey(const ValueKey<String>('home-daily-bubble')),
       findsOneWidget,
     );
+    expect(find.textContaining('今日はひとつだけ進めよう'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('home-room-stage')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey<String>('home-action-bar')),
+      find.byKey(const ValueKey<String>('home-action-voice')),
       findsOneWidget,
     );
     expect(
@@ -124,17 +181,10 @@ void main() {
       );
       expect((image.image as NetworkImage).url, resolvedUrl);
       expect(image.fit, BoxFit.contain);
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey<String>('home-room-stage')),
-          matching: find.byType(CustomPaint),
-        ),
-        findsNothing,
-      );
     });
   });
 
-  testWidgets('shows assistant history and sends a new pending message', (
+  testWidgets('shows assistant history and sends a new message in chat mode', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -154,15 +204,45 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
     await tester.pumpAndSettle();
+
     expect(find.text('今日は朝に散歩した'), findsWidgets);
-    expect(find.textContaining('反映しておくね'), findsOneWidget);
-    final userTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('home-user-bubble-0')).last,
+  });
+
+  testWidgets('opens voice mode and shows transcript plus reply text', (
+    WidgetTester tester,
+  ) async {
+    final fakePlayer = _FakeVoicePlayer();
+
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        child: HomeScreen(
+          onSettingsTap: nullHandler,
+          voiceRecorder: _FakeVoiceRecorder(),
+          voicePlayer: fakePlayer,
+        ),
+      ),
     );
-    final assistantTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('home-assistant-bubble-1')),
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-voice')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('home-voice-mode')), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-voice-primary-button')),
     );
-    expect(userTopLeft.dy, lessThan(assistantTopLeft.dy));
+    await tester.pump();
+    expect(find.text('送信する'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-voice-primary-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('今日は音声で話した内容を残した'), findsOneWidget);
+    expect(find.textContaining('今日はひとつだけ進めてみよう'), findsWidgets);
+    expect(fakePlayer.playCount, 1);
   });
 
   testWidgets('shows pending preview after gallery selection', (
@@ -181,9 +261,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
+    await tester.tap(find.byKey(const ValueKey<String>('home-action-photo')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey<String>('chat-input-image')));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-photo-gallery-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -193,7 +275,7 @@ void main() {
     expect(find.text('home-gallery.png'), findsOneWidget);
   });
 
-  testWidgets('preserves draft text and sent messages across back navigation', (
+  testWidgets('preserves draft text across back navigation', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(

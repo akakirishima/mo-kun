@@ -4,7 +4,7 @@
 - Flutter app now boots through `AppBootstrapScreen`.
 - `App` uses a repository abstraction.
 - `main.dart` attempts to create `FirebaseAppRepository` and falls back to a fake repository if Firebase is not configured yet.
-- `HomeScreen` is the production chat UI. `ChatScreen` is no longer the live chat path.
+- `HomeScreen` is the production chat UI and the conversation flow now lives there.
 - `Home` chat uses repository-backed send and stream updates with optimistic pending messages.
 - `Diary` reads AI-generated daily summaries.
 - `Image` reads latest character image status and image history, and can trigger manual regeneration.
