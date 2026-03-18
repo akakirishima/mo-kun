@@ -183,28 +183,10 @@ DiaryMonthBook _buildDiaryBook({
         DateTime(normalizedMonth.year, normalizedMonth.month, 1);
     final isCurrentDay = _isSameDay(date, appDate);
     final image = _resolveImageForDate(sortedImages, summary.dateKey);
-
-    final body = [
-      summary.title,
-      '',
-      '気分: ${summary.mood}',
-      '',
-      'できたこと',
-      if (summary.doneThings.isEmpty)
-        '・まだ記録がありません'
-      else
-        ...summary.doneThings.map((item) => '・$item'),
-      '',
-      '振り返り',
-      summary.reflection,
-      '',
-      '明日のひとこと',
-      summary.tomorrowNote,
-    ].join('\n');
     return DiaryDayEntry(
       dayNumber: date.day,
       weekdayLabel: _weekdayLabel(date.weekday),
-      body: body,
+      body: _buildDiaryEntryBody(summary),
       illustrationPalette: _illustrationPaletteForEntry(
         isCurrentDay: isCurrentDay,
         hasSummary: true,
@@ -227,6 +209,64 @@ DiaryMonthBook _buildDiaryBook({
     canShowNextMonth: normalizedMonth.isBefore(appMonthStart(currentMonth)),
     entries: entries,
   );
+}
+
+String _buildDiaryEntryBody(DailySummary summary) {
+  final diaryBody = _normalizeDiaryEntryBody(summary.diaryBody);
+  if (diaryBody.isNotEmpty) {
+    return diaryBody;
+  }
+
+  final doneThings = summary.doneThings
+      .map((item) => _compactDiaryText(item, maxLength: 22))
+      .where((item) => item.isNotEmpty)
+      .take(3)
+      .join('、');
+  final reflection = _compactDiarySentence(summary.reflection, maxLength: 30);
+  final tomorrow = _compactDiarySentence(summary.tomorrowNote, maxLength: 24);
+
+  final todaySentence = doneThings.isNotEmpty
+      ? '今日は$doneThings。'
+      : (reflection.isNotEmpty ? '$reflection。' : '今日は少しずつ進めた。');
+  final tomorrowSentence = tomorrow.isNotEmpty ? '明日は$tomorrow。' : '';
+
+  return [
+    todaySentence,
+    if (tomorrowSentence.isNotEmpty) tomorrowSentence,
+  ].join('\n\n');
+}
+
+String _normalizeDiaryEntryBody(String value) {
+  return value
+      .replaceAll('\r\n', '\n')
+      .split('\n')
+      .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((line) => line.isNotEmpty)
+      .take(3)
+      .join('\n');
+}
+
+String _compactDiaryText(String value, {required int maxLength}) {
+  final normalized = value
+      .replaceAll('「', '')
+      .replaceAll('」', '')
+      .replaceAll('\n', ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (normalized.isEmpty) {
+    return '';
+  }
+  return normalized.characters.length <= maxLength
+      ? normalized
+      : '${normalized.characters.take(maxLength - 1).toString()}…';
+}
+
+String _compactDiarySentence(String value, {required int maxLength}) {
+  final normalized = _compactDiaryText(value, maxLength: maxLength)
+      .replaceAll(RegExp(r'[。.!！?？]+$'), '')
+      .replaceAll(RegExp(r'^(今日は|明日は|今日は少し|明日は少し)'), '')
+      .trim();
+  return normalized;
 }
 
 List<Color> _illustrationPaletteForEntry({

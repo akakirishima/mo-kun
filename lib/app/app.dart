@@ -94,6 +94,8 @@ AppRepository _buildPreviewRepository() {
     initialSummary: DailySummary(
       dateKey: _dateKey(now),
       title: '小さく前進した日',
+      diaryBody: '今日はUI を調整して、報告を1つ送った。'
+          '\n明日は起きたらまず一言だけでも報告できたらいいな。',
       mood: '前向き',
       doneThings: const <String>['UI を調整した', '報告を1つ送った'],
       reflection: '少しずつでも続けると、翌朝の見え方が変わる。',

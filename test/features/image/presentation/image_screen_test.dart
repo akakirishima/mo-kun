@@ -46,6 +46,8 @@ FakeAppRepository _buildRepository({required String latestImageUrl}) {
     initialSummary: DailySummary(
       dateKey: '2026-03-16',
       title: '小さく前進した日',
+      diaryBody: '今日は報告を1つ送って、UIを整えた。'
+          '\n明日は朝に短く報告して流れを作れたらいいな。',
       mood: '前向き',
       doneThings: const <String>['報告を1つ送った', 'UIを整えた'],
       reflection: 'やることを言葉にすると次の動きが見えた。',

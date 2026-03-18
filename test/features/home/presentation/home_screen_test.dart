@@ -55,6 +55,19 @@ FakeAppRepository _buildRepository({required String latestImageUrl}) {
   );
 }
 
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  int maxPumps = 20,
+}) async {
+  for (var index = 0; index < maxPumps; index += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (finder.evaluate().isNotEmpty) {
+      return;
+    }
+  }
+}
+
 void main() {
   testWidgets('renders the Mori card, room stage, and action buttons', (
     WidgetTester tester,
@@ -101,7 +114,10 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('home-room-stage-image')),
+      );
 
       final image = tester.widget<Image>(
         find.byKey(const ValueKey<String>('home-room-stage-image')),

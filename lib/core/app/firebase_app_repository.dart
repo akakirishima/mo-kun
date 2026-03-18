@@ -285,6 +285,7 @@ class FirebaseAppRepository implements AppRepository {
     return DailySummary(
       dateKey: snapshot.id,
       title: data['title'] as String? ?? '今日のまとめ',
+      diaryBody: data['diaryBody'] as String? ?? '',
       mood: data['mood'] as String? ?? '',
       doneThings: List<String>.from(data['doneThings'] as List? ?? const []),
       reflection: data['reflection'] as String? ?? '',

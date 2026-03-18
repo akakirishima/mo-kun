@@ -42,6 +42,7 @@ assert.match(instruction, /引用しすぎない/);
 const dailySummaryInstruction = buildDailySummarySystemInstruction();
 assert.match(dailySummaryInstruction, /日次ダイアリー用/);
 assert.match(dailySummaryInstruction, /JSON 以外を返さない/);
+assert.match(dailySummaryInstruction, /diaryBody/);
 
 const dailySummaryPrompt = buildDailySummaryPrompt({
   dateKey: "2026-03-16",
@@ -54,6 +55,7 @@ assert.match(dailySummaryPrompt, /対象日: 2026-03-16/);
 assert.match(dailySummaryPrompt, /assistant: まずは落ち着いて整理しよう/);
 assert.match(dailySummaryPrompt, /user: 今日は UI を整えて、報告も 1 つ送った/);
 assert.match(dailySummaryPrompt, /doneThings/);
+assert.match(dailySummaryPrompt, /diaryBody/);
 
 assert.equal(normalizeAssistantReply(" こんにちは\n"), "こんにちは。");
 assert.equal(normalizeAssistantReply("   \n  "), null);
@@ -77,6 +79,8 @@ const fallbackDailySummary = buildFallbackDailySummary({
 
 assert.equal(fallbackDailySummary.dateKey, "2026-03-16");
 assert.equal(fallbackDailySummary.doneThings.length, 2);
+assert.match(fallbackDailySummary.diaryBody, /今日は/);
+assert.match(fallbackDailySummary.diaryBody, /明日は/);
 assert.match(fallbackDailySummary.reflection, /UI の余白も整えた/);
 
 const normalizedDailySummary = normalizeGeneratedDailySummary({
@@ -87,8 +91,21 @@ const normalizedDailySummary = normalizeGeneratedDailySummary({
   fallback: fallbackDailySummary,
 });
 
+const normalizedDailySummaryWithDiaryBody = normalizeGeneratedDailySummary({
+  dateKey: "2026-03-16",
+  rawText: `\`\`\`json
+{"title":"積み上げを整えた日","diaryBody":"今日は報告を 1 つ送って、UI の余白も整えた。\\n明日は短く進捗を残せたらいいな。","mood":"前向き","doneThings":["報告を 1 つ送った","UI の余白を整えた"],"reflection":"やったことを言葉にしたことで、進み方が見えやすくなった。","tomorrowNote":"明日も短く進捗を残す。"}
+\`\`\``,
+  fallback: fallbackDailySummary,
+});
+
 assert.equal(normalizedDailySummary?.dateKey, "2026-03-16");
 assert.equal(normalizedDailySummary?.title, "積み上げを整えた日");
+assert.equal(normalizedDailySummary?.diaryBody, fallbackDailySummary.diaryBody);
+assert.equal(
+  normalizedDailySummaryWithDiaryBody?.diaryBody,
+  "今日は報告を 1 つ送って、UI の余白も整えた。\n明日は短く進捗を残せたらいいな。",
+);
 assert.deepEqual(normalizedDailySummary?.doneThings, [
   "報告を 1 つ送った",
   "UI の余白を整えた",
@@ -98,6 +115,7 @@ const visualPrompt = buildVisualEvolutionPrompt([
   {
     dateKey: "2026-03-16",
     title: "小さく前進した日",
+    diaryBody: "今日はUI を整えて、報告を 1 つ送った。\n明日は朝に短く報告できたらいいな。",
     mood: "前向き",
     doneThings: ["UI を整えた", "報告を 1 つ送った"],
     reflection: "少しずつ形になった。",
