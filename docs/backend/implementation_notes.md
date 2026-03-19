@@ -4,22 +4,32 @@
 - Flutter app now boots through `AppBootstrapScreen`.
 - `App` uses a repository abstraction.
 - `main.dart` attempts to create `FirebaseAppRepository` and falls back to a fake repository if Firebase is not configured yet.
-- `HomeScreen` is the production chat UI. `ChatScreen` is no longer the live chat path.
+- `HomeScreen` is the production conversation UI and the main flow now lives there.
+- `Home` renders the latest character image when available, a daily speech bubble, and `voice / photo / chat` actions.
 - `Home` chat uses repository-backed send and stream updates with optimistic pending messages.
+- `Home` voice mode uses push-to-talk recording and backend round-trips.
 - `Diary` reads AI-generated daily summaries.
 - `Image` reads latest character image status and image history, and can trigger manual regeneration.
-- `POST /v1/chat/messages` now uses Gemini on Vertex AI for assistant replies.
-- `POST /v1/characters/image` now uses Gemini image generation plus Cloud Storage persistence.
-- `Home` also renders the latest generated character image when available.
+- `POST /v1/chat/messages` uses Gemini on Vertex AI for assistant replies.
+- `POST /v1/chat/voice` uses Speech-to-Text, Gemini, and Text-to-Speech for a voice round-trip.
+- `POST /v1/characters/image` uses Gemini image generation plus Cloud Storage persistence.
+- `daily bubble` generation is persisted in Firestore and is based on the previous day summary.
+
+## Product concept
+- The current concept is not an AI partner.
+- The character is treated as a self-projection of the user.
+- The response style should feel like `自分の内なる声`, not a mascot or companion.
+- UI wording should avoid fixed names like `Mori`.
 
 ## Firebase / GCP setup still required
 - Register Android/iOS apps in Firebase and add native config files.
-- Enable Anonymous Auth, Firestore, Cloud Run, Cloud Scheduler, Vertex AI, Secret Manager, and Cloud Storage in the target project.
+- Enable Anonymous Auth, Firestore, Cloud Run, Cloud Scheduler, Vertex AI, Speech-to-Text, Text-to-Speech, Secret Manager, and Cloud Storage in the target project.
 - Deploy the Cloud Run service under `backend/`.
 - Set `BACKEND_BASE_URL` for Flutter builds.
 
-## Gemini deployment notes
-- Backend chat and image generation now depend on `@google/genai` and the Cloud Run service account being able to call Vertex AI.
+## Gemini / Speech deployment notes
+- Backend chat and image generation depend on `@google/genai` and the Cloud Run service account being able to call Vertex AI.
+- Backend voice chat depends on `@google-cloud/speech` and `@google-cloud/text-to-speech`.
 - Required env vars for Cloud Run:
   - `GOOGLE_CLOUD_PROJECT`
   - `VERTEX_LOCATION`
@@ -28,21 +38,57 @@
   - `GEMINI_TEMPERATURE`
   - `GEMINI_MAX_OUTPUT_TOKENS`
   - `IMAGE_BUCKET`
+  - `SPEECH_LANGUAGE_CODE`
+  - `TTS_LANGUAGE_CODE`
+  - `TTS_AUDIO_ENCODING`
 - Recommended initial values:
   - `VERTEX_LOCATION=global`
   - `GEMINI_MODEL=gemini-2.5-flash`
   - `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`
   - `GEMINI_TEMPERATURE=0.7`
   - `GEMINI_MAX_OUTPUT_TOKENS=220`
+  - `SPEECH_LANGUAGE_CODE=ja-JP`
+  - `TTS_LANGUAGE_CODE=ja-JP`
+  - `TTS_AUDIO_ENCODING=MP3`
 - `IMAGE_BUCKET` should be the Firebase Storage bucket name without `gs://`.
-- `gemini-2.0-flash` is no longer usable in this project setup. Use `gemini-2.5-flash` for chat and `gemini-2.5-flash-image` for image generation.
-- `/v1/chat/messages` returns `503 assistant_generation_failed` when Gemini fails. Flutter should surface this as a retryable send failure instead of falling back to fake text.
+- `TTS_VOICE_NAME` is optional.
+- `/v1/chat/messages` returns `503 assistant_generation_failed` when Gemini fails.
 - `/v1/characters/image` returns `503 generate_image_failed` when Gemini image generation fails.
+- `/v1/chat/voice` may succeed partially: if TTS fails after the assistant text was generated and stored, the response returns text with `audioStatus=failed`.
 
-## Image generation flow
+## Current backend flows
+### Text chat
+1. Verify Firebase ID token
+2. Verify thread ownership
+3. Read thread history
+4. Generate assistant reply with Gemini
+5. Store user / assistant messages
+6. Rebuild the current daily summary
+
+### Voice chat
+1. Verify Firebase ID token
+2. Verify thread ownership
+3. Accept multipart audio upload
+4. Run Speech-to-Text
+5. Generate assistant reply with Gemini
+6. Store the user transcript with `inputType=voice`
+7. Store the assistant text reply
+8. Rebuild the current daily summary
+9. Run Text-to-Speech
+10. Return transcript, assistant text, and assistant audio
+
+### Daily bubble
+1. Resolve the app date key with `03:00 JST` cutover
+2. Read the previous day summary when available
+3. Generate a short daily bubble text
+4. Persist it to `users/{uid}/dailyBubbles/{dateKey}`
+5. Reuse the same bubble within the same day
+
+### Image generation flow
 - `backend/src/index.ts` is the source of truth for backend wiring.
 - `AiService` handles:
   - assistant chat generation
+  - daily bubble generation
   - `visualEvolutionMemo` generation from recent daily summaries
   - final image prompt construction
   - Gemini image generation
@@ -61,55 +107,59 @@ The final image prompt is composed from:
 - continuity rules that keep the same character identity stable across days
 
 ## Firestore document expectations
-- `users/{uid}`
-  - `createdAt`
-  - `updatedAt`
-- `users/{uid}/dailySummaries/{dateKey}`
-  - `title`
-  - `mood`
-  - `doneThings`
-  - `reflection`
-  - `tomorrowNote`
-  - `generatedAt`
-- `characters/{uid}`
-  - `userId`
-  - `name`
-  - `personaPrompt`
-  - `visualPromptBase`
-  - `visualEvolutionMemo`
-  - `visualEvolutionUpdatedAt`
-  - `starterGreeting`
-  - `imageGenerationStatus`
-  - `lastGeneratedImageUrl`
-  - `lastImageGeneratedAt`
-- `characters/{uid}/imageHistory/{imageId}`
-  - `title`
-  - `promptExcerpt`
-  - `status`
-  - `generatedAt`
-  - `imageUrl`
-- `chatThreads/{threadId}`
-  - `userId`
-  - `createdAt`
-  - `updatedAt`
-- `chatThreads/{threadId}/messages/{messageId}`
-  - `role`
-  - `text`
-  - `clientMessageId`
-  - `createdAt`
+### `users/{uid}`
+- `createdAt`
+- `updatedAt`
+
+### `users/{uid}/dailySummaries/{dateKey}`
+- `title`
+- `mood`
+- `doneThings`
+- `reflection`
+- `tomorrowNote`
+- `generatedAt`
+
+### `users/{uid}/dailyBubbles/{dateKey}`
+- `text`
+- `generatedAt`
+- `sourceDateKey`
+
+### `characters/{uid}`
+- `userId`
+- `name`
+- `personaPrompt`
+- `visualPromptBase`
+- `visualEvolutionMemo`
+- `visualEvolutionUpdatedAt`
+- `starterGreeting`
+- `imageGenerationStatus`
+- `lastGeneratedImageUrl`
+- `lastImageGeneratedAt`
+
+### `characters/{uid}/imageHistory/{imageId}`
+- `title`
+- `promptExcerpt`
+- `status`
+- `generatedAt`
+- `imageUrl`
+
+### `chatThreads/{threadId}`
+- `userId`
+- `createdAt`
+- `updatedAt`
+
+### `chatThreads/{threadId}/messages/{messageId}`
+- `role`
+- `text`
+- `inputType`
+- `clientMessageId`
+- `createdAt`
 
 ## Notes
 - The fake repository keeps widget tests stable and gives a local preview without Firebase credentials.
 - Production flows depend on the backend returning `threadId`, `characterId`, and writing `clientMessageId` into stored user messages so optimistic updates can resolve cleanly.
-- Image generation builds the final prompt from:
-  - `visualPromptBase`
-  - the latest `visualEvolutionMemo`
-  - the current daily summary
-  - an optional one-off note from the manual regenerate UI
-- `visualEvolutionMemo` is rebuilt from the latest 7 daily summaries and persisted on the character document.
-- The app and backend both use `03:00 JST` as the day boundary for daily refresh.
 - Generated image files live in Cloud Storage and Firestore stores `gs://...` references plus image history metadata.
 - Flutter resolves `gs://` URLs through Firebase Storage before rendering them in `ImageScreen` and `HomeScreen`.
-- Chat writes are now protected in two layers:
+- Chat writes are protected in two layers:
   - Firestore Rules prevent direct client writes to messages.
   - Backend verifies that the requested `threadId` belongs to the authenticated user before reading history or appending messages.

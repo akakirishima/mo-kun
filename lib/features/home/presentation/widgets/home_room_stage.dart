@@ -96,7 +96,9 @@ class _StageCharacter extends StatelessWidget {
     }
 
     if (imageUrl == null || imageUrl!.isEmpty) {
-      return const _MoriSprite(key: ValueKey<String>('home-room-stage-fallback'));
+      return const _CharacterSprite(
+        key: ValueKey<String>('home-room-stage-fallback'),
+      );
     }
 
     return ClipRRect(
@@ -110,7 +112,7 @@ class _StageCharacter extends StatelessWidget {
           fit: BoxFit.contain,
           alignment: Alignment.center,
           errorBuilder: (context, error, stackTrace) {
-            return const _MoriSprite(
+            return const _CharacterSprite(
               key: ValueKey<String>('home-room-stage-fallback'),
             );
           },
@@ -120,8 +122,8 @@ class _StageCharacter extends StatelessWidget {
   }
 }
 
-class _MoriSprite extends StatelessWidget {
-  const _MoriSprite({super.key});
+class _CharacterSprite extends StatelessWidget {
+  const _CharacterSprite({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +134,7 @@ class _MoriSprite extends StatelessWidget {
         clipBehavior: Clip.none,
         alignment: Alignment.topCenter,
         children: [
-          const Positioned(top: 0, child: _MoriHead()),
+          const Positioned(top: 0, child: _CharacterHead()),
           Positioned(
             top: 55,
             child: Container(
@@ -145,19 +147,19 @@ class _MoriSprite extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Container(
-                width: 18,
-                height: 18,
+                width: 20,
+                height: 20,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF6F2D8),
-                  borderRadius: BorderRadius.circular(8),
+                  shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: const Text(
-                  'M',
-                  style: TextStyle(
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
                     color: Color(0xFF62826B),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                    shape: BoxShape.circle,
                   ),
                 ),
               ),
@@ -205,8 +207,8 @@ class _MoriSprite extends StatelessWidget {
   }
 }
 
-class _MoriHead extends StatelessWidget {
-  const _MoriHead();
+class _CharacterHead extends StatelessWidget {
+  const _CharacterHead();
 
   @override
   Widget build(BuildContext context) {

@@ -6,6 +6,10 @@ export type AppConfig = {
   geminiTemperature: number;
   geminiMaxOutputTokens: number;
   imageBucket: string;
+  speechLanguageCode: string;
+  ttsLanguageCode: string;
+  ttsVoiceName: string;
+  ttsAudioEncoding: "MP3";
   dailyRefreshSecret: string;
   port: number;
 };
@@ -20,6 +24,10 @@ export function loadConfig(): AppConfig {
     geminiTemperature: Number(process.env.GEMINI_TEMPERATURE ?? 0.5),
     geminiMaxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? 320),
     imageBucket: process.env.IMAGE_BUCKET ?? 'local-bucket',
+    speechLanguageCode: process.env.SPEECH_LANGUAGE_CODE ?? 'ja-JP',
+    ttsLanguageCode: process.env.TTS_LANGUAGE_CODE ?? 'ja-JP',
+    ttsVoiceName: process.env.TTS_VOICE_NAME ?? '',
+    ttsAudioEncoding: 'MP3',
     dailyRefreshSecret: process.env.DAILY_REFRESH_SECRET ?? 'local-secret',
     port: Number(process.env.PORT ?? 8080),
   };

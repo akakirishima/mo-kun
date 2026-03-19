@@ -357,7 +357,7 @@ class _LatestImageCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            character?.name ?? 'Mori',
+            character?.name ?? 'Self',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               color: palette.titleText,
               fontWeight: FontWeight.w800,

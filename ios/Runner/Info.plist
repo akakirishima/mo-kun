@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Roomチャットで写真を撮って送るためにカメラを使用します。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>音声で話しかけて、キャラクターからの返答を受け取るためにマイクを使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Roomチャットで画像を選んで送るために写真ライブラリを使用します。</string>
 	<key>UIApplicationSceneManifest</key>

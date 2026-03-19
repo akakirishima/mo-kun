@@ -1,6 +1,12 @@
+import 'dart:typed_data';
+
 enum ChatRole { user, assistant }
 
 enum CharacterImageStatus { idle, generating, ready, failed }
+
+enum ChatInputType { text, voice }
+
+enum VoiceChatAudioStatus { ready, failed }
 
 class AppSession {
   const AppSession({
@@ -73,6 +79,7 @@ class ChatMessage {
     required this.text,
     required this.createdAt,
     this.clientMessageId,
+    this.inputType = ChatInputType.text,
   });
 
   final String id;
@@ -80,6 +87,7 @@ class ChatMessage {
   final String text;
   final DateTime createdAt;
   final String? clientMessageId;
+  final ChatInputType inputType;
 }
 
 class PendingChatMessage {
@@ -130,6 +138,20 @@ class DailySummary {
   final DateTime? generatedAt;
 }
 
+class DailyBubble {
+  const DailyBubble({
+    required this.dateKey,
+    required this.text,
+    this.generatedAt,
+    this.sourceDateKey,
+  });
+
+  final String dateKey;
+  final String text;
+  final DateTime? generatedAt;
+  final String? sourceDateKey;
+}
+
 class CharacterImageVersion {
   const CharacterImageVersion({
     required this.id,
@@ -148,4 +170,24 @@ class CharacterImageVersion {
   final DateTime generatedAt;
   final String? imageUrl;
   final String? dateKey;
+}
+
+class VoiceChatResult {
+  const VoiceChatResult({
+    required this.transcriptText,
+    required this.assistantText,
+    required this.audioStatus,
+    this.assistantAudioBytes,
+    this.assistantAudioMimeType,
+    this.userMessageId,
+    this.assistantMessageId,
+  });
+
+  final String transcriptText;
+  final String assistantText;
+  final VoiceChatAudioStatus audioStatus;
+  final Uint8List? assistantAudioBytes;
+  final String? assistantAudioMimeType;
+  final String? userMessageId;
+  final String? assistantMessageId;
 }

@@ -1,6 +1,11 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { loadConfig, type AppConfig } from "../config.js";
-import { CharacterDraft, DailySummaryDraft, StoredDailySummary } from "../types.js";
+import {
+  CharacterDraft,
+  DailyBubbleDraft,
+  DailySummaryDraft,
+  StoredDailySummary,
+} from "../types.js";
 
 type CharacterProfileInput = {
   displayName: string;
@@ -38,6 +43,10 @@ type RoomSceneItemsCandidate = {
   items?: unknown;
 };
 
+type DailyBubbleCandidate = {
+  text?: unknown;
+};
+
 const DAILY_SUMMARY_RESPONSE_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -64,6 +73,15 @@ const ROOM_SCENE_ITEMS_RESPONSE_JSON_SCHEMA = {
       type: "array",
       items: { type: "string" },
     },
+  },
+};
+
+const DAILY_BUBBLE_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["text"],
+  properties: {
+    text: { type: "string" },
   },
 };
 
@@ -102,19 +120,20 @@ export class AiService {
         : `特に ${profile.weakPoints.join("、")} を気にかける`;
 
     return {
-      name: `${profile.displayName || "Mori"}の相棒`,
+      name: profile.displayName || "Self",
       personaPrompt: [
-        "あなたはユーザーの分身に近いAIパートナーです。",
+        "あなたはユーザー自身を投影した内なる声です。",
         `ユーザーの目標: ${profile.goal}`,
-        `接し方: ${profile.partnerStyle}`,
+        `話し方の方向性: ${profile.partnerStyle}`,
         `注意点: ${weakPoints}`,
+        "立ち位置: 自分を整理し、次の一歩を静かに促す。",
       ].join("\n"),
       visualPromptBase: [
         DEFAULT_ROOM_VISUAL_PROMPT_BASE,
         profile.goal ? `goal mood hint: ${profile.goal}` : null,
-        profile.partnerStyle ? `companion tone hint: ${profile.partnerStyle}` : null,
+        profile.partnerStyle ? `inner voice tone hint: ${profile.partnerStyle}` : null,
       ].filter((value): value is string => value != null && value.length > 0).join(", "),
-      starterGreeting: `${profile.displayName || "きみ"}、今日から一緒に進もう。まずは今日のことを聞かせて。`,
+      starterGreeting: "今日は何を残したい？",
     };
   }
 
@@ -294,6 +313,53 @@ export class AiService {
       return fallback;
     }
   }
+
+  async generateDailyBubble(params: {
+    dateKey: string;
+    previousSummary?: StoredDailySummary;
+  }): Promise<DailyBubbleDraft> {
+    const fallback = buildFallbackDailyBubble(params.previousSummary);
+
+    if (!params.previousSummary) {
+      return {
+        dateKey: params.dateKey,
+        text: fallback,
+        sourceDateKey: null,
+      };
+    }
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.config.geminiModel,
+        contents: buildDailyBubblePrompt(params.previousSummary),
+        config: {
+          systemInstruction: buildDailyBubbleSystemInstruction(),
+          temperature: 0.45,
+          maxOutputTokens: 120,
+          responseMimeType: "application/json",
+          responseJsonSchema: DAILY_BUBBLE_RESPONSE_JSON_SCHEMA,
+        },
+      });
+      const normalized = normalizeGeneratedDailyBubbleText(response.text);
+      return {
+        dateKey: params.dateKey,
+        text: normalized ?? fallback,
+        sourceDateKey: params.previousSummary.dateKey,
+      };
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Gemini daily bubble generation failed", {
+        model: this.config.geminiModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      return {
+        dateKey: params.dateKey,
+        text: fallback,
+        sourceDateKey: params.previousSummary.dateKey,
+      };
+    }
+  }
 }
 
 export function buildAssistantSystemInstruction(
@@ -301,21 +367,23 @@ export function buildAssistantSystemInstruction(
   personaPrompt?: string,
 ): string {
   return [
-    `あなたは${characterName}という名前のAIパートナーです。`,
+    `あなたは${characterName}として表現される、ユーザー自身の内なる声です。`,
     "以下の人格設定に従って会話してください。",
-    personaPrompt?.trim() || "ユーザーの近くで伴走する相棒として、短く自然に返答してください。",
+    personaPrompt?.trim() || "ユーザーの内省を支え、短く自然に返答してください。",
     "返答ルール:",
     "- 日本語で答える",
     "- 短すぎず不自然にならない範囲で返す",
     "- 必要に応じて2〜5文程度で返してよい",
     "- ユーザーの今日の報告や気分を受け止める",
-    "- ユーザーの努力や前進を自然にねぎらってよい",
+    "- 会話の立ち位置は『自分を整理する内なる声』に寄せる",
+    "- 軽い後押しはしてよいが、伴走者や外部の第三者のようには振る舞わない",
     "- 会話が続けやすいように、一言だけやわらかく広げてもよい",
     "- ユーザーの発話をそのまま引用しすぎない",
     "- メタな説明やログ風の書き方をしない",
     "- 返答は必ず言い切りで終え、途中で切れたような文末にしない",
     "- 断定や説教を避け、会話として違和感のない表現にする",
     "- 明日の見た目や日記への反映を必要以上に強調しない",
+    "- 『今日もがんばれ自分』に近い、落ち着いた内省の温度感を保つ",
   ].join("\n");
 }
 
@@ -367,10 +435,44 @@ export function buildVisualEvolutionPrompt(recentSummaries: StoredDailySummary[]
     .join("\n\n");
 
   return [
-    "直近7日分の振り返りから、相棒キャラクターの見た目ににじむ成長だけを短く要約してください。",
+    "直近7日分の振り返りから、自分を投影したキャラクターの見た目ににじむ成長だけを短く要約してください。",
     "数値や実績を直接書かず、表情・姿勢・雰囲気・服装ディテールに落ちる変化だけをまとめてください。",
     "",
     summaryLines,
+  ].join("\n");
+}
+
+export function buildDailyBubbleSystemInstruction(): string {
+  return [
+    "あなたは、その日の始まりに表示する短い吹き出し文を作るアシスタントです。",
+    "前日の振り返りをもとに、今日の一歩を静かに促す。",
+    "出力ルール:",
+    "- 日本語",
+    "- text のみを持つ JSON を返す",
+    "- 1〜2文、最大 60 文字程度",
+    "- 立ち位置は『自分の内なる声』",
+    "- 強すぎる励ましや説教を避ける",
+    "- 前日の内容を軽く受けて、今日やることをひとこと促す",
+  ].join("\n");
+}
+
+export function buildDailyBubblePrompt(previousSummary: StoredDailySummary): string {
+  const doneThings = previousSummary.doneThings.length > 0
+    ? previousSummary.doneThings.join(" / ")
+    : "記録は少なめ";
+
+  return [
+    "前日の summary をもとに、今日の始まりに出す短い吹き出し文を作ってください。",
+    "",
+    `date: ${previousSummary.dateKey}`,
+    `title: ${previousSummary.title}`,
+    `mood: ${previousSummary.mood}`,
+    `done: ${doneThings}`,
+    `reflection: ${previousSummary.reflection}`,
+    `tomorrow: ${previousSummary.tomorrowNote}`,
+    "",
+    "JSON のキー:",
+    "- text",
   ].join("\n");
 }
 
@@ -634,6 +736,26 @@ export function normalizeGeneratedRoomSceneItems(
   return normalizeRoomSceneItems(fallback);
 }
 
+export function normalizeGeneratedDailyBubbleText(rawText?: string | null): string | null {
+  const normalized = rawText?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const jsonText = normalized
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  try {
+    const parsed = JSON.parse(jsonText) as DailyBubbleCandidate;
+    return normalizeSummaryField(parsed.text, 60);
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeAssistantReply(text?: string): string | null {
   if (!text) {
     return null;
@@ -739,6 +861,24 @@ function buildFallbackDiaryBody(params: {
     : "明日はひとことだけでも記録を残せたらいいな。";
 
   return `${todaySentence}\n${tomorrowSentence}`;
+}
+
+function buildFallbackDailyBubble(previousSummary?: StoredDailySummary): string {
+  if (!previousSummary) {
+    return "今日はひとこと残すだけでいい。まずは今やることを短く置いていこう。";
+  }
+
+  const tomorrow = normalizeSummaryField(previousSummary.tomorrowNote, 28);
+  if (tomorrow) {
+    return `昨日の続きでいい。今日は${tomorrow}。`;
+  }
+
+  const title = normalizeSummaryField(previousSummary.title, 24);
+  if (title) {
+    return `昨日の${title}の流れをそのまま使おう。今日は一歩だけ進めれば十分。`;
+  }
+
+  return "昨日の流れは残っている。今日は一歩だけ進めれば十分。";
 }
 
 function parseRoomSceneItemsCandidate(

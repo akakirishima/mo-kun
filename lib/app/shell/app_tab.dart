@@ -8,13 +8,6 @@ enum AppTab {
     selectedIcon: Icons.home,
     accentColor: Color(0xFFF3B4CB),
   ),
-  chat(
-    label: 'Chat',
-    semanticLabel: 'Chat tab',
-    icon: Icons.chat_bubble_outline,
-    selectedIcon: Icons.chat_bubble,
-    accentColor: Color(0xFFC8E6FF),
-  ),
   diary(
     label: 'Diary',
     semanticLabel: 'Diary tab',

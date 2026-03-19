@@ -2,9 +2,11 @@ import { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "../lib/firebase.js";
 import {
   CharacterDraft,
+  DailyBubbleDraft,
   DailySummaryDraft,
   ImageDraft,
   SessionResponse,
+  StoredDailyBubble,
   StoredDailySummary,
 } from "../types.js";
 import { buildAppDateWindow } from "../services/app-date.js";
@@ -13,6 +15,7 @@ export type StoredMessage = {
   id: string;
   role?: string;
   text?: string;
+  inputType?: string;
   [key: string]: unknown;
 };
 
@@ -166,6 +169,7 @@ export class AppRepository {
     userText: string;
     clientMessageId: string;
     assistantText: string;
+    userInputType?: "text" | "voice";
   }) {
     const userCreatedAt = Timestamp.now();
     const assistantCreatedAt = Timestamp.fromMillis(Date.now() + 1);
@@ -177,7 +181,7 @@ export class AppRepository {
       transaction.set(userRef, {
         role: "user",
         text: params.userText,
-        inputType: "text",
+        inputType: params.userInputType ?? "text",
         clientMessageId: params.clientMessageId,
         createdAt: userCreatedAt,
       });
@@ -269,6 +273,48 @@ export class AppRepository {
       .doc(summary.dateKey);
     await summaryRef.set({
       ...summary,
+      generatedAt: Timestamp.now(),
+    });
+  }
+
+  async getDailySummary(userId: string, dateKey: string): Promise<StoredDailySummary | null> {
+    const snapshot = await this.db
+      .collection("users")
+      .doc(userId)
+      .collection("dailySummaries")
+      .doc(dateKey)
+      .get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    return { ...snapshot.data(), dateKey } as StoredDailySummary;
+  }
+
+  async getDailyBubble(userId: string, dateKey: string): Promise<StoredDailyBubble | null> {
+    const snapshot = await this.db
+      .collection("users")
+      .doc(userId)
+      .collection("dailyBubbles")
+      .doc(dateKey)
+      .get();
+
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    return { ...snapshot.data(), dateKey } as StoredDailyBubble;
+  }
+
+  async saveDailyBubble(userId: string, bubble: DailyBubbleDraft) {
+    const bubbleRef = this.db
+      .collection("users")
+      .doc(userId)
+      .collection("dailyBubbles")
+      .doc(bubble.dateKey);
+    await bubbleRef.set({
+      ...bubble,
       generatedAt: Timestamp.now(),
     });
   }

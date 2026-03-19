@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'dart:async';
 
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
@@ -15,6 +17,14 @@ abstract class AppRepository {
     required String clientMessageId,
   });
 
+  Future<VoiceChatResult> sendVoiceMessage({
+    required String threadId,
+    required Uint8List audioBytes,
+    required String mimeType,
+    required int durationMs,
+    required String clientMessageId,
+  });
+
   Future<void> regenerateCharacterImage({String? title, String? reportText});
 
   Stream<CharacterSnapshot?> watchCharacter(String characterId);
@@ -27,6 +37,11 @@ abstract class AppRepository {
   });
 
   Stream<DailySummary?> watchDailySummary({
+    required String userId,
+    required String dateKey,
+  });
+
+  Stream<DailyBubble?> watchDailyBubble({
     required String userId,
     required String dateKey,
   });

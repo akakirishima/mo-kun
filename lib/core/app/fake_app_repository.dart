@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'dart:async';
 
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
@@ -11,6 +13,7 @@ class FakeAppRepository implements AppRepository {
     List<ChatMessage>? initialMessages,
     DailySummary? initialSummary,
     List<DailySummary>? initialSummaries,
+    DailyBubble? initialDailyBubble,
     List<CharacterImageVersion>? initialImageHistory,
   }) : _session =
            initialSession ??
@@ -21,6 +24,7 @@ class FakeAppRepository implements AppRepository {
       primary: initialSummary,
       additional: initialSummaries,
     );
+    _dailyBubble = initialDailyBubble ?? _defaultDailyBubble();
     _imageHistory = initialImageHistory ?? <CharacterImageVersion>[];
     _emitAll();
   }
@@ -29,6 +33,7 @@ class FakeAppRepository implements AppRepository {
   final _characterController = StreamController<CharacterSnapshot?>.broadcast();
   final _dailySummariesController =
       StreamController<List<DailySummary>>.broadcast();
+  final _dailyBubbleController = StreamController<DailyBubble?>.broadcast();
   final _imageHistoryController =
       StreamController<List<CharacterImageVersion>>.broadcast();
 
@@ -36,6 +41,7 @@ class FakeAppRepository implements AppRepository {
   CharacterSnapshot? _character;
   List<ChatMessage> _messages = <ChatMessage>[];
   List<DailySummary> _summaries = <DailySummary>[];
+  DailyBubble? _dailyBubble;
   List<CharacterImageVersion> _imageHistory = <CharacterImageVersion>[];
 
   @override
@@ -46,15 +52,15 @@ class FakeAppRepository implements AppRepository {
     final now = DateTime.now();
     _character = CharacterSnapshot(
       id: 'character-${_session.userId}',
-      name: input.displayName.isEmpty ? 'Mori' : '${input.displayName} Mori',
+      name: input.displayName.isEmpty ? 'Self' : input.displayName,
       personaPrompt:
-          'You are a supportive partner who reflects progress gently.',
+          'You are the user\'s reflective inner voice.',
       visualPromptBase:
-          'Soft illustrated companion, reflects recent self-improvement.',
+          'Soft illustrated self-projection character, reflects recent self-improvement.',
       imageStatus: CharacterImageStatus.ready,
       latestImageUrl: null,
       lastGeneratedAt: now,
-      starterGreeting: '${input.displayName}、今日から一緒に進もう。',
+      starterGreeting: '今日は何を残したい？',
     );
     _messages = <ChatMessage>[
       ChatMessage(
@@ -68,10 +74,10 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: _dateKey(now),
         title: 'はじまりの日',
-        diaryBody: '今日はプロフィールを登録して、相棒を迎えた。'
+        diaryBody: '今日はプロフィールを登録して、自分を投影したキャラクターを迎えた。'
             '\n明日はまず小さな報告を1つ送れたらいいな。',
         mood: 'わくわく',
-        doneThings: ['プロフィールを登録した', '相棒を迎えた'],
+        doneThings: ['プロフィールを登録した', 'キャラクターを作った'],
         reflection: '最初の一歩を踏み出した日。',
         tomorrowNote: 'まずは小さな報告を1つ送ってみよう。',
         generatedAt: now,
@@ -87,6 +93,11 @@ class FakeAppRepository implements AppRepository {
         dateKey: _dateKey(now),
       ),
     ];
+    _dailyBubble = DailyBubble(
+      dateKey: _dateKey(now),
+      text: '今日はひとこと残すだけでいい。まずは今やることを置いていこう。',
+      generatedAt: now,
+    );
     _session = _session.copyWith(
       needsOnboarding: false,
       characterId: _character!.id,
@@ -117,6 +128,7 @@ class FakeAppRepository implements AppRepository {
         text: text,
         createdAt: now,
         clientMessageId: clientMessageId,
+        inputType: ChatInputType.text,
       ),
     ];
     final todayDateKey = _dateKey(now);
@@ -148,7 +160,7 @@ class FakeAppRepository implements AppRepository {
     ];
     _character = CharacterSnapshot(
       id: _character?.id ?? 'character-${_session.userId}',
-      name: _character?.name ?? 'Mori',
+      name: _character?.name ?? 'Self',
       personaPrompt: _character?.personaPrompt ?? '',
       visualPromptBase: _character?.visualPromptBase ?? '',
       imageStatus: CharacterImageStatus.ready,
@@ -164,11 +176,66 @@ class FakeAppRepository implements AppRepository {
       ChatMessage(
         id: 'assistant-${now.microsecondsSinceEpoch}',
         role: ChatRole.assistant,
-        text: '受け取ったよ。明日の姿にも少し反映しておくね。',
+        text: '受け取った。今日はひとつだけ進めば十分。',
         createdAt: now.add(const Duration(seconds: 1)),
       ),
     ];
     _emitAll();
+  }
+
+  @override
+  Future<VoiceChatResult> sendVoiceMessage({
+    required String threadId,
+    required Uint8List audioBytes,
+    required String mimeType,
+    required int durationMs,
+    required String clientMessageId,
+  }) async {
+    final now = DateTime.now();
+    const transcriptText = '今日は音声で話した内容を残した';
+    const assistantText = '昨日の流れは残っている。今日はひとつだけ進めてみよう。';
+
+    _messages = [
+      ..._messages,
+      ChatMessage(
+        id: clientMessageId,
+        role: ChatRole.user,
+        text: transcriptText,
+        createdAt: now,
+        clientMessageId: clientMessageId,
+        inputType: ChatInputType.voice,
+      ),
+      ChatMessage(
+        id: 'assistant-voice-${now.microsecondsSinceEpoch}',
+        role: ChatRole.assistant,
+        text: assistantText,
+        createdAt: now.add(const Duration(seconds: 1)),
+      ),
+    ];
+    _upsertSummary(
+      DailySummary(
+        dateKey: _dateKey(now),
+        title: '声で整理した日',
+        diaryBody: '今日は音声で気持ちを整理して、ひとつ先の動きを言葉にした。'
+            '\n明日はその続きを短く残せたらいいな。',
+        mood: '穏やか',
+        doneThings: const <String>['音声で整理した'],
+        reflection: '声にすると、自分の流れが少し見えやすくなった。',
+        tomorrowNote: '続きをひとことだけ残す。',
+        generatedAt: now,
+      ),
+    );
+    _emitAll();
+
+    return VoiceChatResult(
+      transcriptText: transcriptText,
+      assistantText: assistantText,
+      audioStatus: VoiceChatAudioStatus.ready,
+      assistantAudioBytes: Uint8List.fromList(const <int>[1, 2, 3]),
+      assistantAudioMimeType: 'audio/mpeg',
+      userMessageId: clientMessageId,
+      assistantMessageId: 'assistant-voice-${now.microsecondsSinceEpoch}',
+    );
   }
 
   @override
@@ -199,7 +266,7 @@ class FakeAppRepository implements AppRepository {
     ];
     _character = CharacterSnapshot(
       id: _character?.id ?? 'character-${_session.userId}',
-      name: _character?.name ?? 'Mori',
+      name: _character?.name ?? 'Self',
       personaPrompt: _character?.personaPrompt ?? '',
       visualPromptBase: _character?.visualPromptBase ?? '',
       imageStatus: CharacterImageStatus.ready,
@@ -242,7 +309,18 @@ class FakeAppRepository implements AppRepository {
   }) async* {
     yield _summaryForDate(dateKey);
     yield* _dailySummariesController.stream.map(
-      (summaries) => _findSummaryByDate(summaries, dateKey),
+        (summaries) => _findSummaryByDate(summaries, dateKey),
+    );
+  }
+
+  @override
+  Stream<DailyBubble?> watchDailyBubble({
+    required String userId,
+    required String dateKey,
+  }) async* {
+    yield _dailyBubble?.dateKey == dateKey ? _dailyBubble : null;
+    yield* _dailyBubbleController.stream.map(
+      (bubble) => bubble?.dateKey == dateKey ? bubble : null,
     );
   }
 
@@ -262,6 +340,7 @@ class FakeAppRepository implements AppRepository {
     await _chatController.close();
     await _characterController.close();
     await _dailySummariesController.close();
+    await _dailyBubbleController.close();
     await _imageHistoryController.close();
   }
 
@@ -269,8 +348,19 @@ class FakeAppRepository implements AppRepository {
     _chatController.add(List<ChatMessage>.unmodifiable(_messages));
     _characterController.add(_character);
     _dailySummariesController.add(List<DailySummary>.unmodifiable(_summaries));
+    _dailyBubbleController.add(_dailyBubble);
     _imageHistoryController.add(
       List<CharacterImageVersion>.unmodifiable(_imageHistory),
+    );
+  }
+
+  DailyBubble _defaultDailyBubble() {
+    final now = DateTime.now();
+    return DailyBubble(
+      dateKey: _dateKey(now),
+      text: '昨日の流れでいい。今日は一歩だけ進めよう。',
+      generatedAt: now,
+      sourceDateKey: _dateKey(now.subtract(const Duration(days: 1))),
     );
   }
 
@@ -310,7 +400,10 @@ class FakeAppRepository implements AppRepository {
     DailySummary? primary,
     List<DailySummary>? additional,
   }) {
-    final merged = <DailySummary>[...?additional, if (primary != null) primary];
+    final merged = <DailySummary>[
+      ...?additional,
+      if (primary case final value?) value,
+    ];
     final deduped = <String, DailySummary>{};
     for (final summary in merged) {
       deduped[summary.dateKey] = summary;

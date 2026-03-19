@@ -101,7 +101,7 @@ class SettingsScreen extends StatelessWidget {
                           tileKey: ValueKey<String>('settings-item-ai'),
                           icon: Icons.auto_awesome_outlined,
                           title: 'AI / キャラクター',
-                          subtitle: 'Mori の反応や雰囲気の調整',
+                          subtitle: '内なる声の反応や雰囲気の調整',
                         ),
                         const _SettingsItemData(
                           tileKey: ValueKey<String>('settings-item-help'),

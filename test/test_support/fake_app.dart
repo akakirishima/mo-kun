@@ -23,12 +23,12 @@ FakeAppRepository buildFakeRepository() {
     ),
     initialCharacter: CharacterSnapshot(
       id: 'test-character',
-      name: 'Mori',
-      personaPrompt: 'やわらかく励ます相棒。',
-      visualPromptBase: '会話内容に応じて見た目が少し変わる相棒。',
+      name: 'Self',
+      personaPrompt: '自分の流れを静かに整理して返す内なる声。',
+      visualPromptBase: '会話内容に応じて見た目が少し変わる自己投影キャラクター。',
       imageStatus: CharacterImageStatus.ready,
       lastGeneratedAt: now,
-      starterGreeting: '今日も会えて嬉しいな。\n一緒にお話ししよ！',
+      starterGreeting: '今日は何を残したい？',
     ),
     initialMessages: <ChatMessage>[
       ChatMessage(
@@ -38,6 +38,12 @@ FakeAppRepository buildFakeRepository() {
         createdAt: now.subtract(const Duration(minutes: 3)),
       ),
     ],
+    initialDailyBubble: DailyBubble(
+      dateKey: dateKey,
+      text: '昨日の段取りは残っている。今日はひとつだけ進めよう、自分。',
+      generatedAt: now.subtract(const Duration(minutes: 30)),
+      sourceDateKey: previousDateKey,
+    ),
     initialSummary: DailySummary(
       dateKey: dateKey,
       title: '小さく前進した日',

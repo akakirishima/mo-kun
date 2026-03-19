@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:async';
 import 'dart:convert';
 
@@ -99,6 +100,53 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
+  Future<VoiceChatResult> sendVoiceMessage({
+    required String threadId,
+    required Uint8List audioBytes,
+    required String mimeType,
+    required int durationMs,
+    required String clientMessageId,
+  }) async {
+    final token = await auth.currentUser!.getIdToken();
+    final request = http.MultipartRequest(
+      'POST',
+      baseUri.resolve('/v1/chat/voice'),
+    )
+      ..headers['Authorization'] = 'Bearer $token'
+      ..fields['threadId'] = threadId
+      ..fields['clientMessageId'] = clientMessageId
+      ..fields['durationMs'] = '$durationMs'
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'audio',
+          audioBytes,
+          filename: 'voice-input.wav',
+        ),
+      );
+
+    final streamed = await client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Backend request failed: ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final audioBase64 = decoded['assistantAudioBase64'] as String?;
+
+    return VoiceChatResult(
+      transcriptText: decoded['transcriptText'] as String? ?? '',
+      assistantText: decoded['assistantText'] as String? ?? '',
+      audioStatus: (decoded['audioStatus'] as String?) == 'ready'
+          ? VoiceChatAudioStatus.ready
+          : VoiceChatAudioStatus.failed,
+      assistantAudioBytes: audioBase64 == null ? null : base64Decode(audioBase64),
+      assistantAudioMimeType: decoded['assistantAudioMimeType'] as String?,
+      userMessageId: decoded['userMessageId'] as String?,
+      assistantMessageId: decoded['assistantMessageId'] as String?,
+    );
+  }
+
+  @override
   Future<void> regenerateCharacterImage({
     String? title,
     String? reportText,
@@ -120,7 +168,7 @@ class FirebaseAppRepository implements AppRepository {
       final data = snapshot.data()!;
       return CharacterSnapshot(
         id: snapshot.id,
-        name: data['name'] as String? ?? 'Mori',
+        name: data['name'] as String? ?? 'Self',
         personaPrompt: data['personaPrompt'] as String? ?? '',
         visualPromptBase: data['visualPromptBase'] as String? ?? '',
         imageStatus: _parseImageStatus(
@@ -192,6 +240,31 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
+  Stream<DailyBubble?> watchDailyBubble({
+    required String userId,
+    required String dateKey,
+  }) {
+    return firestore
+        .collection('users')
+        .doc(userId)
+        .collection('dailyBubbles')
+        .doc(dateKey)
+        .snapshots()
+        .map((snapshot) {
+          if (!snapshot.exists) {
+            return null;
+          }
+          final data = snapshot.data() ?? const <String, dynamic>{};
+          return DailyBubble(
+            dateKey: snapshot.id,
+            text: data['text'] as String? ?? '',
+            generatedAt: _parseTimestamp(data['generatedAt']),
+            sourceDateKey: data['sourceDateKey'] as String?,
+          );
+        });
+  }
+
+  @override
   Stream<List<DailySummary>> watchMonthlyDailySummaries({
     required String userId,
     required DateTime month,
@@ -252,6 +325,9 @@ class FirebaseAppRepository implements AppRepository {
       text: data['text'] as String? ?? '',
       createdAt: _parseTimestamp(data['createdAt']) ?? DateTime.now(),
       clientMessageId: data['clientMessageId'] as String?,
+      inputType: (data['inputType'] as String?) == 'voice'
+          ? ChatInputType.voice
+          : ChatInputType.text,
     );
   }
 
@@ -317,4 +393,5 @@ class FirebaseAppRepository implements AppRepository {
           buildAppDateKeyFromDateTime(generatedAt),
     );
   }
+
 }

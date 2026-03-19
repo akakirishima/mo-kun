@@ -75,13 +75,13 @@ AppRepository _buildPreviewRepository() {
     ),
     initialCharacter: CharacterSnapshot(
       id: 'preview-character',
-      name: 'Mori',
-      personaPrompt: 'やわらかく励ます相棒。',
-      visualPromptBase: '昨日の報告を少しずつ見た目に反映する相棒。',
+      name: 'Self',
+      personaPrompt: '自分の流れを静かに整理して返す内なる声。',
+      visualPromptBase: '昨日の報告を少しずつ見た目に反映する自己投影キャラクター。',
       imageStatus: CharacterImageStatus.ready,
       latestImageUrl: null,
       lastGeneratedAt: now.subtract(const Duration(hours: 7)),
-      starterGreeting: '今日も会えて嬉しいな。\n一緒にお話ししよ！',
+      starterGreeting: '今日は何を残したい？',
     ),
     initialMessages: <ChatMessage>[
       ChatMessage(
@@ -101,6 +101,12 @@ AppRepository _buildPreviewRepository() {
       reflection: '少しずつでも続けると、翌朝の見え方が変わる。',
       tomorrowNote: '起きたらまず一言だけでも報告する。',
       generatedAt: now.subtract(const Duration(hours: 6)),
+    ),
+    initialDailyBubble: DailyBubble(
+      dateKey: _dateKey(now),
+      text: '昨日の段取りは残っている。今日は一つだけ進めよう、自分。',
+      generatedAt: now.subtract(const Duration(hours: 5)),
+      sourceDateKey: _dateKey(now.subtract(const Duration(days: 1))),
     ),
     initialImageHistory: <CharacterImageVersion>[
       CharacterImageVersion(

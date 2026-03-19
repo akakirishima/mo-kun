@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -10,62 +11,63 @@ import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_input_bar.dart';
 import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_message_bubble.dart';
+import 'package:gdgoc_2026_prototype/features/home/presentation/home_voice.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
 import 'package:image_picker/image_picker.dart';
 
 typedef HomeChatImagePicker = Future<XFile?> Function(ImageSource source);
 typedef HomeChatLostDataRetriever = Future<LostDataResponse> Function();
 
+enum HomeOverlayMode { none, voice, photo, chat }
+
+enum HomeVoiceState { idle, recording, uploading, playing, error }
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     super.key,
     required this.onSettingsTap,
     this.onOverlayModeChanged,
-    this.initialMoriMessage = '今日も会えて嬉しいな。\n一緒にお話ししよ！',
+    this.initialBubbleMessage = '昨日の流れは残っている。今日は一つだけ進めよう、自分。',
     this.pickImage,
     this.retrieveLostData,
+    this.voiceRecorder,
+    this.voicePlayer,
   });
 
   final VoidCallback onSettingsTap;
   final ValueChanged<HomeOverlayMode>? onOverlayModeChanged;
-  final String initialMoriMessage;
+  final String initialBubbleMessage;
   final HomeChatImagePicker? pickImage;
   final HomeChatLostDataRetriever? retrieveLostData;
+  final VoiceRecorderController? voiceRecorder;
+  final VoicePlayerController? voicePlayer;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-enum HomeOverlayMode { none, phone, photo, chat }
-
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  static const _headerTop = 14.0;
-  static const _stageActionGap = 16.0;
-  static const _actionBarHeight = 92.0;
-  static const _composerHeight = 76.0;
-  static const _dockedBottomSpacing =
-      GlassBottomDock.reservedBottomSpacing + 12.0;
-  static const _immersiveBottomSpacing = 12.0;
   static const _horizontalPadding = 18.0;
-  static const _stageHorizontalPadding = 8.0;
-  static const _headerStageGap = 8.0;
-  static const _messageSpacing = 12.0;
-  static const _messageLayerPadding = EdgeInsets.only(
-    left: 24,
-    right: 2,
-    top: 18,
-    bottom: 6,
-  );
+  static const _actionBarHeight = 92.0;
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late final ScrollController _messageScrollController;
+  late final VoiceRecorderController _voiceRecorder;
+  late final VoicePlayerController _voicePlayer;
   final ImagePicker _imagePicker = ImagePicker();
   final List<_HomeChatMessage> _localMessages = <_HomeChatMessage>[];
   String _draftText = '';
   XFile? _pendingAttachment;
   bool _isPickingImage = false;
   HomeOverlayMode _overlayMode = HomeOverlayMode.none;
+  HomeVoiceState _voiceState = HomeVoiceState.idle;
+  Timer? _recordingTicker;
+  Duration _recordingDuration = Duration.zero;
+  String? _voiceBubbleText;
+  String? _voiceErrorMessage;
+  String? _latestTranscriptText;
+  String? _latestAssistantText;
 
   bool get _canSend =>
       _draftText.trim().isNotEmpty || _pendingAttachment != null;
@@ -78,16 +80,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _controller = TextEditingController()..addListener(_handleInputChanged);
     _focusNode = FocusNode();
     _messageScrollController = ScrollController();
+    _voiceRecorder =
+        widget.voiceRecorder ?? DeviceVoiceRecorderController();
+    _voicePlayer = widget.voicePlayer ?? DeviceVoicePlayerController();
     _restoreLostAttachmentIfNeeded();
   }
 
   @override
   void dispose() {
+    _recordingTicker?.cancel();
     _controller
       ..removeListener(_handleInputChanged)
       ..dispose();
     _focusNode.dispose();
     _messageScrollController.dispose();
+    unawaited(_voiceRecorder.dispose());
+    unawaited(_voicePlayer.dispose());
     super.dispose();
   }
 
@@ -97,41 +105,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  void _setOverlayMode(HomeOverlayMode mode) {
+  Future<void> _setOverlayMode(HomeOverlayMode mode) async {
     if (_overlayMode == mode) {
       return;
     }
-
+    if (_overlayMode == HomeOverlayMode.voice && mode != HomeOverlayMode.voice) {
+      await _resetVoiceMode();
+    }
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _overlayMode = mode;
     });
     widget.onOverlayModeChanged?.call(mode);
-  }
-
-  void _exitImmersiveMode() {
-    if (!_isImmersiveMode) {
-      return;
-    }
-
-    _setOverlayMode(HomeOverlayMode.none);
-  }
-
-  Future<XFile?> _pickImage(ImageSource source) {
-    final picker = widget.pickImage;
-    if (picker != null) {
-      return picker(source);
-    }
-
-    return _imagePicker.pickImage(source: source, imageQuality: 85);
-  }
-
-  Future<LostDataResponse> _retrieveLostData() {
-    final retriever = widget.retrieveLostData;
-    if (retriever != null) {
-      return retriever();
-    }
-
-    return _imagePicker.retrieveLostData();
   }
 
   Future<void> _restoreLostAttachmentIfNeeded() async {
@@ -142,14 +129,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
-    final response = await _retrieveLostData();
+    final response = widget.retrieveLostData != null
+        ? await widget.retrieveLostData!.call()
+        : await _imagePicker.retrieveLostData();
     if (!mounted || response.isEmpty) {
       return;
     }
 
-    final files = response.files;
-    final restoredFile = files != null && files.isNotEmpty
-        ? files.first
+    final restoredFile = response.files?.isNotEmpty == true
+        ? response.files!.first
         : response.file;
     if (restoredFile == null) {
       return;
@@ -157,33 +145,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     setState(() {
       _pendingAttachment = restoredFile;
+      _overlayMode = HomeOverlayMode.chat;
     });
-    _setOverlayMode(HomeOverlayMode.chat);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _focusNode.requestFocus();
-      }
-    });
+    widget.onOverlayModeChanged?.call(HomeOverlayMode.chat);
   }
 
   Future<void> _handleAttachmentTap(ImageSource source) async {
     if (_isPickingImage) {
       return;
     }
-
     setState(() {
       _isPickingImage = true;
     });
-
     try {
-      final image = await _pickImage(source);
+      final image = widget.pickImage != null
+          ? await widget.pickImage!(source)
+          : await _imagePicker.pickImage(source: source, imageQuality: 85);
       if (!mounted || image == null) {
         return;
       }
-
       setState(() {
         _pendingAttachment = image;
+        _overlayMode = HomeOverlayMode.chat;
       });
+      widget.onOverlayModeChanged?.call(HomeOverlayMode.chat);
       _focusNode.requestFocus();
     } finally {
       if (mounted) {
@@ -195,10 +180,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _removePendingAttachment() {
-    if (_pendingAttachment == null) {
-      return;
-    }
-
     setState(() {
       _pendingAttachment = null;
     });
@@ -222,7 +203,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         );
       }
-
       _controller.clear();
       _draftText = '';
       _pendingAttachment = null;
@@ -232,14 +212,160 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final backendMessage = message.isNotEmpty
         ? message
         : (attachment != null ? '画像を1枚送った' : '');
-    if (backendMessage.isNotEmpty && mounted) {
+    if (backendMessage.isNotEmpty) {
       try {
         await ref
             .read(sendChatMessageControllerProvider)
             .send(session: session, text: backendMessage);
       } catch (_) {}
     }
+    _scrollMessagesToBottom();
+  }
 
+  Future<void> _handleVoicePrimaryTap() async {
+    switch (_voiceState) {
+      case HomeVoiceState.recording:
+        await _finishVoiceRecording();
+        return;
+      case HomeVoiceState.playing:
+        await _voicePlayer.stop();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _voiceState = HomeVoiceState.idle;
+        });
+        return;
+      case HomeVoiceState.uploading:
+        return;
+      case HomeVoiceState.idle:
+      case HomeVoiceState.error:
+        await _startVoiceRecording();
+        return;
+    }
+  }
+
+  Future<void> _startVoiceRecording() async {
+    try {
+      await _voicePlayer.stop();
+      await _voiceRecorder.start();
+      if (!mounted) {
+        return;
+      }
+      _recordingTicker?.cancel();
+      _recordingTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _recordingDuration += const Duration(seconds: 1);
+        });
+      });
+      setState(() {
+        _voiceState = HomeVoiceState.recording;
+        _recordingDuration = Duration.zero;
+        _voiceErrorMessage = null;
+        _voiceBubbleText = '声を聞いている。終わったらもう一度押して送って。';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _voiceState = HomeVoiceState.error;
+        _voiceErrorMessage = error.toString();
+        _voiceBubbleText = 'マイクを使えなかった。権限を確認してもう一度。';
+      });
+    }
+  }
+
+  Future<void> _finishVoiceRecording() async {
+    _recordingTicker?.cancel();
+    setState(() {
+      _voiceState = HomeVoiceState.uploading;
+      _recordingDuration = Duration.zero;
+      _voiceErrorMessage = null;
+      _voiceBubbleText = '今の声を受け取っている。少し待って。';
+    });
+
+    try {
+      final clip = await _voiceRecorder.stop();
+      if (clip == null || clip.audioBytes.isEmpty) {
+        throw const VoiceControllerException('録音データを取得できませんでした。');
+      }
+
+      final session = await ref.read(sessionProvider.future);
+      final result = await ref
+          .read(sendVoiceMessageControllerProvider)
+          .send(
+            session: session,
+            audioBytes: clip.audioBytes,
+            mimeType: clip.mimeType,
+            durationMs: clip.durationMs,
+          );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _latestTranscriptText = result.transcriptText;
+        _latestAssistantText = result.assistantText;
+        _voiceBubbleText = result.assistantText;
+        _voiceErrorMessage = result.audioStatus == VoiceChatAudioStatus.failed
+            ? '音声の再生はできなかったけれど、返答テキストは受け取れた。'
+            : null;
+      });
+
+      final audioBytes = result.assistantAudioBytes;
+      final mimeType = result.assistantAudioMimeType;
+      if (result.audioStatus == VoiceChatAudioStatus.ready &&
+          audioBytes != null &&
+          audioBytes.isNotEmpty &&
+          mimeType != null &&
+          mimeType.isNotEmpty) {
+        setState(() {
+          _voiceState = HomeVoiceState.playing;
+        });
+        await _voicePlayer.play(audioBytes, mimeType: mimeType);
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _voiceState = HomeVoiceState.idle;
+      });
+      _scrollMessagesToBottom();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _voiceState = HomeVoiceState.error;
+        _voiceErrorMessage = error.toString();
+        _voiceBubbleText = 'うまく聞き取れなかった。短く区切ってもう一度話してみよう。';
+      });
+    }
+  }
+
+  Future<void> _resetVoiceMode() async {
+    _recordingTicker?.cancel();
+    if (_voiceState == HomeVoiceState.recording) {
+      await _voiceRecorder.cancel();
+    }
+    await _voicePlayer.stop();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _voiceState = HomeVoiceState.idle;
+      _voiceErrorMessage = null;
+      _voiceBubbleText = null;
+      _recordingDuration = Duration.zero;
+    });
+  }
+
+  void _scrollMessagesToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messageScrollController.hasClients) {
         return;
@@ -250,22 +376,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         curve: Curves.easeOutCubic,
       );
     });
-
-    _focusNode.requestFocus();
-  }
-
-  void _handleSendTap() {
-    _sendMessage();
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).home;
-    final isChatMode = _isChatMode;
-    final isImmersiveMode = _isImmersiveMode;
-    final composerBottom = isImmersiveMode
-        ? _immersiveBottomSpacing
-        : _dockedBottomSpacing;
     final session = ref.watch(sessionProvider).valueOrNull;
     final threadId = session?.threadId;
     final characterId = session?.characterId;
@@ -285,6 +400,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ref
               .read(pendingMessagesProvider.notifier)
               .markCompleted(resolvedClientIds);
+          if (_isChatMode) {
+            _scrollMessagesToBottom();
+          }
         },
       );
     }
@@ -305,6 +423,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final resolvedCharacterImageUrl = ref.watch(
       resolvedImageUrlProvider(character?.latestImageUrl),
     );
+    final dailyBubble = session == null
+        ? null
+        : ref.watch(dailyBubbleProvider(session)).valueOrNull;
+    final bubbleText =
+        _voiceBubbleText ??
+        dailyBubble?.text ??
+        character?.starterGreeting ??
+        widget.initialBubbleMessage;
 
     return DecoratedBox(
       key: const ValueKey<String>('home-background'),
@@ -320,20 +446,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final maxStageWidth = math.max(
-              constraints.maxWidth - (_stageHorizontalPadding * 2),
+              constraints.maxWidth - (_horizontalPadding * 2),
               0.0,
             );
-            final stageHeight = math.max(
-              math.min(
-                maxStageWidth / 0.96,
-                math.max(constraints.maxHeight * 0.44, 0.0),
-              ),
-              0.0,
+            final stageHeight = math.min(
+              maxStageWidth / 0.96,
+              math.max(constraints.maxHeight * 0.38, 240.0),
             );
-            final stageWidth = stageHeight * 0.96;
-            final stageShell = SizedBox(
+            final stage = SizedBox(
               key: const ValueKey<String>('home-room-stage-shell'),
-              width: stageWidth,
+              width: stageHeight * 0.96,
               height: stageHeight,
               child: HomeRoomStage(
                 characterImageUrl: resolvedCharacterImageUrl.valueOrNull,
@@ -342,176 +464,169 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             );
 
             return Column(
-              key: const ValueKey<String>('home-screen'),
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    _horizontalPadding,
-                    _headerTop,
-                    _horizontalPadding,
-                    0,
-                  ),
-                  child: _MoriHeaderCard(
-                    message:
-                        character?.starterGreeting ?? widget.initialMoriMessage,
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                  child: _HomeTopBar(
+                    showBackButton: _isImmersiveMode,
+                    onBackTap: () {
+                      unawaited(_setOverlayMode(HomeOverlayMode.none));
+                    },
                     onSettingsTap: widget.onSettingsTap,
-                    showBackButton: isImmersiveMode,
-                    onBackTap: _exitImmersiveMode,
                   ),
                 ),
-                const SizedBox(height: _headerStageGap),
-                if (isChatMode)
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, stackConstraints) {
-                        final messageLayerBottom =
-                            _composerHeight + composerBottom + 12;
-                        final availableStageHeight = math.max(
-                          stackConstraints.maxHeight - messageLayerBottom,
-                          0.0,
-                        );
-                        final chatStageHeight = math.min(
-                          stageHeight,
-                          availableStageHeight,
-                        );
-                        final chatStageWidth = chatStageHeight * 0.96;
-                        final messageLayerTop = chatStageHeight * 0.52;
-                        final messageLayerHeight = math.max(
-                          stackConstraints.maxHeight -
-                              messageLayerTop -
-                              messageLayerBottom,
-                          1.0,
-                        );
-                        final previewBottom =
-                            composerBottom + _composerHeight + 10;
-                        final chatStageShell = SizedBox(
-                          key: const ValueKey<String>('home-room-stage-shell'),
-                          width: chatStageWidth,
-                          height: chatStageHeight,
-                          child: HomeRoomStage(
-                            characterImageUrl:
-                                resolvedCharacterImageUrl.valueOrNull,
-                            isResolvingImage: resolvedCharacterImageUrl.isLoading,
-                          ),
-                        );
-
-                        return Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: Center(child: chatStageShell),
-                            ),
-                            Positioned(
-                              top: messageLayerTop,
-                              left: 24,
-                              right: 24,
-                              child: SizedBox(
-                                height: messageLayerHeight,
-                                child: ClipRect(
-                                  child: ShaderMask(
-                                    shaderCallback: (bounds) {
-                                      return const LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Color(0x00FFFFFF),
-                                          Color(0x77FFFFFF),
-                                          Color(0xF2FFFFFF),
-                                          Color(0xFFFFFFFF),
-                                        ],
-                                        stops: [0, 0.12, 0.24, 1],
-                                      ).createShader(bounds);
-                                    },
-                                    blendMode: BlendMode.dstIn,
-                                    child: SingleChildScrollView(
-                                      key: const ValueKey<String>(
-                                        'home-message-layer',
-                                      ),
-                                      controller: _messageScrollController,
-                                      physics: const BouncingScrollPhysics(),
-                                      child: _MessageCanvas(
-                                        minHeight: messageLayerHeight,
-                                        padding: _messageLayerPadding,
-                                        messages: timelineMessages,
-                                        includeKeys: true,
-                                        allowOverflow: false,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (_pendingAttachment != null)
-                              Positioned(
-                                left: 12,
-                                right: 12,
-                                bottom: previewBottom,
-                                child: _HomePendingAttachmentPreview(
-                                  attachment: _pendingAttachment!,
-                                  onRemove: _removePendingAttachment,
-                                ),
-                              ),
-                            Positioned(
-                              left: _horizontalPadding,
-                              right: _horizontalPadding,
-                              bottom: composerBottom,
-                              child: ChatInputBar(
-                                key: const ValueKey<String>(
-                                  'home-chat-input-bar',
-                                ),
-                                controller: _controller,
-                                focusNode: _focusNode,
-                                hintText: 'メッセージ',
-                                sendEnabled: _canSend,
-                                onSubmitted: (_) => _handleSendTap(),
-                                onSendTap: _handleSendTap,
-                                onCameraTap: () =>
-                                    _handleAttachmentTap(ImageSource.camera),
-                                onImageTap: () =>
-                                    _handleAttachmentTap(ImageSource.gallery),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  )
-                else ...[
-                  SizedBox(
-                    height: stageHeight,
-                    child: Center(child: stageShell),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                  child: _HomeBubble(text: bubbleText, isLive: _voiceState != HomeVoiceState.idle),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: _buildBody(
+                    context: context,
+                    stage: stage,
+                    timelineMessages: timelineMessages,
                   ),
-                ],
-                if (!isImmersiveMode) ...[
-                  const SizedBox(height: _stageActionGap),
+                ),
+                if (!_isImmersiveMode) ...[
+                  const SizedBox(height: 16),
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _horizontalPadding,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
                     child: SizedBox(
                       height: _actionBarHeight,
                       child: _RoomActionBar(
                         selectedMode: _overlayMode,
-                        onModeSelected: _setOverlayMode,
+                        onModeSelected: (mode) {
+                          unawaited(_setOverlayMode(mode));
+                        },
                       ),
                     ),
                   ),
-                ] else if (!isChatMode) ...[
-                  const Spacer(),
-                  SizedBox(
-                    height: isImmersiveMode
-                        ? _immersiveBottomSpacing
-                        : _dockedBottomSpacing,
+                  const SizedBox(
+                    height: GlassBottomDock.reservedBottomSpacing + 12,
                   ),
-                ],
+                ] else
+                  const SizedBox(height: 12),
               ],
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildBody({
+    required BuildContext context,
+    required Widget stage,
+    required List<_HomeChatMessage> timelineMessages,
+  }) {
+    if (_isChatMode) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final chatStageHeight = math.min(
+            220.0,
+            math.max(constraints.maxHeight * 0.24, 120.0),
+          );
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Column(
+              children: [
+                SizedBox(height: chatStageHeight, child: Center(child: stage)),
+                Expanded(
+                  child: ListView.separated(
+                    key: const ValueKey<String>('home-message-layer'),
+                    controller: _messageScrollController,
+                    padding: const EdgeInsets.only(top: 12, bottom: 12),
+                    itemBuilder: (context, index) {
+                      final message = timelineMessages[index];
+                      return ChatMessageBubble(
+                        key: ValueKey<String>(
+                          message.isCurrentUser
+                              ? 'home-user-bubble-$index'
+                              : 'home-assistant-bubble-$index',
+                        ),
+                        text: message.text,
+                        imagePath: message.imagePath,
+                        isCurrentUser: message.isCurrentUser,
+                        showAvatar: !message.isCurrentUser,
+                        timestamp: _timestampFromDateTime(message.createdAt),
+                        statusLabel: message.statusLabel,
+                      );
+                    },
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemCount: timelineMessages.length,
+                  ),
+                ),
+                if (_pendingAttachment != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _PendingAttachmentPreview(
+                      attachment: _pendingAttachment!,
+                      onRemove: _removePendingAttachment,
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                ChatInputBar(
+                  key: const ValueKey<String>('home-chat-input-bar'),
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  hintText: 'メッセージ',
+                  sendEnabled: _canSend,
+                  onSubmitted: (_) {
+                    unawaited(_sendMessage());
+                  },
+                  onSendTap: () {
+                    unawaited(_sendMessage());
+                  },
+                  onCameraTap: () {
+                    unawaited(_handleAttachmentTap(ImageSource.camera));
+                  },
+                  onImageTap: () {
+                    unawaited(_handleAttachmentTap(ImageSource.gallery));
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    final panel = switch (_overlayMode) {
+      HomeOverlayMode.voice => _VoicePanel(
+          voiceState: _voiceState,
+          recordingDuration: _recordingDuration,
+          transcriptText: _latestTranscriptText,
+          assistantText: _latestAssistantText,
+          errorText: _voiceErrorMessage,
+          onPrimaryTap: () {
+            unawaited(_handleVoicePrimaryTap());
+          },
+        ),
+      HomeOverlayMode.photo => _PhotoPanel(
+          isBusy: _isPickingImage,
+          onCameraTap: () {
+            unawaited(_handleAttachmentTap(ImageSource.camera));
+          },
+          onGalleryTap: () {
+            unawaited(_handleAttachmentTap(ImageSource.gallery));
+          },
+        ),
+      _ => null,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Column(
+        children: [
+          Expanded(child: Center(child: stage)),
+          if (panel != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: panel,
+            ),
+        ],
       ),
     );
   }
@@ -529,7 +644,6 @@ List<_HomeChatMessage> _buildTimelineMessages({
         text: message.text,
         createdAt: message.createdAt,
         isCurrentUser: message.role == ChatRole.user,
-        senderName: message.role == ChatRole.assistant ? 'Mori' : null,
       ),
     for (final message in pendingMessages)
       _HomeChatMessage(
@@ -538,16 +652,7 @@ List<_HomeChatMessage> _buildTimelineMessages({
         isCurrentUser: true,
         statusLabel: message.failed ? '再送待ち' : '送信中',
       ),
-  ]..sort((left, right) {
-    final timestampComparison = left.createdAt.compareTo(right.createdAt);
-    if (timestampComparison != 0) {
-      return timestampComparison;
-    }
-    if (left.isCurrentUser == right.isCurrentUser) {
-      return 0;
-    }
-    return left.isCurrentUser ? -1 : 1;
-  });
+  ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
   return timeline;
 }
 
@@ -555,6 +660,235 @@ String _timestampFromDateTime(DateTime dateTime) {
   final hour = dateTime.hour.toString().padLeft(2, '0');
   final minute = dateTime.minute.toString().padLeft(2, '0');
   return '$hour:$minute';
+}
+
+String _formatRecordingDuration(Duration duration) {
+  final minutes = duration.inMinutes.toString().padLeft(2, '0');
+  final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+class _HomeTopBar extends StatelessWidget {
+  const _HomeTopBar({
+    required this.showBackButton,
+    required this.onBackTap,
+    required this.onSettingsTap,
+  });
+
+  final bool showBackButton;
+  final VoidCallback onBackTap;
+  final VoidCallback onSettingsTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).home;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 44,
+          child: showBackButton
+              ? _RoundIconButton(
+                  buttonKey: const ValueKey<String>('home-chat-back-button'),
+                  icon: Icons.arrow_back_ios_new_rounded,
+                  tooltip: '戻る',
+                  color: palette.headerText,
+                  onPressed: onBackTap,
+                )
+              : null,
+        ),
+        const Spacer(),
+        _RoundIconButton(
+          buttonKey: const ValueKey<String>('home-settings-button'),
+          icon: Icons.settings_outlined,
+          tooltip: '設定',
+          color: palette.settingsIcon,
+          onPressed: onSettingsTap,
+        ),
+      ],
+    );
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
+    required this.buttonKey,
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.46),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+      ),
+      child: IconButton(
+        key: buttonKey,
+        onPressed: onPressed,
+        tooltip: tooltip,
+        icon: Icon(icon),
+        color: color,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+class _HomeBubble extends StatelessWidget {
+  const _HomeBubble({required this.text, required this.isLive});
+
+  final String text;
+  final bool isLive;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).home;
+    final bubbleRadius = BorderRadius.circular(32);
+
+    return Align(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 340),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            ClipRRect(
+              borderRadius: bubbleRadius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  key: const ValueKey<String>('home-daily-bubble'),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  decoration: BoxDecoration(
+                    borderRadius: bubbleRadius,
+                    color: Colors.white.withValues(alpha: 0.8),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.94),
+                      width: 1.4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: palette.panelShadow.withValues(alpha: 0.22),
+                        blurRadius: 28,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isLive)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(top: 8, right: 10),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEE7D9C),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      Expanded(
+                        child: Text(
+                          text,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: const Color(0xFF3E3B42),
+                            height: 1.34,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -21,
+              left: 44,
+              child: CustomPaint(
+                painter: _SpeechBubbleTailPainter(
+                  fillColor: Colors.white.withValues(alpha: 0.8),
+                  borderColor: Colors.white.withValues(alpha: 0.94),
+                  shadowColor: palette.panelShadow.withValues(alpha: 0.2),
+                ),
+                child: const SizedBox(width: 42, height: 28),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeechBubbleTailPainter extends CustomPainter {
+  const _SpeechBubbleTailPainter({
+    required this.fillColor,
+    required this.borderColor,
+    required this.shadowColor,
+  });
+
+  final Color fillColor;
+  final Color borderColor;
+  final Color shadowColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width * 0.82, 0)
+      ..quadraticBezierTo(
+        size.width * 0.44,
+        size.height * 0.08,
+        size.width * 0.3,
+        size.height * 0.42,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.16,
+        size.height * 0.86,
+        size.width * 0.04,
+        size.height * 0.98,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.3,
+        size.height * 0.9,
+        size.width * 0.52,
+        size.height * 0.7,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.82,
+        size.height * 0.42,
+        size.width * 0.96,
+        size.height * 0.1,
+      )
+      ..close();
+
+    canvas.drawShadow(path, shadowColor, 8, false);
+    canvas.drawPath(path, Paint()..color = fillColor);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = borderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.3,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpeechBubbleTailPainter oldDelegate) {
+    return oldDelegate.fillColor != fillColor ||
+        oldDelegate.borderColor != borderColor ||
+        oldDelegate.shadowColor != shadowColor;
+  }
 }
 
 class _RoomActionBar extends StatelessWidget {
@@ -573,14 +907,14 @@ class _RoomActionBar extends StatelessWidget {
       children: [
         Expanded(
           child: _RoomActionButton(
-            buttonKey: const ValueKey<String>('home-action-phone'),
-            icon: Icons.call_rounded,
-            tooltip: '電話',
-            selected: selectedMode == HomeOverlayMode.phone,
+            buttonKey: const ValueKey<String>('home-action-voice'),
+            icon: Icons.mic_rounded,
+            tooltip: '音声',
+            selected: selectedMode == HomeOverlayMode.voice,
             baseColor: const Color(0xFFF7C4D6),
             borderColor: const Color(0xFFCA7A9A),
             iconColor: const Color(0xFF8E4764),
-            onPressed: () => onModeSelected(HomeOverlayMode.phone),
+            onPressed: () => onModeSelected(HomeOverlayMode.voice),
           ),
         ),
         const SizedBox(width: 12),
@@ -640,7 +974,6 @@ class _RoomActionButton extends StatelessWidget {
     final fillColor = selected
         ? baseColor
         : Color.lerp(baseColor, Colors.white, 0.22)!;
-    final shadowColor = borderColor.withValues(alpha: selected ? 0.26 : 0.16);
 
     return AspectRatio(
       aspectRatio: 1,
@@ -650,20 +983,11 @@ class _RoomActionButton extends StatelessWidget {
           key: buttonKey,
           onTap: onPressed,
           borderRadius: BorderRadius.circular(24),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOutCubic,
+          child: Container(
             decoration: BoxDecoration(
               color: fillColor,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: borderColor, width: 2.6),
-              boxShadow: [
-                BoxShadow(
-                  color: shadowColor,
-                  blurRadius: selected ? 12 : 8,
-                  offset: Offset(0, selected ? 6 : 4),
-                ),
-              ],
             ),
             child: Center(child: Icon(icon, size: 30, color: iconColor)),
           ),
@@ -673,295 +997,184 @@ class _RoomActionButton extends StatelessWidget {
   }
 }
 
-class _MoriHeaderCard extends StatelessWidget {
-  const _MoriHeaderCard({
-    required this.message,
-    required this.onSettingsTap,
-    required this.showBackButton,
-    this.onBackTap,
+class _VoicePanel extends StatelessWidget {
+  const _VoicePanel({
+    required this.voiceState,
+    required this.recordingDuration,
+    required this.transcriptText,
+    required this.assistantText,
+    required this.errorText,
+    required this.onPrimaryTap,
   });
 
-  final String message;
-  final VoidCallback onSettingsTap;
-  final bool showBackButton;
-  final VoidCallback? onBackTap;
+  final HomeVoiceState voiceState;
+  final Duration recordingDuration;
+  final String? transcriptText;
+  final String? assistantText;
+  final String? errorText;
+  final VoidCallback onPrimaryTap;
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).home;
-    final theme = Theme.of(context);
+    final label = switch (voiceState) {
+      HomeVoiceState.recording => '送信する',
+      HomeVoiceState.uploading => '処理中',
+      HomeVoiceState.playing => '再生中',
+      HomeVoiceState.error => 'もう一度',
+      HomeVoiceState.idle => '押して話す',
+    };
+    final helper = switch (voiceState) {
+      HomeVoiceState.recording =>
+        '録音中 ${_formatRecordingDuration(recordingDuration)}',
+      HomeVoiceState.uploading => '文字起こしと返答を生成しています',
+      HomeVoiceState.playing => '返答音声を再生しています',
+      HomeVoiceState.error => '短く区切ってもう一度試してください',
+      HomeVoiceState.idle => '押して話し、もう一度押すと送信します',
+    };
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          key: const ValueKey<String>('home-mori-card'),
-          padding: const EdgeInsets.fromLTRB(18, 14, 12, 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(30),
-            color: Colors.white.withValues(alpha: 0.6),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.82)),
-            boxShadow: [
-              BoxShadow(
-                color: palette.panelShadow.withValues(alpha: 0.32),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.72),
-                const Color(0xFFE7F8FF).withValues(alpha: 0.58),
-                const Color(0xFFFFDCEC).withValues(alpha: 0.52),
-              ],
+    return _PanelShell(
+      child: Column(
+        key: const ValueKey<String>('home-voice-mode'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Voice', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(helper),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            key: const ValueKey<String>('home-voice-primary-button'),
+            onPressed: voiceState == HomeVoiceState.uploading ? null : onPrimaryTap,
+            icon: Icon(
+              switch (voiceState) {
+                HomeVoiceState.recording => Icons.stop_rounded,
+                HomeVoiceState.uploading => Icons.hourglass_top_rounded,
+                HomeVoiceState.playing => Icons.volume_up_rounded,
+                HomeVoiceState.error => Icons.refresh_rounded,
+                HomeVoiceState.idle => Icons.mic_rounded,
+              },
             ),
+            label: Text(label),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (showBackButton) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, right: 12),
-                  child: _HeaderIconButton(
-                    buttonKey: const ValueKey<String>('home-chat-back-button'),
-                    tooltip: '戻る',
-                    icon: Icons.arrow_back_ios_new_rounded,
-                    color: palette.headerText,
-                    onPressed: onBackTap,
-                  ),
-                ),
-              ],
-              const Padding(
-                padding: EdgeInsets.only(top: 2),
-                child: _MoriBadgeAvatar(),
+          if (transcriptText != null && transcriptText!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _InfoChip(title: 'あなたの声', body: transcriptText!),
+          ],
+          if (assistantText != null && assistantText!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _InfoChip(title: '返答', body: assistantText!),
+          ],
+          if (errorText != null && errorText!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              errorText!,
+              key: const ValueKey<String>('home-voice-error-text'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF8A425E),
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Mori',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: palette.headerText,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      message,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF3E3B42),
-                        height: 1.28,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              _HeaderIconButton(
-                buttonKey: const ValueKey<String>('home-settings-button'),
-                tooltip: '設定',
-                icon: Icons.settings_outlined,
-                color: palette.settingsIcon,
-                onPressed: onSettingsTap,
-              ),
-            ],
-          ),
-        ),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
-    required this.buttonKey,
-    required this.tooltip,
-    required this.icon,
-    required this.color,
-    required this.onPressed,
+class _PhotoPanel extends StatelessWidget {
+  const _PhotoPanel({
+    required this.isBusy,
+    required this.onCameraTap,
+    required this.onGalleryTap,
   });
 
-  final Key buttonKey;
-  final String tooltip;
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onPressed;
+  final bool isBusy;
+  final VoidCallback onCameraTap;
+  final VoidCallback onGalleryTap;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.46),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
-      ),
-      child: IconButton(
-        key: buttonKey,
-        onPressed: onPressed,
-        tooltip: tooltip,
-        icon: Icon(icon),
-        color: color,
-        visualDensity: VisualDensity.compact,
+    return _PanelShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Photo', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text('写真を選ぶと、そのままチャット入力に添付します。'),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey<String>('home-photo-camera-button'),
+                  onPressed: isBusy ? null : onCameraTap,
+                  icon: const Icon(Icons.photo_camera_rounded),
+                  label: const Text('撮る'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  key: const ValueKey<String>('home-photo-gallery-button'),
+                  onPressed: isBusy ? null : onGalleryTap,
+                  icon: const Icon(Icons.image_rounded),
+                  label: const Text('選ぶ'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _MoriBadgeAvatar extends StatelessWidget {
-  const _MoriBadgeAvatar();
+class _PanelShell extends StatelessWidget {
+  const _PanelShell({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 54,
-      height: 54,
+      key: const ValueKey<String>('home-voice-panel'),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFC7DA), Color(0xFFFFEAF4)],
-        ),
-        border: Border.all(color: const Color(0xFFF09FBE), width: 2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x24F09FBE),
-            blurRadius: 12,
-            offset: Offset(0, 5),
-          ),
-        ],
+        color: Colors.white.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(28),
       ),
-      child: Stack(
-        alignment: Alignment.center,
+      child: child,
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3F8),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            top: 7,
-            left: 8,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFE58D),
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
-          ),
-          Text(
-            'M',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: const Color(0xFF9A4E70),
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          Text(title, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(body, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35)),
         ],
       ),
     );
   }
 }
 
-class _MessageCanvas extends StatelessWidget {
-  const _MessageCanvas({
-    required this.minHeight,
-    required this.padding,
-    required this.messages,
-    required this.includeKeys,
-    required this.allowOverflow,
-  });
-
-  final double minHeight;
-  final EdgeInsets padding;
-  final List<_HomeChatMessage> messages;
-  final bool includeKeys;
-  final bool allowOverflow;
-
-  @override
-  Widget build(BuildContext context) {
-    final estimatedHeight = math.max(
-      minHeight,
-      padding.vertical + (messages.length * 96.0),
-    );
-
-    final canvas = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: estimatedHeight),
-      child: Padding(
-        padding: padding,
-        child: Align(
-          alignment: Alignment.bottomRight,
-          child: _MessageColumn(messages: messages, includeKeys: includeKeys),
-        ),
-      ),
-    );
-
-    if (!allowOverflow) {
-      return canvas;
-    }
-
-    return OverflowBox(
-      alignment: Alignment.bottomRight,
-      minWidth: 0,
-      maxWidth: double.infinity,
-      minHeight: 0,
-      maxHeight: double.infinity,
-      child: canvas,
-    );
-  }
-}
-
-class _MessageColumn extends StatelessWidget {
-  const _MessageColumn({required this.messages, required this.includeKeys});
-
-  final List<_HomeChatMessage> messages;
-  final bool includeKeys;
-
-  @override
-  Widget build(BuildContext context) {
-    var userBubbleIndex = 0;
-    var assistantBubbleIndex = 0;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var index = 0; index < messages.length; index++) ...[
-          ChatMessageBubble(
-            key: includeKeys
-                ? ValueKey<String>(
-                    messages[index].isCurrentUser
-                        ? 'home-user-bubble-${userBubbleIndex++}'
-                        : 'home-assistant-bubble-${assistantBubbleIndex++}',
-                  )
-                : null,
-            text: messages[index].text,
-            imagePath: messages[index].imagePath,
-            imageKey: includeKeys && messages[index].imagePath != null
-                ? ValueKey<String>(
-                    messages[index].isCurrentUser
-                        ? 'home-user-bubble-${userBubbleIndex - 1}-image'
-                        : 'home-assistant-bubble-${assistantBubbleIndex - 1}-image',
-                  )
-                : null,
-            isCurrentUser: messages[index].isCurrentUser,
-            senderName: messages[index].senderName,
-            showAvatar: !messages[index].isCurrentUser,
-            timestamp: _timestampFromDateTime(messages[index].createdAt),
-            statusLabel: messages[index].statusLabel,
-          ),
-          if (index != messages.length - 1)
-            const SizedBox(height: _HomeScreenState._messageSpacing),
-        ],
-      ],
-    );
-  }
-}
-
-class _HomePendingAttachmentPreview extends StatelessWidget {
-  const _HomePendingAttachmentPreview({
+class _PendingAttachmentPreview extends StatelessWidget {
+  const _PendingAttachmentPreview({
     required this.attachment,
     required this.onRemove,
   });
@@ -971,32 +1184,22 @@ class _HomePendingAttachmentPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).chat;
-
     return Container(
       key: const ValueKey<String>('home-chat-pending-preview'),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: palette.composerShell.withValues(alpha: 0.82),
+        color: Colors.white.withValues(alpha: 0.84),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: palette.composerIcon.withValues(alpha: 0.2),
-          width: 1.5,
-        ),
       ),
       child: Row(
         children: [
-          _HomePendingAttachmentThumbnail(path: attachment.path),
+          _PendingAttachmentThumbnail(path: attachment.path),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               attachment.path.split(RegExp(r'[\\/]')).last,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: palette.composerText,
-                fontWeight: FontWeight.w700,
-              ),
             ),
           ),
           IconButton(
@@ -1004,7 +1207,6 @@ class _HomePendingAttachmentPreview extends StatelessWidget {
             onPressed: onRemove,
             tooltip: '添付を外す',
             icon: const Icon(Icons.close_rounded),
-            color: palette.composerIcon,
           ),
         ],
       ),
@@ -1012,26 +1214,23 @@ class _HomePendingAttachmentPreview extends StatelessWidget {
   }
 }
 
-class _HomePendingAttachmentThumbnail extends StatelessWidget {
-  const _HomePendingAttachmentThumbnail({required this.path});
+class _PendingAttachmentThumbnail extends StatelessWidget {
+  const _PendingAttachmentThumbnail({required this.path});
 
   final String path;
 
   @override
   Widget build(BuildContext context) {
     final file = File(path);
-    final hasFile = file.existsSync();
-    final palette = AppearanceScope.paletteOf(context).chat;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: Container(
+      child: SizedBox(
         width: 68,
         height: 68,
-        color: palette.composerFieldFill,
-        child: hasFile
+        child: file.existsSync()
             ? Image.file(file, fit: BoxFit.cover)
-            : Icon(Icons.image_outlined, color: palette.composerIcon),
+            : const Icon(Icons.image_outlined),
       ),
     );
   }
@@ -1043,7 +1242,6 @@ class _HomeChatMessage {
     this.imagePath,
     required this.createdAt,
     required this.isCurrentUser,
-    this.senderName,
     this.statusLabel,
   });
 
@@ -1051,6 +1249,5 @@ class _HomeChatMessage {
   final String? imagePath;
   final DateTime createdAt;
   final bool isCurrentUser;
-  final String? senderName;
   final String? statusLabel;
 }

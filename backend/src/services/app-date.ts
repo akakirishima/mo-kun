@@ -30,3 +30,8 @@ export function buildAppDateWindow(dateKey: string): { startAt: Date; endAt: Dat
     endAt: new Date(startAt.getTime() + DAY_IN_MS),
   };
 }
+
+export function previousAppDateKey(dateKey: string): string {
+  const { startAt } = buildAppDateWindow(dateKey);
+  return buildAppDateKey(new Date(startAt.getTime() - 1));
+}
