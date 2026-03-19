@@ -18,13 +18,6 @@ void main() {
     return decoration.gradient! as LinearGradient;
   }
 
-  Color scaffoldColor(WidgetTester tester, String keyName) {
-    final scaffold = tester.widget<Scaffold>(
-      find.byKey(ValueKey<String>(keyName)),
-    );
-    return scaffold.backgroundColor!;
-  }
-
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
@@ -47,7 +40,7 @@ void main() {
   });
 
   testWidgets(
-    'default blossom preset is applied across room diary image and settings',
+    'default blossom preset is applied across home diary and settings',
     (WidgetTester tester) async {
       await tester.pumpWidget(const App());
       await tester.pumpAndSettle();
@@ -65,23 +58,17 @@ void main() {
         findsNothing,
       );
 
-      await tester.tap(find.byKey(const ValueKey<String>('nav-diary')));
+      await tester.tap(find.byKey(const ValueKey<String>('home-diary-entry')));
       await tester.pumpAndSettle();
       expect(
         backgroundGradient(tester, 'diary-background').colors.first,
         const Color(0xFFFFEEF5),
       );
 
-      await tester.tap(find.byKey(const ValueKey<String>('nav-image')));
+      await tester.tap(find.byKey(const ValueKey<String>('diary-back-button')));
       await tester.pumpAndSettle();
-      expect(scaffoldColor(tester, 'image-scaffold'), const Color(0xFFFFFAFD));
-      expect(
-        find.byKey(const ValueKey<String>('image-latest-card')),
-        findsOneWidget,
-      );
-
       await tester.tap(
-        find.byKey(const ValueKey<String>('image-settings-button')),
+        find.byKey(const ValueKey<String>('home-settings-button')),
       );
       await tester.pumpAndSettle();
       expect(
@@ -184,19 +171,11 @@ void main() {
       const Color(0xFFE5F3E8),
     );
 
-    await tester.tap(find.byKey(const ValueKey<String>('nav-diary')));
+    await tester.tap(find.byKey(const ValueKey<String>('home-diary-entry')));
     await tester.pumpAndSettle();
     expect(
       backgroundGradient(tester, 'diary-background').colors.first,
       const Color(0xFFF2F8EF),
-    );
-
-    await tester.tap(find.byKey(const ValueKey<String>('nav-image')));
-    await tester.pumpAndSettle();
-    expect(scaffoldColor(tester, 'image-scaffold'), const Color(0xFFF7FBF6));
-    expect(
-      find.byKey(const ValueKey<String>('image-latest-card')),
-      findsOneWidget,
     );
 
     final preferences = await SharedPreferences.getInstance();

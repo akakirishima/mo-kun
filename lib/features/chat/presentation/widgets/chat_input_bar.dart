@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 class ChatInputBar extends StatelessWidget {
   const ChatInputBar({
@@ -38,83 +39,68 @@ class ChatInputBar extends StatelessWidget {
     final theme = Theme.of(context);
     final palette = AppearanceScope.paletteOf(context).chat;
 
-    return Container(
+    return NesContainer(
       key: const ValueKey<String>('chat-input-shell'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-      decoration: BoxDecoration(
-        color: palette.composerShell.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: palette.composerIcon.withValues(alpha: 0.35),
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: palette.composerShadow,
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
+      backgroundColor: palette.composerShell.withValues(alpha: 0.96),
+      borderColor: palette.composerIcon,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      painterBuilder: NesContainerSquareCornerPainter.new,
       child: Row(
         children: [
           _ChatActionButton(
             key: ValueKey<String>('chat-input-camera'),
-            icon: Icons.camera_alt_outlined,
+            icon: NesIcons.camera,
             tooltip: 'カメラ',
             onPressed: onCameraTap,
           ),
           _ChatActionButton(
             key: ValueKey<String>('chat-input-image'),
-            icon: Icons.photo_outlined,
+            icon: NesIcons.gallery,
             tooltip: '画像',
             onPressed: onImageTap,
           ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: TextField(
-                key: const ValueKey<String>('chat-input-message-field'),
-                controller: controller,
-                focusNode: focusNode,
-                readOnly: readOnly,
-                onChanged: onChanged,
-                onSubmitted: onSubmitted,
-                textInputAction: TextInputAction.send,
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  hintStyle: theme.textTheme.bodyLarge?.copyWith(
-                    color: palette.composerHint,
+              child: Material(
+                color: Colors.transparent,
+                child: TextField(
+                  key: const ValueKey<String>('chat-input-message-field'),
+                  controller: controller,
+                  focusNode: focusNode,
+                  readOnly: readOnly,
+                  onChanged: onChanged,
+                  onSubmitted: onSubmitted,
+                  textInputAction: TextInputAction.send,
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                      color: palette.composerHint,
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 11,
+                    ),
                   ),
-                  filled: true,
-                  fillColor: palette.composerFieldFill,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 13,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: palette.composerText,
+                    fontWeight: FontWeight.w600,
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: palette.composerText,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
           ),
           if (showMicAction)
-            const _ChatActionButton(
+            _ChatActionButton(
               key: ValueKey<String>('chat-input-mic'),
-              icon: Icons.mic_none_rounded,
+              icon: NesIcons.audio,
               tooltip: 'マイク',
             ),
           if (showPhoneAction)
             _ChatActionButton(
               key: const ValueKey<String>('chat-input-phone'),
-              icon: Icons.call_outlined,
+              icon: NesIcons.radio,
               tooltip: 'Homeで話す',
               onPressed: onPhoneTap,
             ),
@@ -136,7 +122,7 @@ class _ChatActionButton extends StatelessWidget {
     this.onPressed,
   });
 
-  final IconData icon;
+  final NesIconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
 
@@ -144,15 +130,22 @@ class _ChatActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).chat;
 
-    return IconButton(
-      onPressed: onPressed ?? () {},
-      icon: Icon(icon),
-      iconSize: 22,
-      color: palette.composerIcon,
-      tooltip: tooltip,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-      splashRadius: 20,
-      visualDensity: VisualDensity.compact,
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: SizedBox(
+        width: 38,
+        height: 38,
+        child: Center(
+          child: NesIconButton(
+            icon: icon,
+            onPress: onPressed,
+            size: const Size.square(24),
+            primaryColor: palette.composerIcon,
+            secondaryColor: Colors.white,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -165,26 +158,15 @@ class _SendActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).chat;
-
     return Padding(
-      padding: const EdgeInsets.only(left: 2),
-      child: IconButton.filled(
+      padding: const EdgeInsets.only(left: 4),
+      child: NesButton.icon(
         key: const ValueKey<String>('chat-input-send'),
+        type: enabled ? NesButtonType.primary : NesButtonType.normal,
+        icon: enabled ? NesIcons.rightArrowIndicator : NesIcons.thinArrowRight,
+        iconSize: const Size.square(18),
+        buttonWidth: 28,
         onPressed: onPressed,
-        tooltip: '送信',
-        style: IconButton.styleFrom(
-          backgroundColor: enabled
-              ? const Color(0xFFF7B4D0)
-              : palette.composerHint.withValues(alpha: 0.28),
-          foregroundColor: enabled
-              ? const Color(0xFF6D3656)
-              : palette.composerHint,
-          disabledBackgroundColor: palette.composerHint.withValues(alpha: 0.28),
-          disabledForegroundColor: palette.composerHint,
-          minimumSize: const Size(42, 42),
-        ),
-        icon: const Icon(Icons.arrow_upward_rounded),
       ),
     );
   }

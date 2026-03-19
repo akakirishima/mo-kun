@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_theme.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_controller.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/settings_screen.dart';
@@ -14,7 +15,10 @@ void main() {
     final controller = AppearanceController();
     return AppearanceScope(
       controller: controller,
-      child: const MaterialApp(home: SettingsScreen()),
+      child: MaterialApp(
+        theme: AppTheme.light(controller.palette),
+        home: const SettingsScreen(),
+      ),
     );
   }
 

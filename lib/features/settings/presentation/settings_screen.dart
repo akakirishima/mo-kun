@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/appearance_settings_screen.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -41,11 +42,13 @@ class SettingsScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
                 child: Row(
                   children: [
-                    IconButton(
+                    NesButton.icon(
                       key: const ValueKey<String>('settings-back-button'),
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                      tooltip: '戻る',
+                      type: NesButtonType.normal,
+                      icon: NesIcons.leftArrowIndicator,
+                      iconSize: const Size.square(18),
+                      buttonWidth: 28,
                     ),
                     Expanded(
                       child: Text(
@@ -65,12 +68,12 @@ class SettingsScreen extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
                   children: [
-                    const _SettingsSection(
+                    _SettingsSection(
                       title: 'General',
                       items: [
                         _SettingsItemData(
                           tileKey: ValueKey<String>('settings-item-profile'),
-                          icon: Icons.person_outline_rounded,
+                          icon: NesIcons.user,
                           title: 'プロフィール',
                           subtitle: '表示名やアバターの設定',
                         ),
@@ -78,7 +81,7 @@ class SettingsScreen extends StatelessWidget {
                           tileKey: ValueKey<String>(
                             'settings-item-notifications',
                           ),
-                          icon: Icons.notifications_none_rounded,
+                          icon: NesIcons.bell,
                           title: '通知',
                           subtitle: 'リマインドやお知らせの受け取り方',
                         ),
@@ -92,20 +95,20 @@ class SettingsScreen extends StatelessWidget {
                           tileKey: const ValueKey<String>(
                             'settings-item-appearance',
                           ),
-                          icon: Icons.palette_outlined,
+                          icon: NesIcons.gem,
                           title: '表示',
                           subtitle: 'テーマや見た目の調整',
                           onTap: openAppearanceSettings,
                         ),
-                        const _SettingsItemData(
+                        _SettingsItemData(
                           tileKey: ValueKey<String>('settings-item-ai'),
-                          icon: Icons.auto_awesome_outlined,
+                          icon: NesIcons.robot,
                           title: 'AI / キャラクター',
                           subtitle: '内なる声の反応や雰囲気の調整',
                         ),
-                        const _SettingsItemData(
+                        _SettingsItemData(
                           tileKey: ValueKey<String>('settings-item-help'),
-                          icon: Icons.help_outline_rounded,
+                          icon: NesIcons.questionMark,
                           title: 'ヘルプ',
                           subtitle: '使い方とサポート情報',
                         ),
@@ -130,34 +133,28 @@ class _SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final settingsColors = AppearanceScope.paletteOf(context).settings;
 
-    return Container(
+    return NesContainer(
+      label: title,
+      backgroundColor: settingsColors.sectionCard,
+      borderColor: settingsColors.sectionTitle,
+      padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),
+      painterBuilder: NesContainerSquareCornerPainter.new,
       decoration: BoxDecoration(
-        color: settingsColors.sectionCard,
-        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: settingsColors.shadowColor,
-            blurRadius: 18,
+            blurRadius: 14,
             offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+        padding: const EdgeInsets.only(top: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: settingsColors.sectionTitle,
-              ),
-            ),
-            const SizedBox(height: 6),
             for (final item in items) _SettingsTile(data: item),
           ],
         ),
@@ -176,36 +173,60 @@ class _SettingsTile extends StatelessWidget {
     final theme = Theme.of(context);
     final settingsColors = AppearanceScope.paletteOf(context).settings;
 
-    return ListTile(
-      key: data.tileKey,
-      contentPadding: EdgeInsets.zero,
-      leading: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: settingsColors.tileIconChipFill,
-          borderRadius: BorderRadius.circular(14),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        button: true,
+        child: NesPressable(
+          key: data.tileKey,
+          onPress: data.onTap ?? () {},
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            decoration: BoxDecoration(
+              color: settingsColors.tileIconChipFill.withValues(alpha: 0.5),
+              border: Border.all(color: settingsColors.tileIconColor, width: 2),
+            ),
+            child: Row(
+              children: [
+                NesIcon(
+                  iconData: data.icon,
+                  size: const Size.square(28),
+                  primaryColor: settingsColors.tileIconColor,
+                  secondaryColor: Colors.white,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        data.title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: settingsColors.tileTitle,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        data.subtitle,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: settingsColors.tileSubtitle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                NesIcon(
+                  iconData: NesIcons.rightArrowIndicator,
+                  size: const Size.square(18),
+                  primaryColor: settingsColors.trailing,
+                  secondaryColor: Colors.white,
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Icon(data.icon, color: settingsColors.tileIconColor),
       ),
-      title: Text(
-        data.title,
-        style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: settingsColors.tileTitle,
-        ),
-      ),
-      subtitle: Text(
-        data.subtitle,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: settingsColors.tileSubtitle,
-        ),
-      ),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: settingsColors.trailing,
-      ),
-      onTap: data.onTap ?? () {},
     );
   }
 }
@@ -220,7 +241,7 @@ class _SettingsItemData {
   });
 
   final Key tileKey;
-  final IconData icon;
+  final NesIconData icon;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;

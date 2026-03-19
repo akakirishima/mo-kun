@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_input_bar.dart';
+import 'package:nes_ui/nes_ui.dart';
+
+import '../../../../test_support/fake_app.dart';
 
 void main() {
   testWidgets('is editable and toggles send affordance from input state', (
@@ -9,23 +12,21 @@ void main() {
     final controller = TextEditingController();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: StatefulBuilder(
-            builder: (context, setState) {
-              return ChatInputBar(
-                controller: controller,
-                sendEnabled: controller.text.trim().isNotEmpty,
-                onChanged: (_) => setState(() {}),
-                onSendTap: () {},
-              );
-            },
-          ),
+      wrapWithTestApp(
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return ChatInputBar(
+              controller: controller,
+              sendEnabled: controller.text.trim().isNotEmpty,
+              onChanged: (_) => setState(() {}),
+              onSendTap: () {},
+            );
+          },
         ),
       ),
     );
 
-    final initialSendButton = tester.widget<IconButton>(
+    final initialSendButton = tester.widget<NesButton>(
       find.byKey(const ValueKey<String>('chat-input-send')),
     );
     expect(initialSendButton.onPressed, isNull);
@@ -38,7 +39,7 @@ void main() {
 
     expect(
       tester
-          .widget<IconButton>(
+          .widget<NesButton>(
             find.byKey(const ValueKey<String>('chat-input-send')),
           )
           .onPressed,
@@ -51,12 +52,10 @@ void main() {
     var imageTapCount = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ChatInputBar(
-            onCameraTap: () => cameraTapCount += 1,
-            onImageTap: () => imageTapCount += 1,
-          ),
+      wrapWithTestApp(
+        child: ChatInputBar(
+          onCameraTap: () => cameraTapCount += 1,
+          onImageTap: () => imageTapCount += 1,
         ),
       ),
     );

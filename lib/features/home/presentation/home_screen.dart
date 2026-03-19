@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
@@ -14,6 +12,7 @@ import 'package:gdgoc_2026_prototype/features/chat/presentation/widgets/chat_mes
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_voice.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 typedef HomeChatImagePicker = Future<XFile?> Function(ImageSource source);
 typedef HomeChatLostDataRetriever = Future<LostDataResponse> Function();
@@ -26,6 +25,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     super.key,
     required this.onSettingsTap,
+    required this.onDiaryTap,
     this.onOverlayModeChanged,
     this.initialBubbleMessage = '昨日の流れは残っている。今日は一つだけ進めよう、自分。',
     this.pickImage,
@@ -35,6 +35,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   });
 
   final VoidCallback onSettingsTap;
+  final VoidCallback onDiaryTap;
   final ValueChanged<HomeOverlayMode>? onOverlayModeChanged;
   final String initialBubbleMessage;
   final HomeChatImagePicker? pickImage;
@@ -48,7 +49,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _horizontalPadding = 18.0;
-  static const _actionBarHeight = 92.0;
+  static const _actionBarHeight = 84.0;
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
@@ -68,6 +69,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _voiceErrorMessage;
   String? _latestTranscriptText;
   String? _latestAssistantText;
+  bool _isSubmittingImage = false;
 
   bool get _canSend =>
       _draftText.trim().isNotEmpty || _pendingAttachment != null;
@@ -220,6 +222,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       } catch (_) {}
     }
     _scrollMessagesToBottom();
+  }
+
+  Future<void> _handleRegenerateTap() async {
+    if (_isSubmittingImage) {
+      return;
+    }
+
+    final note = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _RegenerateImageSheet(),
+    );
+
+    if (!mounted || note == null) {
+      return;
+    }
+
+    setState(() {
+      _isSubmittingImage = true;
+    });
+
+    try {
+      await ref
+          .read(regenerateCharacterImageControllerProvider)
+          .regenerate(reportText: note, title: '更新した姿');
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('画像の再生成を開始しました')));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('画像の再生成に失敗しました')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingImage = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleVoicePrimaryTap() async {
@@ -423,6 +470,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final resolvedCharacterImageUrl = ref.watch(
       resolvedImageUrlProvider(character?.latestImageUrl),
     );
+    final rawCharacterImageUrl = character?.latestImageUrl;
+    final stageState = resolvedCharacterImageUrl.isLoading
+        ? HomeRoomStageState.loading
+        : (rawCharacterImageUrl == null || rawCharacterImageUrl.isEmpty)
+        ? HomeRoomStageState.empty
+        : (resolvedCharacterImageUrl.hasError ||
+              resolvedCharacterImageUrl.valueOrNull == null ||
+              resolvedCharacterImageUrl.valueOrNull!.isEmpty)
+        ? HomeRoomStageState.error
+        : HomeRoomStageState.ready;
+    final stageMessage = switch (stageState) {
+      HomeRoomStageState.loading => '画像を準備しています',
+      HomeRoomStageState.empty => 'まだ画像がありません',
+      HomeRoomStageState.error => '通信に失敗しました',
+      HomeRoomStageState.ready => '',
+    };
+    final imageStatusLabel = switch (character?.imageStatus) {
+      CharacterImageStatus.generating => '生成中',
+      CharacterImageStatus.ready => '',
+      CharacterImageStatus.failed => '再生成に失敗',
+      _ => '',
+    };
     final dailyBubble = session == null
         ? null
         : ref.watch(dailyBubbleProvider(session)).valueOrNull;
@@ -441,74 +510,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           colors: [palette.pageTop, palette.pageBottom],
         ),
       ),
-      child: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final maxStageWidth = math.max(
-              constraints.maxWidth - (_horizontalPadding * 2),
-              0.0,
-            );
-            final stageHeight = math.min(
-              maxStageWidth / 0.96,
-              math.max(constraints.maxHeight * 0.38, 240.0),
-            );
-            final stage = SizedBox(
-              key: const ValueKey<String>('home-room-stage-shell'),
-              width: stageHeight * 0.96,
-              height: stageHeight,
-              child: HomeRoomStage(
-                characterImageUrl: resolvedCharacterImageUrl.valueOrNull,
-                isResolvingImage: resolvedCharacterImageUrl.isLoading,
-              ),
-            );
+      child: Material(
+        color: Colors.transparent,
+        child: SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxStageWidth = math.max(
+                constraints.maxWidth - (_horizontalPadding * 2),
+                0.0,
+              );
+              final desiredStageHeight = _isImmersiveMode
+                  ? constraints.maxHeight * 0.42
+                  : constraints.maxHeight * 0.63;
+              final stageSize = math.min(
+                maxStageWidth,
+                math.max(desiredStageHeight, _isImmersiveMode ? 260.0 : 360.0),
+              );
+              final stage = SizedBox(
+                key: const ValueKey<String>('home-room-stage-shell'),
+                width: stageSize,
+                height: stageSize,
+                child: HomeRoomStage(
+                  imageUrl: resolvedCharacterImageUrl.valueOrNull,
+                  state: stageState,
+                  message: stageMessage,
+                ),
+              );
 
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                  child: _HomeTopBar(
-                    showBackButton: _isImmersiveMode,
-                    onBackTap: () {
-                      unawaited(_setOverlayMode(HomeOverlayMode.none));
-                    },
-                    onSettingsTap: widget.onSettingsTap,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                  child: _HomeBubble(text: bubbleText, isLive: _voiceState != HomeVoiceState.idle),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: _buildBody(
-                    context: context,
-                    stage: stage,
-                    timelineMessages: timelineMessages,
-                  ),
-                ),
-                if (!_isImmersiveMode) ...[
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: SizedBox(
-                      height: _actionBarHeight,
-                      child: _RoomActionBar(
-                        selectedMode: _overlayMode,
-                        onModeSelected: (mode) {
-                          unawaited(_setOverlayMode(mode));
-                        },
-                      ),
+              return Stack(
+                children: [
+                  Positioned(
+                    top: 72,
+                    left: -30,
+                    child: _HomeGlow(
+                      size: 170,
+                      color: palette.panelGlow.withValues(alpha: 0.54),
                     ),
                   ),
-                  const SizedBox(
-                    height: GlassBottomDock.reservedBottomSpacing + 12,
+                  Positioned(
+                    top: 280,
+                    right: -24,
+                    child: _HomeGlow(
+                      size: 140,
+                      color: palette.panelFill.withValues(alpha: 0.62),
+                    ),
                   ),
-                ] else
-                  const SizedBox(height: 12),
-              ],
-            );
-          },
+                  Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                        child: _HomeTopBar(
+                          onSettingsTap: widget.onSettingsTap,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                        child: _HomeBubble(
+                          text: bubbleText,
+                          isLive: _voiceState != HomeVoiceState.idle,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: _buildBody(
+                          context: context,
+                          stage: stage,
+                          timelineMessages: timelineMessages,
+                          imageStatusLabel: imageStatusLabel,
+                          characterName: character?.name ?? 'Self',
+                        ),
+                      ),
+                      if (!_isImmersiveMode) ...[
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          child: SizedBox(
+                            height: _actionBarHeight + 8,
+                            child: _RoomActionBar(
+                              selectedMode: _overlayMode,
+                              onModeSelected: (mode) {
+                                unawaited(_setOverlayMode(mode));
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ] else
+                        const SizedBox(height: 12),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -518,6 +613,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required BuildContext context,
     required Widget stage,
     required List<_HomeChatMessage> timelineMessages,
+    required String imageStatusLabel,
+    required String characterName,
   }) {
     if (_isChatMode) {
       return LayoutBuilder(
@@ -531,6 +628,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Column(
               children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _InlineDismissButton(
+                      buttonKey: const ValueKey<String>('home-chat-back-button'),
+                      onPressed: () {
+                        unawaited(_setOverlayMode(HomeOverlayMode.none));
+                      },
+                    ),
+                  ),
+                ),
                 SizedBox(height: chatStageHeight, child: Center(child: stage)),
                 Expanded(
                   child: ListView.separated(
@@ -553,7 +662,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         statusLabel: message.statusLabel,
                       );
                     },
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemCount: timelineMessages.length,
                   ),
                 ),
@@ -600,12 +709,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           transcriptText: _latestTranscriptText,
           assistantText: _latestAssistantText,
           errorText: _voiceErrorMessage,
+          onClose: () {
+            unawaited(_setOverlayMode(HomeOverlayMode.none));
+          },
           onPrimaryTap: () {
             unawaited(_handleVoicePrimaryTap());
           },
         ),
       HomeOverlayMode.photo => _PhotoPanel(
           isBusy: _isPickingImage,
+          onClose: () {
+            unawaited(_setOverlayMode(HomeOverlayMode.none));
+          },
           onCameraTap: () {
             unawaited(_handleAttachmentTap(ImageSource.camera));
           },
@@ -620,10 +735,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Column(
         children: [
-          Expanded(child: Center(child: stage)),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _HomeHeroPanel(
+                stage: stage,
+                imageStatusLabel: imageStatusLabel,
+                characterName: characterName,
+                isSubmittingImage: _isSubmittingImage,
+                onDiaryTap: widget.onDiaryTap,
+                onRegenerateTap: () {
+                  unawaited(_handleRegenerateTap());
+                },
+              ),
+            ),
+          ),
           if (panel != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.only(top: 14, bottom: 12),
               child: panel,
             ),
         ],
@@ -670,39 +799,20 @@ String _formatRecordingDuration(Duration duration) {
 
 class _HomeTopBar extends StatelessWidget {
   const _HomeTopBar({
-    required this.showBackButton,
-    required this.onBackTap,
     required this.onSettingsTap,
   });
 
-  final bool showBackButton;
-  final VoidCallback onBackTap;
   final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).home;
-
     return Row(
       children: [
-        SizedBox(
-          width: 44,
-          child: showBackButton
-              ? _RoundIconButton(
-                  buttonKey: const ValueKey<String>('home-chat-back-button'),
-                  icon: Icons.arrow_back_ios_new_rounded,
-                  tooltip: '戻る',
-                  color: palette.headerText,
-                  onPressed: onBackTap,
-                )
-              : null,
-        ),
         const Spacer(),
-        _RoundIconButton(
+        _PixelToolbarButton(
           buttonKey: const ValueKey<String>('home-settings-button'),
-          icon: Icons.settings_outlined,
+          icon: NesIcons.wrench,
           tooltip: '設定',
-          color: palette.settingsIcon,
           onPressed: onSettingsTap,
         ),
       ],
@@ -710,36 +820,31 @@ class _HomeTopBar extends StatelessWidget {
   }
 }
 
-class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({
+class _PixelToolbarButton extends StatelessWidget {
+  const _PixelToolbarButton({
     required this.buttonKey,
     required this.icon,
     required this.tooltip,
-    required this.color,
     required this.onPressed,
   });
 
   final Key buttonKey;
-  final IconData icon;
+  final NesIconData icon;
   final String tooltip;
-  final Color color;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.46),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
-      ),
-      child: IconButton(
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: NesButton.icon(
         key: buttonKey,
         onPressed: onPressed,
-        tooltip: tooltip,
-        icon: Icon(icon),
-        color: color,
-        visualDensity: VisualDensity.compact,
+        type: NesButtonType.normal,
+        icon: icon,
+        iconSize: const Size.square(18),
+        buttonWidth: 28,
       ),
     );
   }
@@ -754,7 +859,6 @@ class _HomeBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).home;
-    final bubbleRadius = BorderRadius.circular(32);
 
     return Align(
       child: ConstrainedBox(
@@ -762,67 +866,39 @@ class _HomeBubble extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            ClipRRect(
-              borderRadius: bubbleRadius,
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                child: Container(
-                  key: const ValueKey<String>('home-daily-bubble'),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                  decoration: BoxDecoration(
-                    borderRadius: bubbleRadius,
-                    color: Colors.white.withValues(alpha: 0.8),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.94),
-                      width: 1.4,
+            NesContainer(
+              key: const ValueKey<String>('home-daily-bubble'),
+              backgroundColor: Colors.white.withValues(alpha: 0.94),
+              borderColor: palette.panelOutline,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+              painterBuilder: NesContainerSquareCornerPainter.new,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isLive)
+                    Container(
+                      width: 10,
+                      height: 10,
+                      margin: const EdgeInsets.only(top: 6, right: 10),
+                      color: const Color(0xFFEE7D9C),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: palette.panelShadow.withValues(alpha: 0.22),
-                        blurRadius: 28,
-                        offset: const Offset(0, 12),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: const Color(0xFF3E3B42),
+                        height: 1.34,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
+                    ),
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isLive)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(top: 8, right: 10),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFEE7D9C),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      Expanded(
-                        child: Text(
-                          text,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: const Color(0xFF3E3B42),
-                            height: 1.34,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ),
             ),
-            Positioned(
-              bottom: -21,
-              left: 44,
-              child: CustomPaint(
-                painter: _SpeechBubbleTailPainter(
-                  fillColor: Colors.white.withValues(alpha: 0.8),
-                  borderColor: Colors.white.withValues(alpha: 0.94),
-                  shadowColor: palette.panelShadow.withValues(alpha: 0.2),
-                ),
-                child: const SizedBox(width: 42, height: 28),
-              ),
+            const Positioned(
+              left: 40,
+              bottom: -12,
+              child: _BubbleTail(),
             ),
           ],
         ),
@@ -831,63 +907,271 @@ class _HomeBubble extends StatelessWidget {
   }
 }
 
-class _SpeechBubbleTailPainter extends CustomPainter {
-  const _SpeechBubbleTailPainter({
-    required this.fillColor,
-    required this.borderColor,
-    required this.shadowColor,
-  });
-
-  final Color fillColor;
-  final Color borderColor;
-  final Color shadowColor;
+class _BubbleTail extends StatelessWidget {
+  const _BubbleTail();
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(size.width * 0.82, 0)
-      ..quadraticBezierTo(
-        size.width * 0.44,
-        size.height * 0.08,
-        size.width * 0.3,
-        size.height * 0.42,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.16,
-        size.height * 0.86,
-        size.width * 0.04,
-        size.height * 0.98,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.3,
-        size.height * 0.9,
-        size.width * 0.52,
-        size.height * 0.7,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.82,
-        size.height * 0.42,
-        size.width * 0.96,
-        size.height * 0.1,
-      )
-      ..close();
-
-    canvas.drawShadow(path, shadowColor, 8, false);
-    canvas.drawPath(path, Paint()..color = fillColor);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = borderColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.3,
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        _TailBlock(width: 18, height: 8),
+        Padding(
+          padding: EdgeInsets.only(left: 8),
+          child: _TailBlock(width: 12, height: 8),
+        ),
+        Padding(
+          padding: EdgeInsets.only(left: 14),
+          child: _TailBlock(width: 8, height: 8),
+        ),
+      ],
     );
   }
+}
+
+class _TailBlock extends StatelessWidget {
+  const _TailBlock({required this.width, required this.height});
+
+  final double width;
+  final double height;
 
   @override
-  bool shouldRepaint(covariant _SpeechBubbleTailPainter oldDelegate) {
-    return oldDelegate.fillColor != fillColor ||
-        oldDelegate.borderColor != borderColor ||
-        oldDelegate.shadowColor != shadowColor;
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        border: Border.all(color: const Color(0xFFE8A0C4), width: 2),
+      ),
+    );
+  }
+}
+
+class _HomeGlow extends StatelessWidget {
+  const _HomeGlow({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeHeroPanel extends StatelessWidget {
+  const _HomeHeroPanel({
+    required this.stage,
+    required this.imageStatusLabel,
+    required this.characterName,
+    required this.isSubmittingImage,
+    required this.onDiaryTap,
+    required this.onRegenerateTap,
+  });
+
+  final Widget stage;
+  final String imageStatusLabel;
+  final String characterName;
+  final bool isSubmittingImage;
+  final VoidCallback onDiaryTap;
+  final VoidCallback onRegenerateTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).home;
+
+    return NesContainer(
+      backgroundColor: Colors.white.withValues(alpha: 0.74),
+      borderColor: palette.panelOutline,
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+      painterBuilder: NesContainerSquareCornerPainter.new,
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: palette.panelShadow.withValues(alpha: 0.22),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              if (imageStatusLabel.isNotEmpty) ...[
+                _StatusPill(
+                  label: imageStatusLabel,
+                  fillColor: palette.transcriptBadgeFill,
+                  textColor: palette.transcriptTitle,
+                ),
+                const SizedBox(width: 8),
+              ],
+              _StatusPill(
+                label: characterName,
+                fillColor: palette.panelFill,
+                textColor: palette.headerText,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          stage,
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _QuickActionCard(
+                  actionKey: const ValueKey<String>('home-diary-entry'),
+                  title: 'Diary',
+                  subtitle: '今日までの記録を見る',
+                  fillColor: const Color(0xFFFFE9D3),
+                  borderColor: const Color(0xFFC28B5E),
+                  iconColor: const Color(0xFF8D5B39),
+                  icon: NesIcons.textFile,
+                  onTap: onDiaryTap,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _QuickActionCard(
+                  actionKey: const ValueKey<String>('home-image-regenerate'),
+                  title: isSubmittingImage ? 'Generating' : 'Image',
+                  subtitle: isSubmittingImage ? '再生成しています' : '最新の姿を更新する',
+                  fillColor: const Color(0xFFFFE0EF),
+                  borderColor: const Color(0xFFC7739A),
+                  iconColor: const Color(0xFF8F4567),
+                  icon: isSubmittingImage ? NesIcons.hourglassMiddle : NesIcons.redo,
+                  onTap: isSubmittingImage ? null : onRegenerateTap,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
+    required this.actionKey,
+    required this.title,
+    required this.subtitle,
+    required this.fillColor,
+    required this.borderColor,
+    required this.iconColor,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final Key actionKey;
+  final String title;
+  final String subtitle;
+  final Color fillColor;
+  final Color borderColor;
+  final Color iconColor;
+  final NesIconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onTap == null ? 0.7 : 1,
+      child: Semantics(
+        button: true,
+        child: NesPressable(
+          key: actionKey,
+          disabled: onTap == null,
+          onPress: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: fillColor,
+              border: Border.all(color: borderColor, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: borderColor.withValues(alpha: 0.18),
+                  offset: const Offset(0, 6),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                NesIcon(
+                  iconData: icon,
+                  size: const Size.square(22),
+                  primaryColor: iconColor,
+                  secondaryColor: Colors.white,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontFamily: 'NotoSansJP',
+                    color: iconColor,
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                    shadows: const [],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontFamily: 'NotoSansJP',
+                    color: iconColor.withValues(alpha: 0.84),
+                    height: 1.3,
+                    decoration: TextDecoration.none,
+                    shadows: const [],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    required this.label,
+    required this.fillColor,
+    required this.textColor,
+  });
+
+  final String label;
+  final Color fillColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: fillColor,
+        border: Border.all(color: textColor, width: 2),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 }
 
@@ -908,12 +1192,13 @@ class _RoomActionBar extends StatelessWidget {
         Expanded(
           child: _RoomActionButton(
             buttonKey: const ValueKey<String>('home-action-voice'),
-            icon: Icons.mic_rounded,
+            icon: NesIcons.audio,
+            label: 'Voice',
             tooltip: '音声',
             selected: selectedMode == HomeOverlayMode.voice,
-            baseColor: const Color(0xFFF7C4D6),
-            borderColor: const Color(0xFFCA7A9A),
-            iconColor: const Color(0xFF8E4764),
+            fillColor: const Color(0xFFFFC5D8),
+            borderColor: const Color(0xFFC36A93),
+            iconColor: const Color(0xFF7E3055),
             onPressed: () => onModeSelected(HomeOverlayMode.voice),
           ),
         ),
@@ -921,12 +1206,13 @@ class _RoomActionBar extends StatelessWidget {
         Expanded(
           child: _RoomActionButton(
             buttonKey: const ValueKey<String>('home-action-photo'),
-            icon: Icons.photo_camera_rounded,
+            icon: NesIcons.camera,
+            label: 'Photo',
             tooltip: '写真',
             selected: selectedMode == HomeOverlayMode.photo,
-            baseColor: const Color(0xFFF9E98C),
-            borderColor: const Color(0xFFB89E3C),
-            iconColor: const Color(0xFF6C5A11),
+            fillColor: const Color(0xFFFFE79D),
+            borderColor: const Color(0xFFB38D29),
+            iconColor: const Color(0xFF6F5611),
             onPressed: () => onModeSelected(HomeOverlayMode.photo),
           ),
         ),
@@ -934,12 +1220,13 @@ class _RoomActionBar extends StatelessWidget {
         Expanded(
           child: _RoomActionButton(
             buttonKey: const ValueKey<String>('home-action-chat'),
-            icon: Icons.chat_bubble_outline_rounded,
+            icon: NesIcons.letter,
+            label: 'Chat',
             tooltip: 'チャット',
             selected: selectedMode == HomeOverlayMode.chat,
-            baseColor: const Color(0xFFB8DFFF),
-            borderColor: const Color(0xFF6B94BE),
-            iconColor: const Color(0xFF45678E),
+            fillColor: const Color(0xFFBFE5FF),
+            borderColor: const Color(0xFF5E8CB7),
+            iconColor: const Color(0xFF315B87),
             onPressed: () => onModeSelected(HomeOverlayMode.chat),
           ),
         ),
@@ -952,44 +1239,74 @@ class _RoomActionButton extends StatelessWidget {
   const _RoomActionButton({
     required this.buttonKey,
     required this.icon,
+    required this.label,
     required this.tooltip,
     required this.selected,
-    required this.baseColor,
+    required this.fillColor,
     required this.borderColor,
     required this.iconColor,
     required this.onPressed,
   });
 
   final Key buttonKey;
-  final IconData icon;
+  final NesIconData icon;
+  final String label;
   final String tooltip;
   final bool selected;
-  final Color baseColor;
+  final Color fillColor;
   final Color borderColor;
   final Color iconColor;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final fillColor = selected
-        ? baseColor
-        : Color.lerp(baseColor, Colors.white, 0.22)!;
+    final resolvedFill = selected
+        ? fillColor
+        : Color.lerp(fillColor, Colors.white, 0.28)!;
 
     return AspectRatio(
       aspectRatio: 1,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: NesPressable(
           key: buttonKey,
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(24),
+          onPress: onPressed,
           child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             decoration: BoxDecoration(
-              color: fillColor,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: borderColor, width: 2.6),
+              color: resolvedFill,
+              border: Border.all(color: borderColor, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: borderColor.withValues(alpha: 0.18),
+                  offset: const Offset(0, 7),
+                  blurRadius: 10,
+                ),
+              ],
             ),
-            child: Center(child: Icon(icon, size: 30, color: iconColor)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                NesIcon(
+                  iconData: icon,
+                  size: const Size.square(22),
+                  primaryColor: iconColor,
+                  secondaryColor: Colors.white,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontFamily: 'NotoSansJP',
+                    color: iconColor,
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                    shadows: const [],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1004,6 +1321,7 @@ class _VoicePanel extends StatelessWidget {
     required this.transcriptText,
     required this.assistantText,
     required this.errorText,
+    required this.onClose,
     required this.onPrimaryTap,
   });
 
@@ -1012,6 +1330,7 @@ class _VoicePanel extends StatelessWidget {
   final String? transcriptText;
   final String? assistantText;
   final String? errorText;
+  final VoidCallback onClose;
   final VoidCallback onPrimaryTap;
 
   @override
@@ -1033,27 +1352,40 @@ class _VoicePanel extends StatelessWidget {
     };
 
     return _PanelShell(
+      title: 'Voice',
+      titleColor: const Color(0xFF583A4A),
+      onClose: onClose,
       child: Column(
         key: const ValueKey<String>('home-voice-mode'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Voice', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text(helper),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            key: const ValueKey<String>('home-voice-primary-button'),
-            onPressed: voiceState == HomeVoiceState.uploading ? null : onPrimaryTap,
-            icon: Icon(
-              switch (voiceState) {
-                HomeVoiceState.recording => Icons.stop_rounded,
-                HomeVoiceState.uploading => Icons.hourglass_top_rounded,
-                HomeVoiceState.playing => Icons.volume_up_rounded,
-                HomeVoiceState.error => Icons.refresh_rounded,
-                HomeVoiceState.idle => Icons.mic_rounded,
-              },
+          Text(
+            helper,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontFamily: 'NotoSansJP',
+              color: const Color(0xFF6B5662),
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+              shadows: const [],
             ),
-            label: Text(label),
+          ),
+          const SizedBox(height: 14),
+          _PanelActionButton(
+            buttonKey: const ValueKey<String>('home-voice-primary-button'),
+            label: label,
+            fillColor: const Color(0xFFFFC6D9),
+            borderColor: const Color(0xFFC36A93),
+            textColor: const Color(0xFF6E2949),
+            icon: switch (voiceState) {
+              HomeVoiceState.recording => NesIcons.pause,
+              HomeVoiceState.uploading => NesIcons.hourglassMiddle,
+              HomeVoiceState.playing => NesIcons.audio,
+              HomeVoiceState.error => NesIcons.redo,
+              HomeVoiceState.idle => NesIcons.audio,
+            },
+            onPressed:
+                voiceState == HomeVoiceState.uploading ? null : onPrimaryTap,
           ),
           if (transcriptText != null && transcriptText!.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -1083,41 +1415,60 @@ class _VoicePanel extends StatelessWidget {
 class _PhotoPanel extends StatelessWidget {
   const _PhotoPanel({
     required this.isBusy,
+    required this.onClose,
     required this.onCameraTap,
     required this.onGalleryTap,
   });
 
   final bool isBusy;
+  final VoidCallback onClose;
   final VoidCallback onCameraTap;
   final VoidCallback onGalleryTap;
 
   @override
   Widget build(BuildContext context) {
     return _PanelShell(
+      title: 'Photo',
+      titleColor: const Color(0xFF5A4A37),
+      onClose: onClose,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Photo', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          const Text('写真を選ぶと、そのままチャット入力に添付します。'),
+          Text(
+            '写真を選ぶと、そのままチャット入力に添付します。',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontFamily: 'NotoSansJP',
+              color: const Color(0xFF6F6357),
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+              shadows: const [],
+            ),
+          ),
           const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  key: const ValueKey<String>('home-photo-camera-button'),
+                child: _PanelActionButton(
+                  buttonKey: const ValueKey<String>('home-photo-camera-button'),
+                  label: '撮る',
+                  fillColor: const Color(0xFFFFF1C4),
+                  borderColor: const Color(0xFFBF9532),
+                  textColor: const Color(0xFF6C5414),
+                  icon: NesIcons.camera,
                   onPressed: isBusy ? null : onCameraTap,
-                  icon: const Icon(Icons.photo_camera_rounded),
-                  label: const Text('撮る'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: FilledButton.icon(
-                  key: const ValueKey<String>('home-photo-gallery-button'),
+                child: _PanelActionButton(
+                  buttonKey: const ValueKey<String>('home-photo-gallery-button'),
+                  label: '選ぶ',
+                  fillColor: const Color(0xFFFFD9EB),
+                  borderColor: const Color(0xFFC36A93),
+                  textColor: const Color(0xFF6E2949),
+                  icon: NesIcons.gallery,
                   onPressed: isBusy ? null : onGalleryTap,
-                  icon: const Icon(Icons.image_rounded),
-                  label: const Text('選ぶ'),
                 ),
               ),
             ],
@@ -1129,20 +1480,153 @@ class _PhotoPanel extends StatelessWidget {
 }
 
 class _PanelShell extends StatelessWidget {
-  const _PanelShell({required this.child});
+  const _PanelShell({
+    required this.title,
+    required this.titleColor,
+    required this.onClose,
+    required this.child,
+  });
 
+  final String title;
+  final Color titleColor;
+  final VoidCallback onClose;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return NesContainer(
       key: const ValueKey<String>('home-voice-panel'),
+      backgroundColor: const Color(0xFFFFFCFD).withValues(alpha: 0.96),
+      borderColor: Theme.of(context).colorScheme.onSurface,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.76),
-        borderRadius: BorderRadius.circular(28),
+      painterBuilder: NesContainerSquareCornerPainter.new,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontFamily: 'NotoSansJP',
+                  fontWeight: FontWeight.w800,
+                  color: titleColor,
+                  decoration: TextDecoration.none,
+                  shadows: const [],
+                ),
+              ),
+              const Spacer(),
+              _InlineDismissButton(onPressed: onClose),
+            ],
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
       ),
-      child: child,
+    );
+  }
+}
+
+class _InlineDismissButton extends StatelessWidget {
+  const _InlineDismissButton({this.buttonKey, required this.onPressed});
+
+  final Key? buttonKey;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '閉じる',
+      child: NesPressable(
+        key: buttonKey,
+        onPress: onPressed,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7EDF3),
+            border: Border.all(color: const Color(0xFF5F4A57), width: 3),
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            '×',
+            style: TextStyle(
+              fontFamily: 'NotoSansJP',
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF5F4A57),
+              decoration: TextDecoration.none,
+              shadows: [],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelActionButton extends StatelessWidget {
+  const _PanelActionButton({
+    required this.buttonKey,
+    required this.label,
+    required this.fillColor,
+    required this.borderColor,
+    required this.textColor,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final Key buttonKey;
+  final String label;
+  final Color fillColor;
+  final Color borderColor;
+  final Color textColor;
+  final NesIconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onPressed == null ? 0.58 : 1,
+      child: Semantics(
+        button: true,
+        child: NesPressable(
+          key: buttonKey,
+          disabled: onPressed == null,
+          onPress: onPressed,
+          child: Container(
+            height: 56,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: fillColor,
+              border: Border.all(color: borderColor, width: 3),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                NesIcon(
+                  iconData: icon,
+                  size: const Size.square(18),
+                  primaryColor: textColor,
+                  secondaryColor: Colors.white,
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1155,12 +1639,11 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return NesContainer(
+      backgroundColor: const Color(0xFFF5F3F8),
+      borderColor: Theme.of(context).colorScheme.onSurface,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F3F8),
-        borderRadius: BorderRadius.circular(22),
-      ),
+      painterBuilder: NesContainerSquareCornerPainter.new,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1184,13 +1667,12 @@ class _PendingAttachmentPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return NesContainer(
       key: const ValueKey<String>('home-chat-pending-preview'),
+      backgroundColor: Colors.white.withValues(alpha: 0.92),
+      borderColor: Theme.of(context).colorScheme.onSurface,
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.84),
-        borderRadius: BorderRadius.circular(22),
-      ),
+      painterBuilder: NesContainerSquareCornerPainter.new,
       child: Row(
         children: [
           _PendingAttachmentThumbnail(path: attachment.path),
@@ -1202,11 +1684,11 @@ class _PendingAttachmentPreview extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          IconButton(
+          NesIconButton(
             key: const ValueKey<String>('home-chat-pending-preview-remove'),
-            onPressed: onRemove,
-            tooltip: '添付を外す',
-            icon: const Icon(Icons.close_rounded),
+            onPress: onRemove,
+            icon: NesIcons.close,
+            size: const Size.square(20),
           ),
         ],
       ),
@@ -1231,6 +1713,156 @@ class _PendingAttachmentThumbnail extends StatelessWidget {
         child: file.existsSync()
             ? Image.file(file, fit: BoxFit.cover)
             : const Icon(Icons.image_outlined),
+      ),
+    );
+  }
+}
+
+class _RegenerateImageSheet extends StatefulWidget {
+  const _RegenerateImageSheet();
+
+  @override
+  State<_RegenerateImageSheet> createState() => _RegenerateImageSheetState();
+}
+
+class _RegenerateImageSheetState extends State<_RegenerateImageSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).image;
+
+    return SafeArea(
+      child: Material(
+        color: Colors.transparent,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
+          child: NesContainer(
+            backgroundColor: const Color(0xFFFFFBFD),
+            borderColor: const Color(0xFF5F4A57),
+            padding: const EdgeInsets.all(18),
+            painterBuilder: NesContainerSquareCornerPainter.new,
+            child: Column(
+              key: const ValueKey<String>('home-image-regenerate-sheet'),
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '再生成メモ',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: palette.titleText,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '今回だけ反映したい雰囲気や補足を短く入れます。',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: palette.subtitleText,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Material(
+                  color: Colors.transparent,
+                  child: TextField(
+                    key: const ValueKey<String>('home-image-regenerate-input'),
+                    controller: _controller,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText: '少し春っぽい空気感にしたい、など',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _SheetActionButton(
+                      label: '閉じる',
+                      fillColor: const Color(0xFFF4E7EF),
+                      borderColor: const Color(0xFF7B6672),
+                      textColor: const Color(0xFF5F4A57),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const Spacer(),
+                    _SheetActionButton(
+                      buttonKey: const ValueKey<String>(
+                        'home-image-regenerate-submit',
+                      ),
+                      label: '再生成',
+                      fillColor: const Color(0xFFFFD9EB),
+                      borderColor: const Color(0xFFC36A93),
+                      textColor: const Color(0xFF6E2949),
+                      onPressed: () {
+                        Navigator.of(context).pop(_controller.text.trim());
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetActionButton extends StatelessWidget {
+  const _SheetActionButton({
+    this.buttonKey,
+    required this.label,
+    required this.fillColor,
+    required this.borderColor,
+    required this.textColor,
+    required this.onPressed,
+  });
+
+  final Key? buttonKey;
+  final String label;
+  final Color fillColor;
+  final Color borderColor;
+  final Color textColor;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: NesPressable(
+        key: buttonKey,
+        onPress: onPressed,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: fillColor,
+            border: Border.all(color: borderColor, width: 3),
+          ),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
       ),
     );
   }

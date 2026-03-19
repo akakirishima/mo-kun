@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
@@ -34,13 +35,15 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
                 child: Row(
                   children: [
-                    IconButton(
+                    NesButton.icon(
                       key: const ValueKey<String>(
                         'appearance-settings-back-button',
                       ),
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                      tooltip: '戻る',
+                      type: NesButtonType.normal,
+                      icon: NesIcons.leftArrowIndicator,
+                      iconSize: const Size.square(18),
+                      buttonWidth: 28,
                     ),
                     Expanded(
                       child: Text(
@@ -71,32 +74,26 @@ class AppearanceSettingsScreen extends StatelessWidget {
                     const SizedBox(height: 18),
                     _AppearancePreviewCard(palette: palette),
                     const SizedBox(height: 18),
-                    Container(
+                    NesContainer(
+                      label: 'テーマプリセット',
+                      backgroundColor: settingsColors.sectionCard,
+                      borderColor: settingsColors.sectionTitle,
+                      padding: const EdgeInsets.fromLTRB(18, 24, 18, 12),
+                      painterBuilder: NesContainerSquareCornerPainter.new,
                       decoration: BoxDecoration(
-                        color: settingsColors.sectionCard,
-                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: settingsColors.shadowColor,
-                            blurRadius: 18,
+                            blurRadius: 14,
                             offset: const Offset(0, 6),
                           ),
                         ],
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                        padding: const EdgeInsets.only(top: 6),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'テーマプリセット',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: settingsColors.sectionTitle,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
                             for (final preset in AppAppearancePreset.values)
                               _AppearancePresetTile(
                                 preset: preset,
@@ -129,16 +126,18 @@ class _AppearancePreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final settingsColors = palette.settings;
 
-    return Container(
+    return NesContainer(
       key: const ValueKey<String>('appearance-preview-card'),
+      label: '現在の見た目',
+      backgroundColor: settingsColors.sectionCard,
+      borderColor: settingsColors.sectionTitle,
       padding: const EdgeInsets.all(18),
+      painterBuilder: NesContainerSquareCornerPainter.new,
       decoration: BoxDecoration(
-        color: settingsColors.sectionCard,
-        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: settingsColors.shadowColor,
-            blurRadius: 18,
+            blurRadius: 14,
             offset: const Offset(0, 6),
           ),
         ],
@@ -146,18 +145,10 @@ class _AppearancePreviewCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '現在の見た目',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: settingsColors.sectionTitle,
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Container(
             height: 132,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -174,11 +165,18 @@ class _AppearancePreviewCard extends StatelessWidget {
                     height: 42,
                     decoration: BoxDecoration(
                       color: palette.previewSurface,
-                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: settingsColors.sectionTitle,
+                        width: 2,
+                      ),
                     ),
-                    child: Icon(
-                      Icons.palette_outlined,
-                      color: palette.previewAccent,
+                    child: Center(
+                      child: NesIcon(
+                        iconData: NesIcons.gem,
+                        size: const Size.square(24),
+                        primaryColor: palette.previewAccent,
+                        secondaryColor: Colors.white,
+                      ),
                     ),
                   ),
                   const Spacer(),
@@ -223,73 +221,81 @@ class _AppearancePresetTile extends StatelessWidget {
     final tilePalette = AppAppearancePalette.fromPreset(preset);
     final settingsColors = currentPalette.settings;
 
-    return InkWell(
-      key: ValueKey<String>('appearance-preset-${preset.storageValue}'),
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: tilePalette.previewGradient,
-                ),
-              ),
-              child: Icon(
-                Icons.auto_awesome_rounded,
-                color: tilePalette.previewAccent,
-              ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: NesPressable(
+        key: ValueKey<String>('appearance-preset-${preset.storageValue}'),
+        onPress: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: tilePalette.previewSurface.withValues(alpha: 0.45),
+            border: Border.all(
+              color: isSelected
+                  ? tilePalette.previewAccent
+                  : settingsColors.tileIconColor,
+              width: 2,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    preset.label,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: settingsColors.tileTitle,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    preset.description,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: settingsColors.tileSubtitle,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            AnimatedOpacity(
-              key: ValueKey<String>(
-                'appearance-selected-${preset.storageValue}',
-              ),
-              duration: const Duration(milliseconds: 180),
-              opacity: isSelected ? 1 : 0,
-              child: Container(
-                width: 32,
-                height: 32,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
-                  color: tilePalette.previewAccent,
-                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: tilePalette.previewGradient,
+                  ),
+                  border: Border.all(color: tilePalette.previewAccent, width: 2),
                 ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color: Colors.white,
+                child: Center(
+                  child: NesIcon(
+                    iconData: NesIcons.gem,
+                    size: const Size.square(24),
+                    primaryColor: tilePalette.previewAccent,
+                    secondaryColor: Colors.white,
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      preset.label,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: settingsColors.tileTitle,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      preset.description,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: settingsColors.tileSubtitle,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedOpacity(
+                key: ValueKey<String>(
+                  'appearance-selected-${preset.storageValue}',
+                ),
+                duration: const Duration(milliseconds: 180),
+                opacity: isSelected ? 1 : 0,
+                child: NesIcon(
+                  iconData: NesIcons.check,
+                  size: const Size.square(20),
+                  primaryColor: tilePalette.previewAccent,
+                  secondaryColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
