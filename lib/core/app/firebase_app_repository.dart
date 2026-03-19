@@ -10,6 +10,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 import 'package:gdgoc_2026_prototype/firebase_options.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 class FirebaseAppRepository implements AppRepository {
   FirebaseAppRepository._({
@@ -91,12 +92,38 @@ class FirebaseAppRepository implements AppRepository {
     required String threadId,
     required String text,
     required String clientMessageId,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+    String? imageFilename,
   }) async {
-    await _post('/v1/chat/messages', {
-      'threadId': threadId,
-      'text': text,
-      'clientMessageId': clientMessageId,
-    });
+    final token = await auth.currentUser!.getIdToken();
+    final request = http.MultipartRequest(
+      'POST',
+      baseUri.resolve('/v1/chat/messages'),
+    )
+      ..headers['Authorization'] = 'Bearer $token'
+      ..fields['threadId'] = threadId
+      ..fields['clientMessageId'] = clientMessageId;
+
+    if (text.isNotEmpty) {
+      request.fields['text'] = text;
+    }
+    if (imageBytes != null && imageBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'photo',
+          imageBytes,
+          filename: imageFilename ?? 'photo-input.jpg',
+          contentType: _mediaTypeForImage(imageMimeType),
+        ),
+      );
+    }
+
+    final streamed = await client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Backend request failed: ${response.statusCode}');
+    }
   }
 
   @override
@@ -325,9 +352,13 @@ class FirebaseAppRepository implements AppRepository {
       text: data['text'] as String? ?? '',
       createdAt: _parseTimestamp(data['createdAt']) ?? DateTime.now(),
       clientMessageId: data['clientMessageId'] as String?,
-      inputType: (data['inputType'] as String?) == 'voice'
-          ? ChatInputType.voice
-          : ChatInputType.text,
+      inputType: switch (data['inputType'] as String?) {
+        'voice' => ChatInputType.voice,
+        'photo' => ChatInputType.photo,
+        _ => ChatInputType.text,
+      },
+      imageUrl: data['imageUrl'] as String?,
+      imageAnalysis: _parsePhotoAnalysis(data['imageAnalysis']),
     );
   }
 
@@ -394,4 +425,35 @@ class FirebaseAppRepository implements AppRepository {
     );
   }
 
+  PhotoAnalysis? _parsePhotoAnalysis(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    final data = Map<String, dynamic>.from(value);
+    return PhotoAnalysis(
+      category: data['category'] as String? ?? 'unknown',
+      summary: data['summary'] as String? ?? '',
+      activity: data['activity'] as String? ?? '',
+      food: data['food'] as String? ?? '',
+      locationGuess: data['locationGuess'] as String? ?? '',
+      confidence: data['confidence'] as String? ?? 'low',
+      needsConfirmation: data['needsConfirmation'] as bool? ?? false,
+      confirmationPrompt: data['confirmationPrompt'] as String? ?? '',
+      reactionHint: data['reactionHint'] as String? ?? '',
+    );
+  }
+
+  MediaType _mediaTypeForImage(String? mimeType) {
+    final normalized = mimeType?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return MediaType('image', 'jpeg');
+    }
+
+    final parts = normalized.split('/');
+    if (parts.length != 2) {
+      return MediaType('image', 'jpeg');
+    }
+
+    return MediaType(parts[0], parts[1]);
+  }
 }

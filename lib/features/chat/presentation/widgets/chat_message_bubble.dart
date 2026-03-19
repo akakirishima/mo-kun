@@ -9,6 +9,7 @@ class ChatMessageBubble extends StatelessWidget {
     super.key,
     this.text,
     this.imagePath,
+    this.imageUrl,
     this.imageKey,
     this.isCurrentUser = false,
     this.showAvatar = false,
@@ -21,6 +22,7 @@ class ChatMessageBubble extends StatelessWidget {
 
   final String? text;
   final String? imagePath;
+  final String? imageUrl;
   final Key? imageKey;
   final bool isCurrentUser;
   final bool showAvatar;
@@ -33,7 +35,9 @@ class ChatMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).chat;
-    final hasImage = imagePath != null && imagePath!.isNotEmpty;
+    final hasImage =
+        (imagePath != null && imagePath!.isNotEmpty) ||
+        (imageUrl != null && imageUrl!.isNotEmpty);
     final hasText = text != null && text!.isNotEmpty;
     final bubble = Stack(
       clipBehavior: Clip.none,
@@ -57,7 +61,8 @@ class ChatMessageBubble extends StatelessWidget {
                 if (hasImage)
                   _ChatImageAttachment(
                     key: imageKey,
-                    imagePath: imagePath!,
+                    imagePath: imagePath,
+                    imageUrl: imageUrl,
                     isCurrentUser: isCurrentUser,
                   ),
                 if (hasImage && hasText) const SizedBox(height: 10),
@@ -272,18 +277,22 @@ class _CharacterAvatar extends StatelessWidget {
 class _ChatImageAttachment extends StatelessWidget {
   const _ChatImageAttachment({
     super.key,
-    required this.imagePath,
+    this.imagePath,
+    this.imageUrl,
     required this.isCurrentUser,
   });
 
-  final String imagePath;
+  final String? imagePath;
+  final String? imageUrl;
   final bool isCurrentUser;
 
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).chat;
-    final file = File(imagePath);
-    final hasFile = file.existsSync();
+    final localPath = imagePath;
+    final remoteUrl = imageUrl;
+    final file = localPath == null ? null : File(localPath);
+    final hasFile = file?.existsSync() ?? false;
 
     return Container(
       width: 188,
@@ -298,9 +307,11 @@ class _ChatImageAttachment extends StatelessWidget {
         ),
       ),
       child: hasFile
-          ? Image.file(file, fit: BoxFit.cover)
+          ? Image.file(file!, fit: BoxFit.cover)
+          : (remoteUrl != null && remoteUrl.isNotEmpty)
+          ? Image.network(remoteUrl, fit: BoxFit.cover)
           : _MissingChatImagePlaceholder(
-              imagePath: imagePath,
+              imagePath: localPath ?? remoteUrl ?? '',
               accentColor: isCurrentUser ? palette.userText : palette.metaText,
             ),
     );

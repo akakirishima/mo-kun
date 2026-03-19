@@ -4,9 +4,33 @@ enum ChatRole { user, assistant }
 
 enum CharacterImageStatus { idle, generating, ready, failed }
 
-enum ChatInputType { text, voice }
+enum ChatInputType { text, voice, photo }
 
 enum VoiceChatAudioStatus { ready, failed }
+
+class PhotoAnalysis {
+  const PhotoAnalysis({
+    required this.category,
+    required this.summary,
+    required this.activity,
+    required this.food,
+    required this.locationGuess,
+    required this.confidence,
+    required this.needsConfirmation,
+    required this.confirmationPrompt,
+    required this.reactionHint,
+  });
+
+  final String category;
+  final String summary;
+  final String activity;
+  final String food;
+  final String locationGuess;
+  final String confidence;
+  final bool needsConfirmation;
+  final String confirmationPrompt;
+  final String reactionHint;
+}
 
 class AppSession {
   const AppSession({
@@ -80,6 +104,8 @@ class ChatMessage {
     required this.createdAt,
     this.clientMessageId,
     this.inputType = ChatInputType.text,
+    this.imageUrl,
+    this.imageAnalysis,
   });
 
   final String id;
@@ -88,6 +114,8 @@ class ChatMessage {
   final DateTime createdAt;
   final String? clientMessageId;
   final ChatInputType inputType;
+  final String? imageUrl;
+  final PhotoAnalysis? imageAnalysis;
 }
 
 class PendingChatMessage {
@@ -97,6 +125,7 @@ class PendingChatMessage {
     required this.text,
     required this.createdAt,
     required this.failed,
+    this.localImagePath,
   });
 
   final String clientMessageId;
@@ -104,14 +133,16 @@ class PendingChatMessage {
   final String text;
   final DateTime createdAt;
   final bool failed;
+  final String? localImagePath;
 
-  PendingChatMessage copyWith({bool? failed}) {
+  PendingChatMessage copyWith({bool? failed, String? localImagePath}) {
     return PendingChatMessage(
       clientMessageId: clientMessageId,
       threadId: threadId,
       text: text,
       createdAt: createdAt,
       failed: failed ?? this.failed,
+      localImagePath: localImagePath ?? this.localImagePath,
     );
   }
 }

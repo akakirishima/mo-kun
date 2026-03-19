@@ -5,6 +5,7 @@ import {
   DailyBubbleDraft,
   DailySummaryDraft,
   ImageDraft,
+  PhotoAnalysisDraft,
   SessionResponse,
   StoredDailyBubble,
   StoredDailySummary,
@@ -16,6 +17,9 @@ export type StoredMessage = {
   role?: string;
   text?: string;
   inputType?: string;
+  imageUrl?: string;
+  imageStoragePath?: string;
+  imageAnalysis?: PhotoAnalysisDraft;
   [key: string]: unknown;
 };
 
@@ -169,7 +173,12 @@ export class AppRepository {
     userText: string;
     clientMessageId: string;
     assistantText: string;
-    userInputType?: "text" | "voice";
+    userInputType?: "text" | "voice" | "photo";
+    userImage?: {
+      imageUrl: string;
+      imageStoragePath: string;
+      imageAnalysis: PhotoAnalysisDraft;
+    };
   }) {
     const userCreatedAt = Timestamp.now();
     const assistantCreatedAt = Timestamp.fromMillis(Date.now() + 1);
@@ -183,6 +192,9 @@ export class AppRepository {
         text: params.userText,
         inputType: params.userInputType ?? "text",
         clientMessageId: params.clientMessageId,
+        imageUrl: params.userImage?.imageUrl ?? null,
+        imageStoragePath: params.userImage?.imageStoragePath ?? null,
+        imageAnalysis: params.userImage?.imageAnalysis ?? null,
         createdAt: userCreatedAt,
       });
       transaction.set(assistantRef, {

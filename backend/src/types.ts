@@ -47,3 +47,15 @@ export type StoredDailyBubble = DailyBubbleDraft & {
   generatedAt?: unknown;
 };
 
+export type PhotoAnalysisDraft = {
+  category: string;
+  summary: string;
+  activity: string;
+  food: string;
+  locationGuess: string;
+  confidence: string;
+  needsConfirmation: boolean;
+  confirmationPrompt: string;
+  reactionHint: string;
+};
+

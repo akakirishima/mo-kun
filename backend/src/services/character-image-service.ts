@@ -144,6 +144,15 @@ export type ImageStore = {
   }): Promise<string>;
 };
 
+export type ChatPhotoStore = {
+  save(params: {
+    userId: string;
+    threadId: string;
+    bytes: Buffer;
+    mimeType: string;
+  }): Promise<{ imageUrl: string; storagePath: string }>;
+};
+
 type WritableBucket = {
   name: string;
   file(path: string): {
@@ -185,6 +194,37 @@ export class CloudStorageImageStore implements ImageStore {
     });
 
     return `gs://${this.bucket.name}/${filePath}`;
+  }
+}
+
+export class CloudStorageChatPhotoStore implements ChatPhotoStore {
+  constructor(private readonly bucket: WritableBucket) {}
+
+  async save(params: {
+    userId: string;
+    threadId: string;
+    bytes: Buffer;
+    mimeType: string;
+  }): Promise<{ imageUrl: string; storagePath: string }> {
+    const extension = mimeTypeToExtension(params.mimeType);
+    const filePath =
+      `chatUploads/${params.userId}/${params.threadId}/${Date.now()}-${randomUUID()}.${extension}`;
+    const file = this.bucket.file(filePath);
+
+    await file.save(params.bytes, {
+      contentType: params.mimeType,
+      resumable: false,
+      metadata: {
+        metadata: {
+          firebaseStorageDownloadTokens: randomUUID(),
+        },
+      },
+    });
+
+    return {
+      imageUrl: `gs://${this.bucket.name}/${filePath}`,
+      storagePath: filePath,
+    };
   }
 }
 

@@ -211,10 +211,20 @@ class SendChatMessageController {
 
   final Ref _ref;
 
-  Future<void> send({required AppSession session, required String text}) async {
+  Future<void> send({
+    required AppSession session,
+    required String text,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+    String? imageFilename,
+    String? localImagePath,
+  }) async {
     final threadId = session.threadId;
     if (threadId == null) {
       throw StateError('Missing thread id.');
+    }
+    if (text.trim().isEmpty && imageBytes == null) {
+      throw StateError('Message must contain text or photo.');
     }
     final now = DateTime.now();
     final clientMessageId = 'client-${now.microsecondsSinceEpoch}';
@@ -224,6 +234,7 @@ class SendChatMessageController {
       text: text,
       createdAt: now,
       failed: false,
+      localImagePath: localImagePath,
     );
     _ref.read(pendingMessagesProvider.notifier).add(pending);
     try {
@@ -233,6 +244,9 @@ class SendChatMessageController {
             threadId: threadId,
             text: text,
             clientMessageId: clientMessageId,
+            imageBytes: imageBytes,
+            imageMimeType: imageMimeType,
+            imageFilename: imageFilename,
           );
     } catch (_) {
       _ref.read(pendingMessagesProvider.notifier).markFailed(clientMessageId);

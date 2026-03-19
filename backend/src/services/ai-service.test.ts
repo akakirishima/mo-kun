@@ -6,12 +6,15 @@ import {
   buildDailySummaryPrompt,
   buildDailySummarySystemInstruction,
   buildFallbackDailySummary,
+  buildPhotoAnalysisPrompt,
+  buildPhotoAnalysisSystemInstruction,
   buildRoomSceneItemsPrompt,
   buildRoomSceneItemsSystemInstruction,
   buildVisualEvolutionPrompt,
   extractGeneratedImage,
   normalizeAssistantReply,
   normalizeGeneratedDailySummary,
+  normalizeGeneratedPhotoAnalysis,
   normalizeGeneratedRoomSceneItems,
 } from "./ai-service.js";
 
@@ -48,12 +51,19 @@ const dailySummaryPrompt = buildDailySummaryPrompt({
   dateKey: "2026-03-16",
   messages: [
     { role: "assistant", text: "まずは落ち着いて整理しよう" },
-    { role: "user", text: "今日は UI を整えて、報告も 1 つ送った" },
+    {
+      role: "user",
+      text: "今日は UI を整えて、報告も 1 つ送った",
+      imageAnalysis: {
+        summary: "参考書の写真に見える。勉強も進めた可能性がある。",
+      },
+    },
   ],
 });
 assert.match(dailySummaryPrompt, /対象日: 2026-03-16/);
 assert.match(dailySummaryPrompt, /assistant: まずは落ち着いて整理しよう/);
 assert.match(dailySummaryPrompt, /user: 今日は UI を整えて、報告も 1 つ送った/);
+assert.match(dailySummaryPrompt, /写真メモ: 参考書の写真に見える/);
 assert.match(dailySummaryPrompt, /doneThings/);
 assert.match(dailySummaryPrompt, /diaryBody/);
 
@@ -151,6 +161,33 @@ assert.deepEqual(normalizedSceneItems, [
   "ゲームコントローラー",
   "水筒",
 ]);
+
+const photoAnalysisInstruction = buildPhotoAnalysisSystemInstruction();
+assert.match(photoAnalysisInstruction, /JSON 以外を返さない/);
+assert.match(photoAnalysisInstruction, /high \/ medium \/ low/);
+
+const photoAnalysisPrompt = buildPhotoAnalysisPrompt("東京タワーに行ったかも");
+assert.match(photoAnalysisPrompt, /東京タワーに行ったかも/);
+assert.match(photoAnalysisPrompt, /locationGuess/);
+
+const normalizedPhotoAnalysis = normalizeGeneratedPhotoAnalysis(
+  `{"category":"sightseeing","summary":"東京タワーの写真に見える。観光した可能性がある。","activity":"観光した","food":"","locationGuess":"東京タワー周辺の可能性","confidence":"medium","needsConfirmation":false,"confirmationPrompt":"","reactionHint":"景色を残せたのはいい記録。"} `,
+  {
+    category: "unknown",
+    summary: "写真を1枚送った。",
+    activity: "",
+    food: "",
+    locationGuess: "",
+    confidence: "low",
+    needsConfirmation: true,
+    confirmationPrompt: "合ってる？",
+    reactionHint: "記録できた。",
+  },
+);
+
+assert.equal(normalizedPhotoAnalysis.category, "sightseeing");
+assert.match(normalizedPhotoAnalysis.locationGuess, /東京タワー/);
+assert.equal(normalizedPhotoAnalysis.confidence, "medium");
 
 const imagePrompt = buildCharacterImagePrompt({
   characterName: "Mori",

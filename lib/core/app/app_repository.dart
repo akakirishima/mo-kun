@@ -15,6 +15,9 @@ abstract class AppRepository {
     required String threadId,
     required String text,
     required String clientMessageId,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+    String? imageFilename,
   });
 
   Future<VoiceChatResult> sendVoiceMessage({
