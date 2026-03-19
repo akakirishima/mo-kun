@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_tab.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/diary_screen.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
-import 'package:gdgoc_2026_prototype/features/image/presentation/image_screen.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/settings_screen.dart';
 
 class AppTabConfig {
@@ -41,16 +40,17 @@ List<AppTabConfig> buildAppTabConfigs({
       tab: AppTab.home,
       screen: HomeScreen(
         onSettingsTap: openSettings,
+        onDiaryTap: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => DiaryScreen(onSettingsTap: openSettings)));
+        },
         onOverlayModeChanged: onHomeOverlayModeChanged,
       ),
     ),
     AppTabConfig(
       tab: AppTab.diary,
       screen: DiaryScreen(onSettingsTap: openSettings),
-    ),
-    AppTabConfig(
-      tab: AppTab.image,
-      screen: ImageScreen(onSettingsTap: openSettings),
     ),
   ];
 }

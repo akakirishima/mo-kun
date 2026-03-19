@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
@@ -8,6 +7,7 @@ import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/models/diary_book.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_book_viewport.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_day_selector.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 class DiaryScreen extends ConsumerStatefulWidget {
   const DiaryScreen({super.key, required this.onSettingsTap});
@@ -140,8 +140,7 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                 child: DiaryBookViewport(
                   book: book,
                   controller: _pageController,
-                  dayPageBottomClearance:
-                      GlassBottomDock.reservedBottomSpacing - 12,
+                  dayPageBottomClearance: 20,
                   onOpenSelector: () => _openDaySelector(book),
                   onShowPreviousMonth: _showPreviousMonth,
                   onShowNextMonth: _showNextMonth,
@@ -158,6 +157,18 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
               ),
             ),
           ),
+          if (Navigator.canPop(context))
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 18, 0),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: _DiaryBackButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -306,10 +317,6 @@ bool _isSameDay(DateTime left, DateTime right) {
       left.day == right.day;
 }
 
-String _dateKey(DateTime date) {
-  return buildAppDateKeyFromDateTime(date);
-}
-
 CharacterImageVersion? _resolveImageForDate(
   List<CharacterImageVersion> images,
   String dateKey,
@@ -363,6 +370,45 @@ class _BackdropGlow extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
+        ),
+      ),
+    );
+  }
+}
+
+class _DiaryBackButton extends StatelessWidget {
+  const _DiaryBackButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: NesPressable(
+        key: const ValueKey<String>('diary-back-button'),
+        onPress: onPressed,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            border: Border.all(color: const Color(0xFF43323D), width: 3),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x2243323D),
+                offset: Offset(0, 4),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: NesIcon(
+            iconData: NesIcons.leftArrowIndicator,
+            size: Size.square(16),
+            primaryColor: Color(0xFF43323D),
+            secondaryColor: Colors.white,
+          ),
         ),
       ),
     );

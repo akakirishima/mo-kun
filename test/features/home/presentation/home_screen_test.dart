@@ -129,7 +129,9 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      wrapWithTestApp(child: HomeScreen(onSettingsTap: nullHandler)),
+      wrapWithTestApp(
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -167,7 +169,10 @@ void main() {
               _FakeImageUrlResolver(const {rawUrl: resolvedUrl}),
             ),
           ],
-          child: HomeScreen(onSettingsTap: nullHandler),
+          child: HomeScreen(
+            onSettingsTap: nullHandler,
+            onDiaryTap: nullHandler,
+          ),
         ),
       );
       await tester.pump();
@@ -180,7 +185,7 @@ void main() {
         find.byKey(const ValueKey<String>('home-room-stage-image')),
       );
       expect((image.image as NetworkImage).url, resolvedUrl);
-      expect(image.fit, BoxFit.contain);
+      expect(image.fit, BoxFit.cover);
     });
   });
 
@@ -188,7 +193,9 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      wrapWithTestApp(child: HomeScreen(onSettingsTap: nullHandler)),
+      wrapWithTestApp(
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -217,6 +224,7 @@ void main() {
       wrapWithTestApp(
         child: HomeScreen(
           onSettingsTap: nullHandler,
+          onDiaryTap: nullHandler,
           voiceRecorder: _FakeVoiceRecorder(),
           voicePlayer: fakePlayer,
         ),
@@ -252,6 +260,7 @@ void main() {
       wrapWithTestApp(
         child: HomeScreen(
           onSettingsTap: nullHandler,
+          onDiaryTap: nullHandler,
           pickImage: (source) async {
             expect(source, ImageSource.gallery);
             return XFile('/tmp/home-gallery.png');
@@ -279,7 +288,9 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      wrapWithTestApp(child: HomeScreen(onSettingsTap: nullHandler)),
+      wrapWithTestApp(
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
     );
     await tester.pumpAndSettle();
 

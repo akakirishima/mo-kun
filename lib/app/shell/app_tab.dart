@@ -37,7 +37,7 @@ enum AppTab {
   final IconData selectedIcon;
   final Color accentColor;
 
-  static const navigationTabs = [AppTab.home, AppTab.diary, AppTab.image];
+  static const navigationTabs = [AppTab.home, AppTab.diary];
 
   static AppTab fromName(String value) {
     final normalized = value.toLowerCase();

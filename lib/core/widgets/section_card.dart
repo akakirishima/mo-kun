@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 class SectionCard extends StatelessWidget {
   const SectionCard({
@@ -16,30 +17,24 @@ class SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(28),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
+    return NesContainer(
+      label: title,
+      backgroundColor: Colors.white,
+      borderColor: theme.colorScheme.onSurface,
+      padding: const EdgeInsets.all(20),
+      painterBuilder: NesContainerSquareCornerPainter.new,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.only(top: title == null ? 0 : 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (title != null) ...[
-              Text(title!, style: theme.textTheme.titleLarge),
-              if (description != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  description!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+            if (description != null) ...[
+              Text(
+                description!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ],
+              ),
               const SizedBox(height: 16),
             ],
             child,

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
+import 'package:nes_ui/nes_ui.dart';
 
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
@@ -17,6 +18,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.alignmentKey,
     this.avatarKey,
   });
+
   final String? text;
   final String? imagePath;
   final Key? imageKey;
@@ -33,56 +35,64 @@ class ChatMessageBubble extends StatelessWidget {
     final palette = AppearanceScope.paletteOf(context).chat;
     final hasImage = imagePath != null && imagePath!.isNotEmpty;
     final hasText = text != null && text!.isNotEmpty;
-    final bubble = Container(
-      constraints: const BoxConstraints(maxWidth: 260),
-      padding: EdgeInsets.symmetric(
-        horizontal: hasImage ? 8 : 14,
-        vertical: hasImage ? 8 : 11,
-      ),
-      decoration: BoxDecoration(
-        color: isCurrentUser
-            ? palette.userBubbleFill
-            : palette.characterBubbleFill,
-        borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(18),
-          topRight: const Radius.circular(18),
-          bottomLeft: Radius.circular(isCurrentUser ? 18 : 6),
-          bottomRight: Radius.circular(isCurrentUser ? 6 : 18),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: palette.bubbleShadow,
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    final bubble = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        NesContainer(
+          backgroundColor: isCurrentUser
+              ? palette.userBubbleFill
+              : palette.characterBubbleFill,
+          borderColor: isCurrentUser ? palette.userText : palette.characterText,
+          padding: EdgeInsets.symmetric(
+            horizontal: hasImage ? 8 : 14,
+            vertical: hasImage ? 8 : 11,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hasImage)
-            _ChatImageAttachment(
-              key: imageKey,
-              imagePath: imagePath!,
-              isCurrentUser: isCurrentUser,
+          painterBuilder: NesContainerSquareCornerPainter.new,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasImage)
+                  _ChatImageAttachment(
+                    key: imageKey,
+                    imagePath: imagePath!,
+                    isCurrentUser: isCurrentUser,
+                  ),
+                if (hasImage && hasText) const SizedBox(height: 10),
+                if (hasText)
+                  Text(
+                    text!,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: isCurrentUser
+                          ? palette.userText
+                          : palette.characterText,
+                      height: 1.35,
+                    ),
+                  ),
+              ],
             ),
-          if (hasImage && hasText) const SizedBox(height: 10),
-          if (hasText)
-            Text(
-              text!,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isCurrentUser ? palette.userText : palette.characterText,
-                height: 1.35,
-              ),
-            ),
-        ],
-      ),
+          ),
+        ),
+        Positioned(
+          right: isCurrentUser ? 14 : null,
+          left: isCurrentUser ? null : 14,
+          bottom: -10,
+          child: _PixelTail(
+            fillColor: isCurrentUser
+                ? palette.userBubbleFill
+                : palette.characterBubbleFill,
+            borderColor: isCurrentUser ? palette.userText : palette.characterText,
+            alignRight: isCurrentUser,
+          ),
+        ),
+      ],
     );
 
     if (isCurrentUser) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -93,7 +103,7 @@ class ChatMessageBubble extends StatelessWidget {
             ),
             if (statusLabel != null || timestamp != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4, right: 2),
+                padding: const EdgeInsets.only(top: 8, right: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -122,13 +132,13 @@ class ChatMessageBubble extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (showAvatar)
             Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 20),
+              padding: const EdgeInsets.only(right: 8, bottom: 24),
               child: _CharacterAvatar(key: avatarKey),
             ),
           Flexible(
@@ -153,18 +163,82 @@ class ChatMessageBubble extends StatelessWidget {
                 ),
                 if (timestamp != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4, left: 6),
+                    padding: const EdgeInsets.only(top: 8, left: 6),
                     child: Text(
                       timestamp!,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: palette.metaText),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.metaText,
+                      ),
                     ),
                   ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PixelTail extends StatelessWidget {
+  const _PixelTail({
+    required this.fillColor,
+    required this.borderColor,
+    required this.alignRight,
+  });
+
+  final Color fillColor;
+  final Color borderColor;
+  final bool alignRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = <Widget>[
+      _TailSegment(
+        width: 16,
+        fillColor: fillColor,
+        borderColor: borderColor,
+      ),
+      _TailSegment(
+        width: 10,
+        fillColor: fillColor,
+        borderColor: borderColor,
+      ),
+      _TailSegment(
+        width: 6,
+        fillColor: fillColor,
+        borderColor: borderColor,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: alignRight
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: alignRight ? blocks.reversed.toList() : blocks,
+    );
+  }
+}
+
+class _TailSegment extends StatelessWidget {
+  const _TailSegment({
+    required this.width,
+    required this.fillColor,
+    required this.borderColor,
+  });
+
+  final double width;
+  final Color fillColor;
+  final Color borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: 6,
+      decoration: BoxDecoration(
+        color: fillColor,
+        border: Border.all(color: borderColor, width: 2),
       ),
     );
   }
@@ -181,22 +255,15 @@ class _CharacterAvatar extends StatelessWidget {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: palette.avatarGradient,
-        ),
-        border: Border.all(color: palette.avatarBorder, width: 2),
+        color: palette.avatarGradient.first,
+        border: Border.all(color: palette.avatarText, width: 2),
       ),
       alignment: Alignment.center,
-      child: Container(
-        width: 14,
-        height: 14,
-        decoration: BoxDecoration(
-          color: palette.avatarText,
-          shape: BoxShape.circle,
-        ),
+      child: NesIcon(
+        iconData: NesIcons.user,
+        size: const Size.square(18),
+        primaryColor: palette.avatarText,
+        secondaryColor: palette.avatarBorder,
       ),
     );
   }
@@ -218,23 +285,24 @@ class _ChatImageAttachment extends StatelessWidget {
     final file = File(imagePath);
     final hasFile = file.existsSync();
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 188,
-        height: 188,
+    return Container(
+      width: 188,
+      height: 188,
+      decoration: BoxDecoration(
         color: isCurrentUser
             ? palette.userBubbleFill.withValues(alpha: 0.42)
             : palette.characterBubbleFill.withValues(alpha: 0.42),
-        child: hasFile
-            ? Image.file(file, fit: BoxFit.cover)
-            : _MissingChatImagePlaceholder(
-                imagePath: imagePath,
-                accentColor: isCurrentUser
-                    ? palette.userText
-                    : palette.metaText,
-              ),
+        border: Border.all(
+          color: isCurrentUser ? palette.userText : palette.characterText,
+          width: 2,
+        ),
       ),
+      child: hasFile
+          ? Image.file(file, fit: BoxFit.cover)
+          : _MissingChatImagePlaceholder(
+              imagePath: imagePath,
+              accentColor: isCurrentUser ? palette.userText : palette.metaText,
+            ),
     );
   }
 }
@@ -257,7 +325,12 @@ class _MissingChatImagePlaceholder extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.image_outlined, size: 42, color: accentColor),
+          NesIcon(
+            iconData: NesIcons.gallery,
+            size: const Size.square(28),
+            primaryColor: accentColor,
+            secondaryColor: Colors.white,
+          ),
           const SizedBox(height: 10),
           Text(
             filename,

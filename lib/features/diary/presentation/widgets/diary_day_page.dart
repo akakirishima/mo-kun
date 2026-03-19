@@ -98,10 +98,13 @@ class DiaryDayPage extends ConsumerWidget {
                           vertical: 6,
                         ),
                         textStyle: TextStyle(
+                          fontFamily: 'NotoSansJP',
                           color: palette.ink.withValues(alpha: 0.72),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.4,
+                          decoration: TextDecoration.none,
+                          shadows: const [],
                         ),
                       ),
                     ),
@@ -314,8 +317,11 @@ class _DiaryEntryIllustration extends StatelessWidget {
               child: Text(
                 entry.highlightLabel,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontFamily: 'NotoSansJP',
                   color: Colors.black87,
                   fontWeight: FontWeight.w800,
+                  decoration: TextDecoration.none,
+                  shadows: const [],
                 ),
               ),
             ),

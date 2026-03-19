@@ -135,10 +135,13 @@ class DiaryCoverPage extends StatelessWidget {
                                     vertical: 8,
                                   ),
                                   textStyle: TextStyle(
+                                    fontFamily: 'NotoSansJP',
                                     color: palette.paperFill,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.4,
+                                    decoration: TextDecoration.none,
+                                    shadows: const [],
                                   ),
                                 ),
                                 const Spacer(),
@@ -157,20 +160,26 @@ class DiaryCoverPage extends StatelessWidget {
                             Text(
                               book.coverTitle,
                               style: TextStyle(
+                                fontFamily: 'NotoSansJP',
                                 color: palette.paperFill,
                                 fontSize: 38,
                                 fontWeight: FontWeight.w900,
                                 height: 1.02,
+                                decoration: TextDecoration.none,
+                                shadows: const [],
                               ),
                             ),
                             const SizedBox(height: 14),
                             Text(
                               book.coverSubtitle,
                               style: TextStyle(
+                                fontFamily: 'NotoSansJP',
                                 color: palette.paperFill.withValues(alpha: 0.9),
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 height: 1.45,
+                                decoration: TextDecoration.none,
+                                shadows: const [],
                               ),
                             ),
                             const SizedBox(height: 30),
@@ -259,9 +268,12 @@ class _CoverBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
+          fontFamily: 'NotoSansJP',
           color: textColor,
           fontSize: 13,
           fontWeight: FontWeight.w700,
+          decoration: TextDecoration.none,
+          shadows: const [],
         ),
       ),
     );
