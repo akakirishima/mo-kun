@@ -57,7 +57,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final VoiceRecorderController _voiceRecorder;
   late final VoicePlayerController _voicePlayer;
   final ImagePicker _imagePicker = ImagePicker();
-  final List<_HomeChatMessage> _localMessages = <_HomeChatMessage>[];
   String _draftText = '';
   XFile? _pendingAttachment;
   bool _isPickingImage = false;
@@ -194,33 +193,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
-    final createdAt = DateTime.now();
     setState(() {
-      if (attachment != null) {
-        _localMessages.add(
-          _HomeChatMessage(
-            imagePath: attachment.path,
-            createdAt: createdAt,
-            isCurrentUser: true,
-          ),
-        );
-      }
       _controller.clear();
       _draftText = '';
       _pendingAttachment = null;
     });
 
     final session = await ref.read(sessionProvider.future);
-    final backendMessage = message.isNotEmpty
-        ? message
-        : (attachment != null ? '画像を1枚送った' : '');
-    if (backendMessage.isNotEmpty) {
-      try {
-        await ref
-            .read(sendChatMessageControllerProvider)
-            .send(session: session, text: backendMessage);
-      } catch (_) {}
-    }
+    try {
+      await ref
+          .read(sendChatMessageControllerProvider)
+          .send(
+            session: session,
+            text: message,
+            imageBytes: attachment == null ? null : await attachment.readAsBytes(),
+            imageMimeType: attachment == null
+                ? null
+                : _inferImageMimeTypeFromPath(attachment.path),
+            imageFilename: attachment?.name,
+            localImagePath: attachment?.path,
+          );
+    } catch (_) {}
     _scrollMessagesToBottom();
   }
 
@@ -462,7 +455,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final timelineMessages = _buildTimelineMessages(
       serverMessages: serverMessages,
       pendingMessages: pendingMessages,
-      localMessages: _localMessages,
     );
     final character = characterId == null
         ? null
@@ -648,6 +640,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     padding: const EdgeInsets.only(top: 12, bottom: 12),
                     itemBuilder: (context, index) {
                       final message = timelineMessages[index];
+                      final resolvedMessageImageUrl = message.imageUrl == null
+                          ? null
+                          : ref
+                                  .watch(
+                                    resolvedImageUrlProvider(message.imageUrl),
+                                  )
+                                  .valueOrNull ??
+                              (message.imageUrl!.startsWith('http')
+                                  ? message.imageUrl
+                                  : null);
                       return ChatMessageBubble(
                         key: ValueKey<String>(
                           message.isCurrentUser
@@ -655,7 +657,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               : 'home-assistant-bubble-$index',
                         ),
                         text: message.text,
-                        imagePath: message.imagePath,
+                        imagePath: message.localImagePath,
+                        imageUrl: resolvedMessageImageUrl,
                         isCurrentUser: message.isCurrentUser,
                         showAvatar: !message.isCurrentUser,
                         timestamp: _timestampFromDateTime(message.createdAt),
@@ -764,15 +767,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 List<_HomeChatMessage> _buildTimelineMessages({
   required List<ChatMessage> serverMessages,
   required List<PendingChatMessage> pendingMessages,
-  required List<_HomeChatMessage> localMessages,
 }) {
   final timeline = <_HomeChatMessage>[
-    ...localMessages,
     for (final message in serverMessages)
       _HomeChatMessage(
         text: message.text,
         createdAt: message.createdAt,
         isCurrentUser: message.role == ChatRole.user,
+        imageUrl: message.imageUrl,
       ),
     for (final message in pendingMessages)
       _HomeChatMessage(
@@ -780,6 +782,7 @@ List<_HomeChatMessage> _buildTimelineMessages({
         createdAt: message.createdAt,
         isCurrentUser: true,
         statusLabel: message.failed ? '再送待ち' : '送信中',
+        localImagePath: message.localImagePath,
       ),
   ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
   return timeline;
@@ -1871,15 +1874,28 @@ class _SheetActionButton extends StatelessWidget {
 class _HomeChatMessage {
   const _HomeChatMessage({
     this.text,
-    this.imagePath,
+    this.localImagePath,
+    this.imageUrl,
     required this.createdAt,
     required this.isCurrentUser,
     this.statusLabel,
   });
 
   final String? text;
-  final String? imagePath;
+  final String? localImagePath;
+  final String? imageUrl;
   final DateTime createdAt;
   final bool isCurrentUser;
   final String? statusLabel;
+}
+
+String? _inferImageMimeTypeFromPath(String path) {
+  final lower = path.toLowerCase();
+  if (lower.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (lower.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  return 'image/jpeg';
 }

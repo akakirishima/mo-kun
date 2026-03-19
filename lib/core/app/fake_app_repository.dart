@@ -118,8 +118,25 @@ class FakeAppRepository implements AppRepository {
     required String threadId,
     required String text,
     required String clientMessageId,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+    String? imageFilename,
   }) async {
     final now = DateTime.now();
+    final hasPhoto = imageBytes != null && imageBytes.isNotEmpty;
+    final photoAnalysis = hasPhoto
+        ? const PhotoAnalysis(
+            category: 'meal',
+            summary: '食事の写真に見える。軽く食べた内容を残した可能性がある。',
+            activity: '食事をした',
+            food: 'ご飯',
+            locationGuess: '',
+            confidence: 'medium',
+            needsConfirmation: false,
+            confirmationPrompt: '',
+            reactionHint: '食事をちゃんと残せたのはいい流れ。',
+          )
+        : null;
     _messages = [
       ..._messages,
       ChatMessage(
@@ -128,20 +145,34 @@ class FakeAppRepository implements AppRepository {
         text: text,
         createdAt: now,
         clientMessageId: clientMessageId,
-        inputType: ChatInputType.text,
+        inputType: hasPhoto ? ChatInputType.photo : ChatInputType.text,
+        imageUrl: hasPhoto
+            ? 'https://example.com/chat/${now.microsecondsSinceEpoch}.png'
+            : null,
+        imageAnalysis: photoAnalysis,
       ),
     ];
     final todayDateKey = _dateKey(now);
     final existingSummary = _summaryForDate(todayDateKey);
+    final photoActivity = photoAnalysis?.activity;
+    final summaryLine = [
+      if (text.isNotEmpty) text,
+      if (photoAnalysis != null && photoAnalysis.summary.isNotEmpty)
+        photoAnalysis.summary,
+    ].join(' / ');
     _upsertSummary(
       DailySummary(
         dateKey: todayDateKey,
         title: existingSummary == null ? '今日のまとめ' : '会話を重ねた日',
         diaryBody:
-            '今日は$text。'
+            '今日は${summaryLine.isNotEmpty ? summaryLine : '写真を1枚送った'}。'
             '\n明日はこの続きを少しでも話せたらいいな。',
         mood: '前向き',
-        doneThings: [...?existingSummary?.doneThings, text],
+        doneThings: [
+          ...?existingSummary?.doneThings,
+          if (text.isNotEmpty) text,
+          if (photoActivity != null && photoActivity.isNotEmpty) photoActivity,
+        ],
         reflection: '会話から今日の行動を整理した。',
         tomorrowNote: '続けて1つだけ報告する。',
         generatedAt: now,
@@ -402,7 +433,7 @@ class FakeAppRepository implements AppRepository {
   }) {
     final merged = <DailySummary>[
       ...?additional,
-      if (primary case final value?) value,
+      ...?(primary == null ? null : <DailySummary>[primary]),
     ];
     final deduped = <String, DailySummary>{};
     for (final summary in merged) {

@@ -8,6 +8,7 @@ import { AppRepository } from "./repositories/app-repository.js";
 import { AiService, AiServiceError } from "./services/ai-service.js";
 import {
   CharacterImageService,
+  CloudStorageChatPhotoStore,
   CloudStorageImageStore,
 } from "./services/character-image-service.js";
 import { buildAppDateKey } from "./services/app-date.js";
@@ -25,9 +26,16 @@ const imageService = new CharacterImageService(
   aiService,
   new CloudStorageImageStore(getStorageClient().bucket(config.imageBucket)),
 );
+const chatPhotoStore = new CloudStorageChatPhotoStore(
+  getStorageClient().bucket(config.imageBucket),
+);
 const voiceUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
+});
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
 });
 
 app.use(express.json());
@@ -99,14 +107,25 @@ app.post("/v1/characters", requireAuth, async (request, response) => {
   }
 });
 
-app.post("/v1/chat/messages", requireAuth, async (request, response) => {
+app.post(
+  "/v1/chat/messages",
+  requireAuth,
+  (request, response, next) => {
+    if ((request.headers["content-type"] ?? "").includes("multipart/form-data")) {
+      photoUpload.single("photo")(request, response, next);
+      return;
+    }
+    next();
+  },
+  async (request, response) => {
   try {
     const authedRequest = request as AuthedRequest;
     const threadId = String(request.body.threadId ?? "").trim();
     const text = String(request.body.text ?? "").trim();
     const clientMessageId = String(request.body.clientMessageId ?? "").trim();
+    const photoFile = request.file;
 
-    if (!threadId || !text || !clientMessageId) {
+    if (!threadId || !clientMessageId || (!text && !photoFile?.buffer?.length)) {
       response.status(400).json({ error: "invalid_chat_payload" });
       return;
     }
@@ -129,19 +148,61 @@ app.post("/v1/chat/messages", requireAuth, async (request, response) => {
     }
 
     const recentMessages = await repository.getRecentMessages(threadId);
-    const assistantText = await aiService.generateAssistantReply({
-      characterName: String(character.name ?? "Self"),
-      personaPrompt:
-        typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
-      recentMessages,
-      userText: text,
+    const photoMimeType = photoFile?.buffer?.length
+      ? normalizeIncomingImageMimeType(photoFile.mimetype, photoFile.originalname)
+      : null;
+    const photoAnalysis = photoFile?.buffer?.length
+      ? await aiService.generatePhotoAnalysis({
+          photoBytes: photoFile.buffer,
+          mimeType: photoMimeType ?? inferImageMimeType(photoFile.originalname),
+          userText: text,
+        })
+      : null;
+    const storedPhoto = photoFile?.buffer?.length
+      ? await chatPhotoStore.save({
+          userId: authedRequest.user.uid,
+          threadId,
+          bytes: photoFile.buffer,
+          mimeType: photoMimeType ?? inferImageMimeType(photoFile.originalname),
+        })
+      : null;
+    const effectiveUserText = buildEffectiveUserText({
+      text,
+      photoAnalysis,
     });
+    let assistantText: string;
+    try {
+      assistantText = await aiService.generateAssistantReply({
+        characterName: String(character.name ?? "Self"),
+        personaPrompt:
+          typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
+        recentMessages,
+        userText: effectiveUserText,
+      });
+    } catch (error) {
+      console.error("Assistant reply fallback activated", {
+        detail: error instanceof Error ? error.message : "unknown_error",
+      });
+      assistantText = buildFallbackAssistantReply({
+        userText: text,
+        photoAnalysis,
+      });
+    }
     const saved = await repository.appendConversation({
       threadId,
       userId: authedRequest.user.uid,
       userText: text,
       clientMessageId,
       assistantText,
+      userInputType: photoFile?.buffer?.length ? "photo" : "text",
+      userImage:
+        storedPhoto && photoAnalysis
+          ? {
+              imageUrl: storedPhoto.imageUrl,
+              imageStoragePath: storedPhoto.storagePath,
+              imageAnalysis: photoAnalysis,
+            }
+          : undefined,
     });
     const dateKey = buildAppDateKey(new Date());
     const dayMessages = await repository.getMessagesForDateKey(threadId, dateKey);
@@ -153,17 +214,11 @@ app.post("/v1/chat/messages", requireAuth, async (request, response) => {
 
     response.json({
       threadId,
+      imageUrl: storedPhoto?.imageUrl ?? null,
+      imageAnalysis: photoAnalysis,
       ...saved,
     });
   } catch (error) {
-    if (error instanceof AiServiceError) {
-      response.status(503).json({
-        error: "assistant_generation_failed",
-        detail: error.message,
-      });
-      return;
-    }
-
     response.status(500).json({
       error: "send_message_failed",
       detail: error instanceof Error ? error.message : "unknown_error",
@@ -214,13 +269,24 @@ app.post(
         audioBytes: audioFile.buffer,
       });
       const recentMessages = await repository.getRecentMessages(threadId);
-      const assistantText = await aiService.generateAssistantReply({
-        characterName: String(character.name ?? "Self"),
-        personaPrompt:
-          typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
-        recentMessages,
-        userText: transcriptText,
-      });
+      let assistantText: string;
+      try {
+        assistantText = await aiService.generateAssistantReply({
+          characterName: String(character.name ?? "Self"),
+          personaPrompt:
+            typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
+          recentMessages,
+          userText: transcriptText,
+        });
+      } catch (error) {
+        console.error("Voice assistant reply fallback activated", {
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
+        assistantText = buildFallbackAssistantReply({
+          userText: transcriptText,
+          photoAnalysis: null,
+        });
+      }
       const saved = await repository.appendConversation({
         threadId,
         userId: authedRequest.user.uid,
@@ -270,14 +336,6 @@ app.post(
         });
         return;
       }
-      if (error instanceof AiServiceError) {
-        response.status(503).json({
-          error: "assistant_generation_failed",
-          detail: error.message,
-        });
-        return;
-      }
-
       response.status(500).json({
         error: "voice_message_failed",
         detail: error instanceof Error ? error.message : "unknown_error",
@@ -353,3 +411,95 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
 app.listen(config.port, () => {
   console.log(`mo-kun backend listening on ${config.port}`);
 });
+
+function buildEffectiveUserText(params: {
+  text: string;
+  photoAnalysis: {
+    summary: string;
+    reactionHint: string;
+    confirmationPrompt: string;
+    needsConfirmation: boolean;
+  } | null;
+}) {
+  const parts = [
+    params.text.trim(),
+    params.photoAnalysis?.summary?.trim() ? `写真メモ: ${params.photoAnalysis.summary.trim()}` : "",
+    params.photoAnalysis?.reactionHint?.trim()
+      ? `会話ヒント: ${params.photoAnalysis.reactionHint.trim()}`
+      : "",
+    params.photoAnalysis?.needsConfirmation &&
+      params.photoAnalysis.confirmationPrompt.trim()
+      ? `確認したい点: ${params.photoAnalysis.confirmationPrompt.trim()}`
+      : "",
+  ].filter((value) => value.length > 0);
+
+  return parts.join("\n");
+}
+
+function inferImageMimeType(filename?: string) {
+  const lower = filename?.toLowerCase() ?? "";
+  if (lower.endsWith(".png")) {
+    return "image/png";
+  }
+  if (lower.endsWith(".webp")) {
+    return "image/webp";
+  }
+  return "image/jpeg";
+}
+
+function normalizeIncomingImageMimeType(
+  mimeType: string | undefined,
+  filename?: string,
+) {
+  if (mimeType != null && mimeType.startsWith("image/") && mimeType !== "image/octet-stream") {
+    return mimeType;
+  }
+  return inferImageMimeType(filename);
+}
+
+function buildFallbackAssistantReply(params: {
+  userText: string;
+  photoAnalysis: {
+    summary: string;
+    activity: string;
+    food: string;
+    locationGuess: string;
+    needsConfirmation: boolean;
+    confirmationPrompt: string;
+    reactionHint: string;
+  } | null;
+}) {
+  const analysis = params.photoAnalysis;
+  if (analysis != null) {
+    const lead = analysis.reactionHint.trim().length > 0
+      ? analysis.reactionHint.trim()
+      : "写真を受け取った。今日の流れをちゃんと残せている。";
+    const detail = [
+      analysis.activity.trim(),
+      analysis.food.trim().length > 0 ? `${analysis.food.trim()}を食べたかも` : "",
+      analysis.locationGuess.trim(),
+    ].filter((value) => value.length > 0).join("、");
+
+    if (analysis.needsConfirmation && analysis.confirmationPrompt.trim().length > 0) {
+      return detail.length > 0
+        ? `${lead} ${detail}ようにも見える。${analysis.confirmationPrompt.trim()}`
+        : `${lead} ${analysis.confirmationPrompt.trim()}`;
+    }
+
+    if (detail.length > 0) {
+      return `${lead} ${detail}流れとして残しておく。`;
+    }
+
+    if (analysis.summary.trim().length > 0) {
+      return `${lead} ${analysis.summary.trim()}`;
+    }
+
+    return lead;
+  }
+
+  if (params.userText.trim().length > 0) {
+    return "受け取った。その流れをこのまま今日の記録につないでいこう。";
+  }
+
+  return "受け取った。今日のことをひとつ残せたのはいい流れ。";
+}

@@ -1,9 +1,15 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import {
+  GoogleGenAI,
+  Modality,
+  createPartFromBase64,
+  createPartFromText,
+} from "@google/genai";
 import { loadConfig, type AppConfig } from "../config.js";
 import {
   CharacterDraft,
   DailyBubbleDraft,
   DailySummaryDraft,
+  PhotoAnalysisDraft,
   StoredDailySummary,
 } from "../types.js";
 
@@ -14,7 +20,7 @@ type CharacterProfileInput = {
   weakPoints: string[];
 };
 
-type MessageContext = Array<{ role?: string; text?: string }>;
+type MessageContext = Array<{ role?: string; text?: string; [key: string]: unknown }>;
 
 type GeneratedImageAsset = {
   mimeType: string;
@@ -45,6 +51,18 @@ type RoomSceneItemsCandidate = {
 
 type DailyBubbleCandidate = {
   text?: unknown;
+};
+
+type PhotoAnalysisCandidate = {
+  category?: unknown;
+  summary?: unknown;
+  activity?: unknown;
+  food?: unknown;
+  locationGuess?: unknown;
+  confidence?: unknown;
+  needsConfirmation?: unknown;
+  confirmationPrompt?: unknown;
+  reactionHint?: unknown;
 };
 
 const DAILY_SUMMARY_RESPONSE_JSON_SCHEMA = {
@@ -82,6 +100,33 @@ const DAILY_BUBBLE_RESPONSE_JSON_SCHEMA = {
   required: ["text"],
   properties: {
     text: { type: "string" },
+  },
+};
+
+const PHOTO_ANALYSIS_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "category",
+    "summary",
+    "activity",
+    "food",
+    "locationGuess",
+    "confidence",
+    "needsConfirmation",
+    "confirmationPrompt",
+    "reactionHint",
+  ],
+  properties: {
+    category: { type: "string" },
+    summary: { type: "string" },
+    activity: { type: "string" },
+    food: { type: "string" },
+    locationGuess: { type: "string" },
+    confidence: { type: "string" },
+    needsConfirmation: { type: "boolean" },
+    confirmationPrompt: { type: "string" },
+    reactionHint: { type: "string" },
   },
 };
 
@@ -272,6 +317,40 @@ export class AiService {
     }
   }
 
+  async generatePhotoAnalysis(params: {
+    photoBytes: Buffer;
+    mimeType: string;
+    userText?: string;
+  }): Promise<PhotoAnalysisDraft> {
+    const fallback = buildFallbackPhotoAnalysis(params.userText);
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.config.geminiModel,
+        contents: [
+          createPartFromText(buildPhotoAnalysisPrompt(params.userText)),
+          createPartFromBase64(params.photoBytes.toString("base64"), params.mimeType),
+        ],
+        config: {
+          systemInstruction: buildPhotoAnalysisSystemInstruction(),
+          temperature: 0.2,
+          maxOutputTokens: 220,
+          responseMimeType: "application/json",
+          responseJsonSchema: PHOTO_ANALYSIS_RESPONSE_JSON_SCHEMA,
+        },
+      });
+      return normalizeGeneratedPhotoAnalysis(response.text, fallback);
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Gemini photo analysis failed", {
+        model: this.config.geminiModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      return fallback;
+    }
+  }
+
   async generateDailySummary(params: {
     dateKey: string;
     messages: MessageContext;
@@ -375,6 +454,7 @@ export function buildAssistantSystemInstruction(
     "- 短すぎず不自然にならない範囲で返す",
     "- 必要に応じて2〜5文程度で返してよい",
     "- ユーザーの今日の報告や気分を受け止める",
+    "- 必要なら自然にねぎらってよい",
     "- 会話の立ち位置は『自分を整理する内なる声』に寄せる",
     "- 軽い後押しはしてよいが、伴走者や外部の第三者のようには振る舞わない",
     "- 会話が続けやすいように、一言だけやわらかく広げてもよい",
@@ -393,7 +473,7 @@ export function buildAssistantPrompt(
 ): string {
   const historyLines = recentMessages
     .map((message) => {
-      const text = normalizePromptText(message.text);
+      const text = buildMessagePromptText(message);
       if (!text) {
         return null;
       }
@@ -480,6 +560,7 @@ export function buildDailySummarySystemInstruction(): string {
   return [
     "あなたは日次ダイアリー用の要約を作るアシスタントです。",
     "会話ログを読み、ユーザーが実際に話した事実だけをもとに1日の記録をまとめてください。",
+    "画像解析の要約が含まれる場合は、それもその日の報告として扱ってよいですが、断定せず自然な推定表現を保ってください。",
     "出力ルール:",
     "- 日本語で自然な表現にする",
     "- assistant の発話は文脈としてだけ使い、成果として書かない",
@@ -503,7 +584,7 @@ export function buildDailySummaryPrompt(params: {
 }): string {
   const historyLines = params.messages
     .map((message) => {
-      const text = normalizePromptText(message.text);
+      const text = buildMessagePromptText(message);
       if (!text) {
         return null;
       }
@@ -547,6 +628,44 @@ export function buildVisualEvolutionSystemInstruction(): string {
     "- 努力は表情、姿勢、服装ディテール、雰囲気に翻訳する",
     "- トロフィーや数値のような露骨な記号化は避ける",
     "- 箇条書きにしない",
+  ].join("\n");
+}
+
+export function buildPhotoAnalysisSystemInstruction(): string {
+  return [
+    "あなたはユーザーが送った日常写真を軽く解釈し、行動ログ用の JSON を返すアシスタントです。",
+    "出力ルール:",
+    "- 日本語",
+    "- JSON 以外を返さない",
+    "- 厳密認識よりも、体験を壊さない自然な推定を優先する",
+    "- 分からない場合は断定せず unknown や空文字を使う",
+    "- locationGuess は推定表現にする",
+    "- 食事写真なら food を入れる",
+    "- 観光やランドマークなら locationGuess を入れる",
+    "- activity は短い動作表現にする",
+    "- confidence は high / medium / low のいずれか",
+    "- 曖昧なら needsConfirmation=true にし、confirmationPrompt を自然文で返す",
+    "- reactionHint は会話リアクションに使える短い一言にする",
+  ].join("\n");
+}
+
+export function buildPhotoAnalysisPrompt(userText?: string): string {
+  return [
+    "写真を見て、ユーザーが何をしているか、何を食べたか、どこに行った可能性があるかを推定してください。",
+    "入力テキストがある場合は写真解釈の補助として使ってよいが、見えていない事実を断定しないでください。",
+    "",
+    `補助テキスト: ${normalizePromptText(userText) ?? "なし"}`,
+    "",
+    "JSON のキー:",
+    "- category",
+    "- summary",
+    "- activity",
+    "- food",
+    "- locationGuess",
+    "- confidence",
+    "- needsConfirmation",
+    "- confirmationPrompt",
+    "- reactionHint",
   ].join("\n");
 }
 
@@ -674,8 +793,8 @@ export function buildFallbackDailySummary(params: {
   messages: MessageContext;
 }): DailySummaryDraft {
   const userMessages = params.messages
-    .filter((message) => message.role === "user" && !!message.text)
-    .map((message) => compactSummaryText(message.text))
+    .filter((message) => message.role === "user")
+    .map((message) => compactSummaryText(buildMessagePromptText(message) ?? undefined))
     .filter((text): text is string => text != null)
     .slice(-3);
   const lead = userMessages.at(-1);
@@ -734,6 +853,36 @@ export function normalizeGeneratedRoomSceneItems(
     return normalized;
   }
   return normalizeRoomSceneItems(fallback);
+}
+
+export function normalizeGeneratedPhotoAnalysis(
+  rawText: string | null | undefined,
+  fallback: PhotoAnalysisDraft,
+): PhotoAnalysisDraft {
+  const candidate = parsePhotoAnalysisCandidate(rawText);
+  if (!candidate) {
+    return fallback;
+  }
+
+  return {
+    category: normalizePhotoCategory(candidate.category) ?? fallback.category,
+    summary: normalizeSummaryField(candidate.summary, 120) ?? fallback.summary,
+    activity: normalizeSummaryField(candidate.activity, 40) ?? fallback.activity,
+    food: normalizeSummaryField(candidate.food, 40) ?? fallback.food,
+    locationGuess:
+      normalizeSummaryField(candidate.locationGuess, 60) ?? fallback.locationGuess,
+    confidence:
+      normalizePhotoConfidence(candidate.confidence) ?? fallback.confidence,
+    needsConfirmation:
+      typeof candidate.needsConfirmation === "boolean"
+        ? candidate.needsConfirmation
+        : fallback.needsConfirmation,
+    confirmationPrompt:
+      normalizeSummaryField(candidate.confirmationPrompt, 80) ??
+      fallback.confirmationPrompt,
+    reactionHint:
+      normalizeSummaryField(candidate.reactionHint, 80) ?? fallback.reactionHint,
+  };
 }
 
 export function normalizeGeneratedDailyBubbleText(rawText?: string | null): string | null {
@@ -816,8 +965,7 @@ function hasUserMessage(messages: MessageContext): boolean {
   return messages.some(
     (message) =>
       message.role === "user" &&
-      typeof message.text === "string" &&
-      message.text.trim().length > 0,
+      buildMessagePromptText(message) != null,
   );
 }
 
@@ -929,6 +1077,29 @@ function parseDailySummaryCandidate(rawText?: string | null): DailySummaryCandid
   }
 }
 
+function parsePhotoAnalysisCandidate(rawText?: string | null): PhotoAnalysisCandidate | null {
+  const normalized = rawText?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const jsonText = normalized
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as PhotoAnalysisCandidate;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeSummaryField(value: unknown, maxLength: number): string | null {
   if (typeof value !== "string") {
     return null;
@@ -1003,6 +1174,127 @@ function normalizeRoomSceneItems(value: unknown): string[] {
     }
   }
   return normalizedItems;
+}
+
+function buildMessagePromptText(message: { text?: string; [key: string]: unknown }): string | null {
+  const normalizedText = normalizePromptText(message.text);
+  const photoSummary = extractPhotoSummary(message);
+
+  if (normalizedText && photoSummary) {
+    return `${normalizedText} [写真メモ: ${photoSummary}]`;
+  }
+  if (normalizedText) {
+    return normalizedText;
+  }
+  if (photoSummary) {
+    return `写真メモ: ${photoSummary}`;
+  }
+  return null;
+}
+
+function extractPhotoSummary(message: { [key: string]: unknown }): string | null {
+  const imageAnalysis = message.imageAnalysis;
+  if (typeof imageAnalysis !== "object" || imageAnalysis == null || Array.isArray(imageAnalysis)) {
+    return null;
+  }
+  const summary = (imageAnalysis as { summary?: unknown }).summary;
+  return normalizeSummaryField(summary, 120);
+}
+
+function normalizePhotoCategory(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "meal":
+    case "sightseeing":
+    case "study":
+    case "exercise":
+    case "daily_life":
+    case "unknown":
+      return normalized;
+    default:
+      return "unknown";
+  }
+}
+
+function normalizePhotoConfidence(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized;
+  }
+  return null;
+}
+
+function buildFallbackPhotoAnalysis(userText?: string): PhotoAnalysisDraft {
+  const normalizedUserText = normalizePromptText(userText) ?? "";
+  if (/(東京タワー|観光|旅行|展望台)/.test(normalizedUserText)) {
+    return {
+      category: "sightseeing",
+      summary: "観光スポットの写真に見える。東京タワー周辺に行った可能性がある。",
+      activity: "観光した",
+      food: "",
+      locationGuess: "東京タワー周辺の可能性",
+      confidence: "medium",
+      needsConfirmation: false,
+      confirmationPrompt: "",
+      reactionHint: "景色を残せたのはいい記録になっている。",
+    };
+  }
+  if (/(ご飯|ランチ|夕飯|朝食|カフェ)/.test(normalizedUserText)) {
+    return {
+      category: "meal",
+      summary: "食事の写真に見える。食べたものを残した可能性がある。",
+      activity: "食事をした",
+      food: "ご飯",
+      locationGuess: "",
+      confidence: "medium",
+      needsConfirmation: false,
+      confirmationPrompt: "",
+      reactionHint: "食事を記録できたのはいい流れ。",
+    };
+  }
+  if (/(勉強|参考書|学習|本)/.test(normalizedUserText)) {
+    return {
+      category: "study",
+      summary: "勉強道具の写真に見える。学習の時間を取った可能性がある。",
+      activity: "勉強した",
+      food: "",
+      locationGuess: "",
+      confidence: "medium",
+      needsConfirmation: false,
+      confirmationPrompt: "",
+      reactionHint: "机に向かった流れをちゃんと残せている。",
+    };
+  }
+  if (/(筋トレ|トレーニング|運動)/.test(normalizedUserText)) {
+    return {
+      category: "exercise",
+      summary: "運動や筋トレの場面に見える。体を動かした可能性がある。",
+      activity: "筋トレした",
+      food: "",
+      locationGuess: "",
+      confidence: "medium",
+      needsConfirmation: false,
+      confirmationPrompt: "",
+      reactionHint: "体を動かした流れが残っていていい。",
+    };
+  }
+  return {
+    category: "unknown",
+    summary: "写真を1枚送った。内容はまだ断定しきれない。",
+    activity: "",
+    food: "",
+    locationGuess: "",
+    confidence: "low",
+    needsConfirmation: true,
+    confirmationPrompt: "写真はこの解釈で合ってる？短く教えてくれる？",
+    reactionHint: "写真から今日のことを残そうとしている流れはいい。",
+  };
 }
 
 function isAbstractSceneItem(value: string): boolean {

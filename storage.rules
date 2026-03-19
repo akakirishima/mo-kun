@@ -9,5 +9,10 @@ service firebase.storage {
       allow read: if signedIn() && request.auth.uid == userId;
       allow write: if false;
     }
+
+    match /chatUploads/{userId}/{allPaths=**} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
   }
 }
