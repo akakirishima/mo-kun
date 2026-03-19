@@ -47,7 +47,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   static const _horizontalPadding = 18.0;
   static const _actionBarHeight = 84.0;
 
@@ -69,6 +70,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _latestTranscriptText;
   String? _latestAssistantText;
   bool _isSubmittingImage = false;
+  double _lastKeyboardInset = 0;
+  String? _lastPlayedAssistantMessageId;
 
   bool get _canSend =>
       _draftText.trim().isNotEmpty || _pendingAttachment != null;
@@ -78,8 +81,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = TextEditingController()..addListener(_handleInputChanged);
     _focusNode = FocusNode();
+    _focusNode.addListener(_handleFocusChanged);
     _messageScrollController = ScrollController();
     _voiceRecorder =
         widget.voiceRecorder ?? DeviceVoiceRecorderController();
@@ -89,10 +94,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _recordingTicker?.cancel();
     _controller
       ..removeListener(_handleInputChanged)
       ..dispose();
+    _focusNode.removeListener(_handleFocusChanged);
     _focusNode.dispose();
     _messageScrollController.dispose();
     unawaited(_voiceRecorder.dispose());
@@ -104,6 +111,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     setState(() {
       _draftText = _controller.text;
     });
+  }
+
+  void _handleFocusChanged() {
+    if (_focusNode.hasFocus) {
+      _scrollMessagesToBottom();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (_isChatMode && _focusNode.hasFocus) {
+      _scrollMessagesToBottom();
+    }
   }
 
   Future<void> _setOverlayMode(HomeOverlayMode mode) async {
@@ -120,6 +141,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _overlayMode = mode;
     });
     widget.onOverlayModeChanged?.call(mode);
+    if (mode == HomeOverlayMode.chat) {
+      _scrollMessagesToBottom(jump: true);
+    }
   }
 
   Future<void> _restoreLostAttachmentIfNeeded() async {
@@ -362,10 +386,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           audioBytes != null &&
           audioBytes.isNotEmpty &&
           mimeType != null &&
-          mimeType.isNotEmpty) {
+          mimeType.isNotEmpty &&
+          _shouldPlayAssistantVoice(result.assistantMessageId)) {
         setState(() {
           _voiceState = HomeVoiceState.playing;
         });
+        _lastPlayedAssistantMessageId = result.assistantMessageId;
         await _voicePlayer.play(audioBytes, mimeType: mimeType);
       }
 
@@ -405,13 +431,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  void _scrollMessagesToBottom() {
+  bool _shouldPlayAssistantVoice(String? assistantMessageId) {
+    if (assistantMessageId == null || assistantMessageId.isEmpty) {
+      return true;
+    }
+    return _lastPlayedAssistantMessageId != assistantMessageId;
+  }
+
+  void _scrollMessagesToBottom({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messageScrollController.hasClients) {
         return;
       }
+      final target = _messageScrollController.position.maxScrollExtent;
+      if (jump) {
+        _messageScrollController.jumpTo(target);
+        return;
+      }
       _messageScrollController.animateTo(
-        _messageScrollController.position.maxScrollExtent,
+        target,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
       );
@@ -608,6 +646,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String imageStatusLabel,
     required String characterName,
   }) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    if (_isChatMode && keyboardInset != _lastKeyboardInset) {
+      _lastKeyboardInset = keyboardInset;
+      if (keyboardInset > 0) {
+        _scrollMessagesToBottom();
+      }
+    }
+
     if (_isChatMode) {
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -616,8 +662,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             math.max(constraints.maxHeight * 0.24, 120.0),
           );
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.fromLTRB(18, 0, 18, keyboardInset),
             child: Column(
               children: [
                 Align(

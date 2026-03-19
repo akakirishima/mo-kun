@@ -50,7 +50,7 @@ gcloud run deploy $service `
   --region $region `
   --allow-unauthenticated `
   --service-account $sa `
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=$project,VERTEX_LOCATION=global,GEMINI_MODEL=gemini-2.5-flash,GEMINI_IMAGE_MODEL=gemini-2.5-flash-image,GEMINI_TEMPERATURE=0.7,GEMINI_MAX_OUTPUT_TOKENS=220,IMAGE_BUCKET=$bucket,SPEECH_LANGUAGE_CODE=ja-JP,TTS_LANGUAGE_CODE=ja-JP,TTS_AUDIO_ENCODING=MP3" `
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=$project,VERTEX_LOCATION=global,GEMINI_MODEL=gemini-2.5-pro,GEMINI_IMAGE_MODEL=gemini-2.5-flash-image,GEMINI_TEMPERATURE=0.7,GEMINI_MAX_OUTPUT_TOKENS=220,IMAGE_BUCKET=$bucket,SPEECH_LANGUAGE_CODE=ja-JP,TTS_LANGUAGE_CODE=ja-JP,TTS_MODEL_NAME=gemini-2.5-flash-tts,TTS_VOICE_NAME=Kore,TTS_AUDIO_ENCODING=MP3" `
   --set-secrets "DAILY_REFRESH_SECRET=DAILY_REFRESH_SECRET:latest"
 ```
 
@@ -72,7 +72,7 @@ gcloud run deploy $service `
 - TTS 失敗でテキストだけ返る
   - `audioStatus=failed` が返っていないか確認し、Cloud Run logs を見てください。
 - model availability error
-  - `GEMINI_MODEL=gemini-2.5-flash`、`GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`、`VERTEX_LOCATION=global` を使って再 deploy してください。
+  - `GEMINI_MODEL=gemini-2.5-pro`、`GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`、`VERTEX_LOCATION=global` を使って再 deploy してください。
 - image download URL error
   - `storage.rules` を deploy し、backend が `characters/{uid}/...` 配下へ保存しているか確認してください。
 - source deploy picks Flutter instead of backend
