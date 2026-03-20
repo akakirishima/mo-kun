@@ -1,21 +1,29 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 enum HomeRoomStageState { ready, loading, empty, error }
 
-class HomeRoomStage extends StatelessWidget {
+class HomeRoomStage extends StatefulWidget {
   const HomeRoomStage({
     super.key,
     this.imageUrl,
+    this.videoUrl,
     required this.state,
     required this.message,
   });
 
   final String? imageUrl;
+  final String? videoUrl;
   final HomeRoomStageState state;
   final String message;
 
+  @override
+  State<HomeRoomStage> createState() => _HomeRoomStageState();
+}
+
+class _HomeRoomStageState extends State<HomeRoomStage> {
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -39,7 +47,9 @@ class HomeRoomStage extends StatelessWidget {
         padding: const EdgeInsets.all(1),
         child: Stack(
           children: [
-            const Positioned.fill(child: CustomPaint(painter: _BackdropPainter())),
+            const Positioned.fill(
+              child: CustomPaint(painter: _BackdropPainter()),
+            ),
             Positioned(
               left: 2,
               top: 2,
@@ -73,9 +83,10 @@ class HomeRoomStage extends StatelessWidget {
                         ),
                       ),
                       child: _StageContent(
-                        imageUrl: imageUrl,
-                        state: state,
-                        message: message,
+                        imageUrl: widget.imageUrl,
+                        videoUrl: widget.videoUrl,
+                        state: widget.state,
+                        message: widget.message,
                       ),
                     ),
                   ),
@@ -89,66 +100,188 @@ class HomeRoomStage extends StatelessWidget {
   }
 }
 
-class _StageContent extends StatelessWidget {
+class _StageContent extends StatefulWidget {
   const _StageContent({
     required this.imageUrl,
+    required this.videoUrl,
     required this.state,
     required this.message,
   });
 
   final String? imageUrl;
+  final String? videoUrl;
   final HomeRoomStageState state;
   final String message;
 
   @override
+  State<_StageContent> createState() => _StageContentState();
+}
+
+class _StageContentState extends State<_StageContent> {
+  VideoPlayerController? _videoController;
+  Object? _videoError;
+  String? _lastVideoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncVideoController();
+  }
+
+  @override
+  void didUpdateWidget(covariant _StageContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _syncVideoController();
+    }
+  }
+
+  Future<void> _syncVideoController() async {
+    final nextUrl = widget.videoUrl?.trim();
+    if (nextUrl == _lastVideoUrl) {
+      return;
+    }
+    _lastVideoUrl = nextUrl;
+    _videoError = null;
+
+    final previousController = _videoController;
+    _videoController = null;
+    if (mounted) {
+      setState(() {});
+    }
+    await previousController?.dispose();
+
+    if (nextUrl == null || nextUrl.isEmpty) {
+      return;
+    }
+
+    final controller = VideoPlayerController.networkUrl(Uri.parse(nextUrl));
+    _videoController = controller;
+
+    try {
+      await controller.setLooping(true);
+      await controller.setVolume(0);
+      await controller.initialize();
+      await controller.play();
+      if (!mounted || _videoController != controller) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {});
+    } catch (error) {
+      if (_videoController == controller) {
+        _videoError = error;
+        await controller.dispose();
+        _videoController = null;
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return switch (state) {
+    return switch (widget.state) {
       HomeRoomStageState.loading => const Center(
-          child: SizedBox(
-            width: 30,
-            height: 30,
-            child: CircularProgressIndicator(
-              key: ValueKey<String>('home-room-stage-loading'),
-              strokeWidth: 2.6,
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: CircularProgressIndicator(
+            key: ValueKey<String>('home-room-stage-loading'),
+            strokeWidth: 2.6,
+          ),
+        ),
+      ),
+      HomeRoomStageState.ready => ColoredBox(
+        color: const Color(0xFFFFF2F8),
+        child: _buildReadyMedia(),
+      ),
+      HomeRoomStageState.empty => _StageMessage(
+        key: const ValueKey<String>('home-room-stage-empty'),
+        title: widget.message,
+        subtitle: 'HOME から再生成するとここに表示されます',
+      ),
+      HomeRoomStageState.error => _StageMessage(
+        key: const ValueKey<String>('home-room-stage-error'),
+        title: widget.message,
+        subtitle: '時間をおいてもう一度お試しください',
+      ),
+    };
+  }
+
+  Widget _buildReadyMedia() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: _buildMediaChild(),
+    );
+  }
+
+  Widget _buildMediaChild() {
+    final controller = _videoController;
+    if (controller != null &&
+        controller.value.isInitialized &&
+        _videoError == null) {
+      final size = controller.value.size;
+      return KeyedSubtree(
+        key: ValueKey<String>('video-${widget.videoUrl ?? ""}'),
+        child: ClipRect(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: size.width <= 0 ? 1 : size.width,
+              height: size.height <= 0 ? 1 : size.height,
+              child: VideoPlayer(
+                controller,
+                key: const ValueKey<String>('home-room-stage-video'),
+              ),
             ),
           ),
         ),
-      HomeRoomStageState.ready => ColoredBox(
-          color: const Color(0xFFFFF2F8),
-          child: Image.network(
-            imageUrl!,
-            key: const ValueKey<String>('home-room-stage-image'),
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-            errorBuilder: (_, __, ___) {
-              return const _StageMessage(
-                key: ValueKey<String>('home-room-stage-error'),
-                title: '通信に失敗しました',
-                subtitle: '時間をおいてもう一度お試しください',
-              );
-            },
-          ),
+      );
+    }
+
+    final imageUrl = widget.imageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return KeyedSubtree(
+        key: ValueKey<String>('image-$imageUrl'),
+        child: Image.network(
+          imageUrl,
+          key: const ValueKey<String>('home-room-stage-image'),
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          errorBuilder: (_, __, ___) {
+            return const _StageMessage(
+              key: ValueKey<String>('home-room-stage-error'),
+              title: '通信に失敗しました',
+              subtitle: '時間をおいてもう一度お試しください',
+            );
+          },
         ),
-      HomeRoomStageState.empty => _StageMessage(
-          key: const ValueKey<String>('home-room-stage-empty'),
-          title: message,
-          subtitle: 'HOME から再生成するとここに表示されます',
-        ),
-      HomeRoomStageState.error => _StageMessage(
-          key: const ValueKey<String>('home-room-stage-error'),
-          title: message,
-          subtitle: '時間をおいてもう一度お試しください',
-        ),
-    };
+      );
+    }
+
+    return const _StageMessage(
+      key: ValueKey<String>('home-room-stage-error'),
+      title: '通信に失敗しました',
+      subtitle: '時間をおいてもう一度お試しください',
+    );
   }
 }
 
 class _StageMessage extends StatelessWidget {
-  const _StageMessage({
-    super.key,
-    required this.title,
-    required this.subtitle,
-  });
+  const _StageMessage({super.key, required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -284,10 +417,7 @@ class _BackdropPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height * 0.7),
-      wall,
-    );
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height * 0.7), wall);
     canvas.drawRect(
       Rect.fromLTWH(0, size.height * 0.7, size.width, size.height * 0.3),
       floor,

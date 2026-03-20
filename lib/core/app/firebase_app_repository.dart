@@ -97,13 +97,11 @@ class FirebaseAppRepository implements AppRepository {
     String? imageFilename,
   }) async {
     final token = await auth.currentUser!.getIdToken();
-    final request = http.MultipartRequest(
-      'POST',
-      baseUri.resolve('/v1/chat/messages'),
-    )
-      ..headers['Authorization'] = 'Bearer $token'
-      ..fields['threadId'] = threadId
-      ..fields['clientMessageId'] = clientMessageId;
+    final request =
+        http.MultipartRequest('POST', baseUri.resolve('/v1/chat/messages'))
+          ..headers['Authorization'] = 'Bearer $token'
+          ..fields['threadId'] = threadId
+          ..fields['clientMessageId'] = clientMessageId;
 
     if (text.isNotEmpty) {
       request.fields['text'] = text;
@@ -135,21 +133,19 @@ class FirebaseAppRepository implements AppRepository {
     required String clientMessageId,
   }) async {
     final token = await auth.currentUser!.getIdToken();
-    final request = http.MultipartRequest(
-      'POST',
-      baseUri.resolve('/v1/chat/voice'),
-    )
-      ..headers['Authorization'] = 'Bearer $token'
-      ..fields['threadId'] = threadId
-      ..fields['clientMessageId'] = clientMessageId
-      ..fields['durationMs'] = '$durationMs'
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'audio',
-          audioBytes,
-          filename: 'voice-input.wav',
-        ),
-      );
+    final request =
+        http.MultipartRequest('POST', baseUri.resolve('/v1/chat/voice'))
+          ..headers['Authorization'] = 'Bearer $token'
+          ..fields['threadId'] = threadId
+          ..fields['clientMessageId'] = clientMessageId
+          ..fields['durationMs'] = '$durationMs'
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'audio',
+              audioBytes,
+              filename: 'voice-input.wav',
+            ),
+          );
 
     final streamed = await client.send(request);
     final response = await http.Response.fromStream(streamed);
@@ -166,7 +162,9 @@ class FirebaseAppRepository implements AppRepository {
       audioStatus: (decoded['audioStatus'] as String?) == 'ready'
           ? VoiceChatAudioStatus.ready
           : VoiceChatAudioStatus.failed,
-      assistantAudioBytes: audioBase64 == null ? null : base64Decode(audioBase64),
+      assistantAudioBytes: audioBase64 == null
+          ? null
+          : base64Decode(audioBase64),
       assistantAudioMimeType: decoded['assistantAudioMimeType'] as String?,
       userMessageId: decoded['userMessageId'] as String?,
       assistantMessageId: decoded['assistantMessageId'] as String?,
@@ -201,7 +199,12 @@ class FirebaseAppRepository implements AppRepository {
         imageStatus: _parseImageStatus(
           data['imageGenerationStatus'] as String?,
         ),
+        videoStatus: _parseVideoStatus(
+          data['videoGenerationStatus'] as String?,
+        ),
         latestImageUrl: data['lastGeneratedImageUrl'] as String?,
+        latestVideoUrl: data['lastGeneratedVideoUrl'] as String?,
+        posterImageUrl: data['lastVideoPosterImageUrl'] as String?,
         lastGeneratedAt: _parseTimestamp(data['lastImageGeneratedAt']),
         starterGreeting: data['starterGreeting'] as String?,
       );
@@ -372,6 +375,19 @@ class FirebaseAppRepository implements AppRepository {
         return CharacterImageStatus.failed;
       default:
         return CharacterImageStatus.idle;
+    }
+  }
+
+  CharacterVideoStatus _parseVideoStatus(String? value) {
+    switch (value) {
+      case 'generating':
+        return CharacterVideoStatus.generating;
+      case 'ready':
+        return CharacterVideoStatus.ready;
+      case 'failed':
+        return CharacterVideoStatus.failed;
+      default:
+        return CharacterVideoStatus.idle;
     }
   }
 

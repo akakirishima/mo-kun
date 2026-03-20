@@ -21,6 +21,13 @@ enum HomeOverlayMode { none, voice, photo, chat }
 
 enum HomeVoiceState { idle, recording, uploading, playing, error }
 
+class _StageMedia {
+  const _StageMedia({this.videoUrl, this.imageUrl});
+
+  final String? videoUrl;
+  final String? imageUrl;
+}
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     super.key,
@@ -499,19 +506,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final character = characterId == null
         ? null
         : ref.watch(characterProvider(characterId)).valueOrNull;
-    final resolvedCharacterImageUrl = ref.watch(
-      resolvedImageUrlProvider(character?.latestImageUrl),
+    final stageMedia = _StageMedia(
+      videoUrl: character?.latestVideoUrl,
+      imageUrl: character?.posterImageUrl ?? character?.latestImageUrl,
     );
-    final rawCharacterImageUrl = character?.latestImageUrl;
-    final stageState = resolvedCharacterImageUrl.isLoading
+    final resolvedCharacterVideoUrl = ref.watch(
+      resolvedImageUrlProvider(stageMedia.videoUrl),
+    );
+    final resolvedCharacterImageUrl = ref.watch(
+      resolvedImageUrlProvider(stageMedia.imageUrl),
+    );
+    final hasRawCharacterVideoUrl =
+        stageMedia.videoUrl != null && stageMedia.videoUrl!.isNotEmpty;
+    final rawCharacterImageUrl = stageMedia.imageUrl;
+    final hasRawCharacterImageUrl =
+        rawCharacterImageUrl != null && rawCharacterImageUrl.isNotEmpty;
+    final hasResolvedVideoUrl =
+        (resolvedCharacterVideoUrl.valueOrNull ?? '').isNotEmpty;
+    final hasResolvedImageUrl =
+        (resolvedCharacterImageUrl.valueOrNull ?? '').isNotEmpty;
+    final isMediaLoading =
+        (hasRawCharacterVideoUrl && resolvedCharacterVideoUrl.isLoading) ||
+        (hasRawCharacterImageUrl && resolvedCharacterImageUrl.isLoading);
+    final stageState = hasResolvedVideoUrl || hasResolvedImageUrl
+        ? HomeRoomStageState.ready
+        : isMediaLoading
         ? HomeRoomStageState.loading
-        : (rawCharacterImageUrl == null || rawCharacterImageUrl.isEmpty)
+        : (!hasRawCharacterVideoUrl && !hasRawCharacterImageUrl)
         ? HomeRoomStageState.empty
-        : (resolvedCharacterImageUrl.hasError ||
-              resolvedCharacterImageUrl.valueOrNull == null ||
-              resolvedCharacterImageUrl.valueOrNull!.isEmpty)
-        ? HomeRoomStageState.error
-        : HomeRoomStageState.ready;
+        : HomeRoomStageState.error;
     final stageMessage = switch (stageState) {
       HomeRoomStageState.loading => '画像を準備しています',
       HomeRoomStageState.empty => 'まだ画像がありません',
@@ -564,6 +587,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 width: stageSize,
                 height: stageSize,
                 child: HomeRoomStage(
+                  videoUrl: resolvedCharacterVideoUrl.valueOrNull,
                   imageUrl: resolvedCharacterImageUrl.valueOrNull,
                   state: stageState,
                   message: stageMessage,

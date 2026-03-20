@@ -7,6 +7,7 @@ import {
 import { loadConfig, type AppConfig } from "../config.js";
 import {
   CharacterDraft,
+  SceneSlot,
   DailyBubbleDraft,
   DailySummaryDraft,
   PhotoAnalysisDraft,
@@ -27,12 +28,30 @@ type GeneratedImageAsset = {
   imageBytes: Buffer;
 };
 
+type GeneratedVideoAsset = {
+  mimeType: string;
+  videoBytes?: Buffer;
+  uri?: string;
+};
+
 type ImagePromptContext = {
   characterName: string;
   visualPromptBase: string;
   visualEvolutionMemo: string;
   todaySummary: string;
   sceneItems: string[];
+  sceneSlot?: SceneSlot;
+  optionalNote?: string;
+};
+
+type MotionPromptContext = {
+  characterName: string;
+  visualEvolutionMemo: string;
+  todaySummary: string;
+  sceneItems: string[];
+  sceneSlot?: SceneSlot;
+  activityLabel?: string;
+  motionMode?: "base" | "activity";
   optionalNote?: string;
 };
 
@@ -281,6 +300,17 @@ export class AiService {
     return buildCharacterImagePrompt(params);
   }
 
+  buildCharacterMotionPrompt(params: MotionPromptContext): string {
+    return buildCharacterMotionPrompt(params);
+  }
+
+  buildCharacterActivityMotionPrompt(params: MotionPromptContext): string {
+    return buildCharacterMotionPrompt({
+      ...params,
+      motionMode: "activity",
+    });
+  }
+
   async generateRoomSceneItems(params: {
     todaySummary: string;
     messages: MessageContext;
@@ -335,6 +365,76 @@ export class AiService {
         throw error;
       }
       throw new AiServiceError(`gemini_image_generation_failed: ${detail}`, error);
+    }
+  }
+
+  async generateCharacterMotionVideo(params: {
+    imageBytes: Buffer;
+    mimeType: string;
+    prompt: string;
+    outputGcsUri?: string;
+  }): Promise<GeneratedVideoAsset> {
+    try {
+      let operation = await this.client.models.generateVideos({
+        model: this.config.veoModel,
+        prompt: params.prompt,
+        image: {
+          imageBytes: params.imageBytes.toString("base64"),
+          mimeType: params.mimeType,
+        },
+        config: {
+          aspectRatio: "16:9",
+          durationSeconds: 8,
+          numberOfVideos: 1,
+          resolution: "720p",
+          generateAudio: false,
+          enhancePrompt: true,
+          outputGcsUri: params.outputGcsUri,
+          negativePrompt: [
+            "camera movement",
+            "camera pan",
+            "zoom",
+            "scene transition",
+            "layout change",
+            "furniture rearrangement",
+            "new room objects",
+            "identity change",
+            "extreme limb deformation",
+            "violent motion",
+            "text overlay",
+          ].join(", "),
+        },
+      });
+
+      for (let attempt = 0; !operation.done && attempt < 24; attempt += 1) {
+        await sleep(5000);
+        operation = await this.client.operations.getVideosOperation({
+          operation,
+        });
+      }
+
+      if (!operation.done) {
+        throw new AiServiceError("veo_video_generation_timeout");
+      }
+
+      if (operation.error != null) {
+        throw new AiServiceError(
+          `veo_video_generation_failed: ${JSON.stringify(operation.error)}`,
+        );
+      }
+
+      return extractGeneratedVideo(operation.response);
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      console.error("Veo video generation failed", {
+        model: this.config.veoModel,
+        location: this.config.vertexLocation,
+        detail,
+      });
+      if (error instanceof AiServiceError) {
+        throw error;
+      }
+      throw new AiServiceError(`veo_video_generation_failed: ${detail}`, error);
     }
   }
 
@@ -746,6 +846,7 @@ export function buildCharacterImagePrompt(params: ImagePromptContext): string {
   const sceneItemLines = assignRoomSceneSlots(params.sceneItems).map(
     (assignment) => `- ${assignment.slot}: ${assignment.item}`,
   );
+  const sceneMood = describeSceneSlot(params.sceneSlot);
 
   return [
     `あなたは${params.characterName}という同一キャラクターの最新ビジュアルを生成する。`,
@@ -759,6 +860,7 @@ export function buildCharacterImagePrompt(params: ImagePromptContext): string {
     "- fixed one-room layout from a slightly top-down angle",
     "- left side bed, back wall desk and monitor, two windows, round rug, small table, sofa, cabinet, wall frames",
     "- character stands or sits near the center of the room and is the clear main focus",
+    `- time-of-day mood: ${sceneMood}`,
     "",
     "直近7日間の成長メモ:",
     params.visualEvolutionMemo.trim(),
@@ -794,6 +896,89 @@ export function buildCharacterImagePrompt(params: ImagePromptContext): string {
     "- 部屋のレイアウトを大きく変えない",
     "- キャラクターを部屋の端に寄せない",
   ].join("\n");
+}
+
+export function buildCharacterMotionPrompt(params: MotionPromptContext): string {
+  const optionalNote = params.optionalNote?.trim();
+  const sceneItemText = params.sceneItems.length > 0
+    ? params.sceneItems.join(", ")
+    : "特別な小物の変化はなし";
+  const sceneMood = describeSceneSlot(params.sceneSlot);
+  const motionMode = params.motionMode ?? "base";
+  const activityInstruction = params.activityLabel?.trim()
+    ? buildActivityMotionInstruction(params.activityLabel.trim())
+    : "The character performs a small natural walk cycle near the center of the room.";
+
+  return [
+    `Animate the existing room image of ${params.characterName}.`,
+    "Preserve the exact room layout, character identity, pose silhouette style, and object placement from the input image.",
+    "Camera fixed.",
+    "Create a seamless loopable motion.",
+    motionMode === "activity"
+      ? activityInstruction
+      : "Add only soft idle room motion in curtains, light, and tiny details.",
+    motionMode === "activity"
+      ? "Also keep soft idle room motion in curtains, light, and tiny details."
+      : "The character makes only tiny idle motions like breathing, blinking, and subtle posture shifts.",
+    "No text overlays.",
+    "No camera pan.",
+    "No zoom.",
+    "No scene transition.",
+    "No furniture rearrangement.",
+    "No new room expansion.",
+    "No character identity change.",
+    "No extreme limb deformation.",
+    "Keep the movement gentle and believable for a cozy pixel-art room.",
+    `Keep the room lighting and atmosphere consistent with ${sceneMood}.`,
+    "",
+    "Recent growth mood:",
+    params.visualEvolutionMemo.trim(),
+    "",
+    "Today's reflection:",
+    params.todaySummary.trim(),
+    "",
+    `Scene items to preserve: ${sceneItemText}`,
+    `One-off note: ${optionalNote && optionalNote.length > 0 ? optionalNote : "none"}`,
+  ].join("\n");
+}
+
+function describeSceneSlot(sceneSlot?: SceneSlot): string {
+  switch (sceneSlot) {
+    case "morning":
+      return "soft fresh morning light, bright windows, gentle start-of-day atmosphere";
+    case "day":
+      return "clear daytime light, open and active room feeling";
+    case "night":
+      return "warm evening or late-night light, calm cozy indoor atmosphere";
+    default:
+      return "soft daylight in the same room";
+  }
+}
+
+function buildActivityMotionInstruction(activityLabel: string): string {
+  const normalized = activityLabel.toLowerCase();
+  if (normalized.includes("walk")) {
+    return "The character performs a small natural walk cycle near the center of the room.";
+  }
+  if (normalized.includes("relax") || activityLabel.includes("息抜") || activityLabel.includes("休憩")) {
+    return "The character makes a small relaxing loop near the sofa or rug, with gentle stretch and rest motions.";
+  }
+  if (normalized.includes("study") || activityLabel.includes("勉強") || activityLabel.includes("作業")) {
+    return "The character makes a subtle study loop near the desk, with small writing or computer-work motions.";
+  }
+  if (normalized.includes("reading") || activityLabel.includes("読書") || activityLabel.includes("本")) {
+    return "The character makes a subtle reading loop with a book or notebook near the center or desk area.";
+  }
+  if (normalized.includes("sleep") || activityLabel.includes("寝") || activityLabel.includes("睡眠")) {
+    return "The character rests on the bed with gentle breathing and very small sleepy loop motions.";
+  }
+  if (normalized.includes("snack") || activityLabel.includes("おやつ") || activityLabel.includes("間食")) {
+    return "The character makes a tiny snack-break loop with a small treat and relaxed posture.";
+  }
+  if (normalized.includes("meal") || activityLabel.includes("食") || activityLabel.includes("ご飯")) {
+    return "The character makes a gentle meal loop with small eating motions at the table area.";
+  }
+  return `The character performs a gentle loop that clearly suggests this activity: ${activityLabel}.`;
 }
 
 export function summarizeDailySummary(summary: StoredDailySummary): string {
@@ -955,6 +1140,31 @@ export function extractGeneratedImage(response: unknown): GeneratedImageAsset {
   throw new AiServiceError("gemini_image_response_missing_inline_data");
 }
 
+export function extractGeneratedVideo(response: unknown): GeneratedVideoAsset {
+  if (typeof response !== "object" || response == null) {
+    throw new AiServiceError("veo_video_response_missing_payload");
+  }
+
+  const generatedVideos = (response as {
+    generatedVideos?: Array<{
+      video?: { uri?: string; videoBytes?: string; mimeType?: string };
+    }>;
+  }).generatedVideos;
+  const firstVideo = generatedVideos?.[0]?.video;
+
+  if (!firstVideo) {
+    throw new AiServiceError("veo_video_response_missing_video");
+  }
+
+  return {
+    mimeType: firstVideo.mimeType ?? "video/mp4",
+    uri: firstVideo.uri,
+    videoBytes: firstVideo.videoBytes
+      ? Buffer.from(firstVideo.videoBytes, "base64")
+      : undefined,
+  };
+}
+
 function extractResponseParts(
   response: unknown,
 ): Array<{ inlineData?: { data?: string; mimeType?: string } }> {
@@ -971,6 +1181,10 @@ function extractResponseParts(
   };
 
   return candidateContainer.candidates?.flatMap((candidate) => candidate.content?.parts ?? []) ?? [];
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizePromptText(text?: string): string | null {

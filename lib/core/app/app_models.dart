@@ -4,6 +4,8 @@ enum ChatRole { user, assistant }
 
 enum CharacterImageStatus { idle, generating, ready, failed }
 
+enum CharacterVideoStatus { idle, generating, ready, failed }
+
 enum ChatInputType { text, voice, photo }
 
 enum VoiceChatAudioStatus { ready, failed }
@@ -81,7 +83,10 @@ class CharacterSnapshot {
     required this.personaPrompt,
     required this.visualPromptBase,
     required this.imageStatus,
+    this.videoStatus = CharacterVideoStatus.idle,
     this.latestImageUrl,
+    this.latestVideoUrl,
+    this.posterImageUrl,
     this.lastGeneratedAt,
     this.starterGreeting,
   });
@@ -91,7 +96,10 @@ class CharacterSnapshot {
   final String personaPrompt;
   final String visualPromptBase;
   final CharacterImageStatus imageStatus;
+  final CharacterVideoStatus videoStatus;
   final String? latestImageUrl;
+  final String? latestVideoUrl;
+  final String? posterImageUrl;
   final DateTime? lastGeneratedAt;
   final String? starterGreeting;
 }

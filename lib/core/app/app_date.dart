@@ -1,6 +1,8 @@
 const int _jstOffsetHours = 9;
 const int _appDayCutoffHours = 3;
 
+enum AppSceneSlot { morning, day, night }
+
 DateTime resolveAppDate(DateTime dateTime) {
   final shifted = dateTime.toUtc().add(
     const Duration(hours: _jstOffsetHours - _appDayCutoffHours),
@@ -49,6 +51,20 @@ DateTime appDayBoundaryUtc(DateTime appDate) {
     appDate.day,
     3 - _jstOffsetHours,
   );
+}
+
+AppSceneSlot resolveCurrentSceneSlot([DateTime? now]) {
+  final jst = (now ?? DateTime.now()).toUtc().add(
+    const Duration(hours: _jstOffsetHours),
+  );
+  final hour = jst.hour;
+  if (hour >= 5 && hour <= 10) {
+    return AppSceneSlot.morning;
+  }
+  if (hour >= 11 && hour <= 16) {
+    return AppSceneSlot.day;
+  }
+  return AppSceneSlot.night;
 }
 
 String monthKey(DateTime monthLike) {

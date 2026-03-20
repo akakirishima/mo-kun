@@ -27,6 +27,7 @@ FakeAppRepository buildFakeRepository() {
       personaPrompt: '自分の流れを静かに整理して返す内なる声。',
       visualPromptBase: '会話内容に応じて見た目が少し変わる自己投影キャラクター。',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
     ),

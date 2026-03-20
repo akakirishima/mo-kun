@@ -10,6 +10,7 @@ import {
   CharacterImageService,
   CloudStorageChatPhotoStore,
   CloudStorageImageStore,
+  CloudStorageVideoStore,
 } from "./services/character-image-service.js";
 import { buildAppDateKey } from "./services/app-date.js";
 import { DailyBubbleService } from "./services/daily-bubble-service.js";
@@ -25,6 +26,7 @@ const imageService = new CharacterImageService(
   repository,
   aiService,
   new CloudStorageImageStore(getStorageClient().bucket(config.imageBucket)),
+  new CloudStorageVideoStore(getStorageClient().bucket(config.imageBucket)),
 );
 const chatPhotoStore = new CloudStorageChatPhotoStore(
   getStorageClient().bucket(config.imageBucket),

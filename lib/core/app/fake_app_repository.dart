@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
@@ -53,12 +52,14 @@ class FakeAppRepository implements AppRepository {
     _character = CharacterSnapshot(
       id: 'character-${_session.userId}',
       name: input.displayName.isEmpty ? 'Self' : input.displayName,
-      personaPrompt:
-          'You are the user\'s reflective inner voice.',
+      personaPrompt: 'You are the user\'s reflective inner voice.',
       visualPromptBase:
           'Soft illustrated self-projection character, reflects recent self-improvement.',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
+      latestVideoUrl: null,
+      posterImageUrl: null,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
     );
@@ -74,7 +75,8 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: _dateKey(now),
         title: 'はじまりの日',
-        diaryBody: '今日はプロフィールを登録して、自分を投影したキャラクターを迎えた。'
+        diaryBody:
+            '今日はプロフィールを登録して、自分を投影したキャラクターを迎えた。'
             '\n明日はまず小さな報告を1つ送れたらいいな。',
         mood: 'わくわく',
         doneThings: ['プロフィールを登録した', 'キャラクターを作った'],
@@ -152,6 +154,7 @@ class FakeAppRepository implements AppRepository {
         imageAnalysis: photoAnalysis,
       ),
     ];
+
     final todayDateKey = _dateKey(now);
     final existingSummary = _summaryForDate(todayDateKey);
     final photoActivity = photoAnalysis?.activity;
@@ -195,7 +198,10 @@ class FakeAppRepository implements AppRepository {
       personaPrompt: _character?.personaPrompt ?? '',
       visualPromptBase: _character?.visualPromptBase ?? '',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
+      latestVideoUrl: null,
+      posterImageUrl: null,
       lastGeneratedAt: now,
       starterGreeting: _character?.starterGreeting,
     );
@@ -247,7 +253,8 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: _dateKey(now),
         title: '声で整理した日',
-        diaryBody: '今日は音声で気持ちを整理して、ひとつ先の動きを言葉にした。'
+        diaryBody:
+            '今日は音声で気持ちを整理して、ひとつ先の動きを言葉にした。'
             '\n明日はその続きを短く残せたらいいな。',
         mood: '穏やか',
         doneThings: const <String>['音声で整理した'],
@@ -282,6 +289,8 @@ class FakeAppRepository implements AppRepository {
     ].join(' / ');
     final imageUrl =
         'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.png';
+    final videoUrl =
+        'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.mp4';
 
     _imageHistory = [
       CharacterImageVersion(
@@ -301,7 +310,10 @@ class FakeAppRepository implements AppRepository {
       personaPrompt: _character?.personaPrompt ?? '',
       visualPromptBase: _character?.visualPromptBase ?? '',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.ready,
       latestImageUrl: imageUrl,
+      latestVideoUrl: videoUrl,
+      posterImageUrl: imageUrl,
       lastGeneratedAt: now,
       starterGreeting: _character?.starterGreeting,
     );
@@ -340,7 +352,7 @@ class FakeAppRepository implements AppRepository {
   }) async* {
     yield _summaryForDate(dateKey);
     yield* _dailySummariesController.stream.map(
-        (summaries) => _findSummaryByDate(summaries, dateKey),
+      (summaries) => _findSummaryByDate(summaries, dateKey),
     );
   }
 

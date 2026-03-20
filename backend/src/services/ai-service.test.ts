@@ -3,6 +3,7 @@ import {
   buildAssistantPrompt,
   buildAssistantSystemInstruction,
   buildCharacterImagePrompt,
+  buildCharacterMotionPrompt,
   buildDailySummaryPrompt,
   buildDailySummarySystemInstruction,
   buildFallbackDailySummary,
@@ -221,13 +222,29 @@ const imagePrompt = buildCharacterImagePrompt({
 });
 
 assert.match(imagePrompt, /pixel-art isometric room illustration/);
-assert.match(imagePrompt, /wide horizontal composition/);
+assert.match(imagePrompt, /wide horizontal composition/i);
 assert.match(imagePrompt, /character stands or sits near the center/);
 assert.match(imagePrompt, /desk top item: ノートPC/);
 assert.match(imagePrompt, /表情に少し自信が出てきた/);
 assert.match(imagePrompt, /少し春っぽい空気感/);
 assert.match(imagePrompt, /構図ルール/);
 assert.match(imagePrompt, /縦長の人物ポートレートにしない/);
+
+const motionPrompt = buildCharacterMotionPrompt({
+  characterName: "Mori",
+  visualEvolutionMemo: "表情に少し自信が出てきた。",
+  todaySummary: "日付: 2026-03-16\nやったこと: UI を整えた",
+  sceneItems: ["ノートPC", "付せんメモ"],
+  sceneSlot: "night",
+  optionalNote: "少し春っぽい空気感",
+});
+
+assert.match(motionPrompt, /Camera fixed/i);
+assert.match(motionPrompt, /tiny idle motions/i);
+assert.match(motionPrompt, /preserve the exact room layout/i);
+assert.match(motionPrompt, /ノートPC/);
+assert.match(motionPrompt, /少し春っぽい空気感/);
+assert.match(motionPrompt, /late-night light|evening/i);
 
 const generatedImage = extractGeneratedImage({
   candidates: [

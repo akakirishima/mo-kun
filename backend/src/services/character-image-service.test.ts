@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  buildMotionPromptExcerpt,
   buildPromptExcerpt,
   CharacterImageService,
 } from "./character-image-service.js";
@@ -10,6 +11,7 @@ class FakeRepository {
   character = {
     name: "Mori",
     visualPromptBase: "soft illustrated companion",
+    visualEvolutionMemo: "落ち着いた成長が続いている。",
   };
 
   recentSummaries: StoredDailySummary[] = [
@@ -26,14 +28,9 @@ class FakeRepository {
 
   recentMessages = [{ role: "user", text: "今日は UI を整えた" }];
   markedGenerating: Array<Record<string, unknown>> = [];
-  savedImages: Array<{
-    status: string;
-    image: {
-      imageUrl?: string | null;
-      dateKey?: string;
-    };
-    dateKey?: string;
-  }> = [];
+  markedVideoGenerating: Array<Record<string, unknown>> = [];
+  savedImages: Array<Record<string, unknown>> = [];
+  savedVideos: Array<Record<string, unknown>> = [];
 
   async getCharacterContext() {
     return this.character;
@@ -47,44 +44,35 @@ class FakeRepository {
     this.markedGenerating.push(params);
   }
 
-  async saveCharacterImage(params: {
-    status: string;
-    image: {
-      imageUrl?: string | null;
-      dateKey?: string;
-    };
-    dateKey?: string;
-  }) {
+  async markCharacterVideoGenerating(params: Record<string, unknown>) {
+    this.markedVideoGenerating.push(params);
+  }
+
+  async saveCharacterImage(params: Record<string, unknown>) {
     this.savedImages.push(params);
   }
 
   async getMessagesForDateKey() {
     return this.recentMessages;
   }
+
+  async saveCharacterVideo(params: Record<string, unknown>) {
+    this.savedVideos.push(params);
+  }
 }
 
 class FakeAiService {
-  generatedPrompt = "";
-  generatedSceneItems: string[] = [];
+  imagePromptCalls = 0;
+  motionVideoCalls = 0;
+  motionVideoInputs: Array<{ imageBytes: Buffer; mimeType: string }> = [];
 
   async generateVisualEvolutionMemo() {
     return "表情に少し自信がにじみ、姿勢もわずかに伸びてきた。";
   }
 
-  buildCharacterImagePrompt(params: {
-    visualEvolutionMemo: string;
-    todaySummary: string;
-    sceneItems: string[];
-    optionalNote?: string;
-  }) {
-    this.generatedSceneItems = params.sceneItems;
-    this.generatedPrompt = [
-      params.visualEvolutionMemo,
-      params.todaySummary,
-      params.sceneItems.join(", "),
-      params.optionalNote ?? "",
-    ].join("\n");
-    return this.generatedPrompt;
+  buildCharacterImagePrompt() {
+    this.imagePromptCalls += 1;
+    return `image-prompt-${this.imagePromptCalls}`;
   }
 
   async generateRoomSceneItems() {
@@ -101,6 +89,29 @@ class FakeAiService {
     };
   }
 
+  buildCharacterMotionPrompt() {
+    return "base-motion";
+  }
+
+  async generateCharacterMotionVideo(params: {
+    imageBytes: Buffer;
+    mimeType: string;
+  }): Promise<{
+    mimeType: string;
+    uri?: string;
+    videoBytes?: Buffer<ArrayBufferLike>;
+  }> {
+    this.motionVideoCalls += 1;
+    this.motionVideoInputs.push({
+      imageBytes: params.imageBytes,
+      mimeType: params.mimeType,
+    });
+    return {
+      mimeType: "video/mp4",
+      uri: "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4",
+    };
+  }
+
   generateDailySummary(params: { dateKey: string }) {
     return {
       dateKey: params.dateKey,
@@ -114,7 +125,7 @@ class FakeAiService {
   }
 }
 
-class FailingAiService extends FakeAiService {
+class FailingImageAiService extends FakeAiService {
   override async generateCharacterImage(): Promise<{
     mimeType: string;
     imageBytes: Buffer<ArrayBufferLike>;
@@ -123,9 +134,36 @@ class FailingAiService extends FakeAiService {
   }
 }
 
+class FailingVideoAiService extends FakeAiService {
+  override async generateCharacterMotionVideo(): Promise<{
+    mimeType: string;
+    uri?: string;
+    videoBytes?: Buffer<ArrayBufferLike>;
+  }> {
+    throw new Error("video generation failed");
+  }
+}
+
 class FakeImageStore {
   async save() {
     return "gs://demo-bucket/characters/test-user/imageHistory/demo.png";
+  }
+
+  async load() {
+    return {
+      bytes: Buffer.from("base-image"),
+      mimeType: "image/png",
+    };
+  }
+}
+
+class FakeVideoStore {
+  buildOutputGcsUri() {
+    return "gs://demo-bucket/characters/test-user/videoHistory";
+  }
+
+  async save(params: { generatedUri?: string }) {
+    return params.generatedUri ?? "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4";
   }
 }
 
@@ -135,44 +173,62 @@ const service = new CharacterImageService(
   repository as never,
   aiService as never,
   new FakeImageStore(),
+  new FakeVideoStore(),
 );
 
 const created = await service.generateAndPersist({
   userId: "test-user",
   title: "更新した姿",
   optionalNote: "少し春っぽく",
+  now: new Date("2026-03-18T09:00:00+09:00"),
 });
 
-assert.equal(
-  created.imageUrl,
-  "gs://demo-bucket/characters/test-user/imageHistory/demo.png",
-);
+assert.equal(created.imageUrl, "gs://demo-bucket/characters/test-user/imageHistory/demo.png");
 assert.equal(repository.markedGenerating.length, 1);
+assert.equal(repository.markedVideoGenerating.length, 1);
 assert.equal(repository.savedImages.length, 1);
-assert.equal(repository.savedImages[0].status, "ready");
-assert.equal(repository.savedImages[0].dateKey, buildAppDateKey(new Date()));
-assert.match(aiService.generatedPrompt, /表情に少し自信/);
-assert.match(aiService.generatedPrompt, /小さく前進した日|日付:/);
-assert.deepEqual(aiService.generatedSceneItems, ["ダンベル", "水筒"]);
-assert.match(aiService.generatedPrompt, /少し春っぽく/);
+assert.equal(repository.savedVideos.length, 1);
+assert.equal(created.latestVideoUrl, "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4");
+assert.equal(created.videoStatus, "ready");
+assert.equal(aiService.motionVideoCalls, 1);
+assert.equal(aiService.motionVideoInputs[0]?.mimeType, "image/png");
+assert.equal(aiService.motionVideoInputs[0]?.imageBytes.toString(), "image-bytes");
 
 const failedRepository = new FakeRepository();
 const failedService = new CharacterImageService(
   failedRepository as never,
-  new FailingAiService() as never,
+  new FailingImageAiService() as never,
   new FakeImageStore(),
+  new FakeVideoStore(),
 );
 
 await assert.rejects(() =>
   failedService.generateAndPersist({
     userId: "test-user",
     title: "更新した姿",
+    now: new Date("2026-03-18T09:00:00+09:00"),
   }),
 );
-assert.equal(failedRepository.savedImages.length, 1);
-assert.equal(failedRepository.savedImages[0].status, "failed");
-assert.equal(failedRepository.savedImages[0].image.imageUrl, null);
-assert.equal(failedRepository.savedImages[0].dateKey, buildAppDateKey(new Date()));
+assert.equal(failedRepository.savedImages.length, 0);
+
+const failedVideoRepository = new FakeRepository();
+const failedVideoService = new CharacterImageService(
+  failedVideoRepository as never,
+  new FailingVideoAiService() as never,
+  new FakeImageStore(),
+  new FakeVideoStore(),
+);
+
+const failedVideoResult = await failedVideoService.generateAndPersist({
+  userId: "test-user",
+  title: "更新した姿",
+  now: new Date("2026-03-18T09:00:00+09:00"),
+});
+
+assert.equal(failedVideoRepository.savedImages.length, 1);
+assert.equal(failedVideoRepository.savedVideos.length, 1);
+assert.equal(failedVideoResult.latestVideoUrl, null);
+assert.equal(failedVideoResult.videoStatus, "failed");
 
 assert.equal(buildAppDateKey(new Date("2026-03-17T02:59:00+09:00")), "2026-03-16");
 assert.equal(buildAppDateKey(new Date("2026-03-17T03:00:00+09:00")), "2026-03-17");
@@ -190,9 +246,19 @@ const excerpt = buildPromptExcerpt({
   optionalNote: "少し春っぽい",
 });
 
+assert.doesNotMatch(excerpt, /slot=/);
 assert.match(excerpt, /growth=/);
-assert.match(excerpt, /today=/);
 assert.match(excerpt, /roomItems=ダンベル, 水筒/);
-assert.match(excerpt, /note=/);
+
+const motionExcerpt = buildMotionPromptExcerpt({
+  visualEvolutionMemo: "表情に少し自信がにじんでいる。",
+  todaySummary: "日付: 2026-03-16\nやったこと: UI を整えた",
+  sceneItems: ["ダンベル", "水筒"],
+  optionalNote: "少し春っぽい",
+});
+
+assert.doesNotMatch(motionExcerpt, /slot=/);
+assert.match(motionExcerpt, /motionGrowth=/);
+assert.match(motionExcerpt, /motionRoomItems=ダンベル, 水筒/);
 
 console.log("character-image-service tests passed");
