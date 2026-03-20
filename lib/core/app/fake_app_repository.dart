@@ -59,6 +59,7 @@ class FakeAppRepository implements AppRepository {
       videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
       latestVideoUrl: null,
+      latestSquareVideoUrl: null,
       posterImageUrl: null,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
@@ -201,6 +202,7 @@ class FakeAppRepository implements AppRepository {
       videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
       latestVideoUrl: null,
+      latestSquareVideoUrl: null,
       posterImageUrl: null,
       lastGeneratedAt: now,
       starterGreeting: _character?.starterGreeting,
@@ -291,6 +293,8 @@ class FakeAppRepository implements AppRepository {
         'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.png';
     final videoUrl =
         'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.mp4';
+    final squareVideoUrl =
+        'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}-square.mp4';
 
     _imageHistory = [
       CharacterImageVersion(
@@ -313,6 +317,7 @@ class FakeAppRepository implements AppRepository {
       videoStatus: CharacterVideoStatus.ready,
       latestImageUrl: imageUrl,
       latestVideoUrl: videoUrl,
+      latestSquareVideoUrl: squareVideoUrl,
       posterImageUrl: imageUrl,
       lastGeneratedAt: now,
       starterGreeting: _character?.starterGreeting,

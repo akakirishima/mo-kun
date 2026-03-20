@@ -286,7 +286,6 @@ export class AppRepository {
     const now = Timestamp.now();
     const update: Record<string, unknown> = {
       videoGenerationStatus: "generating",
-      lastGeneratedVideoUrl: null,
       updatedAt: now,
     };
     if (params.posterImageUrl !== undefined) {
@@ -320,6 +319,9 @@ export class AppRepository {
     }
     if (status === "ready") {
       characterUpdate.lastGeneratedVideoUrl = params.video.videoUrl ?? null;
+      if (params.video.squareVideoUrl !== undefined && params.video.squareVideoUrl !== null) {
+        characterUpdate.lastGeneratedSquareVideoUrl = params.video.squareVideoUrl;
+      }
       characterUpdate.lastVideoGeneratedAt = now;
       characterUpdate.lastVideoPrompt = params.video.promptExcerpt;
     }
@@ -330,6 +332,7 @@ export class AppRepository {
         title: params.video.title,
         promptExcerpt: params.video.promptExcerpt,
         videoUrl: params.video.videoUrl ?? null,
+        squareVideoUrl: params.video.squareVideoUrl ?? null,
         posterImageUrl: params.video.posterImageUrl ?? null,
         status,
         generatedAt: now,

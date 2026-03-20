@@ -82,6 +82,7 @@ AppRepository _buildPreviewRepository() {
       videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
       latestVideoUrl: null,
+      latestSquareVideoUrl: null,
       posterImageUrl: null,
       lastGeneratedAt: now.subtract(const Duration(hours: 7)),
       starterGreeting: '今日は何を残したい？',

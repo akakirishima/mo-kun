@@ -507,7 +507,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ? null
         : ref.watch(characterProvider(characterId)).valueOrNull;
     final stageMedia = _StageMedia(
-      videoUrl: character?.latestVideoUrl,
+      videoUrl: character?.latestSquareVideoUrl,
       imageUrl: character?.posterImageUrl ?? character?.latestImageUrl,
     );
     final resolvedCharacterVideoUrl = ref.watch(

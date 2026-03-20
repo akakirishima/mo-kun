@@ -8,6 +8,7 @@ import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_voice.dart';
+import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../test_support/fake_app.dart';
@@ -75,7 +76,11 @@ class _FakeVoicePlayer implements VoicePlayerController {
   Future<void> stop() async {}
 }
 
-FakeAppRepository _buildRepository({required String latestImageUrl}) {
+FakeAppRepository _buildRepository({
+  required String latestImageUrl,
+  String? latestVideoUrl,
+  String? latestSquareVideoUrl,
+}) {
   final now = DateTime(2026, 3, 18, 10, 0);
   return FakeAppRepository(
     initialSession: const AppSession(
@@ -92,7 +97,8 @@ FakeAppRepository _buildRepository({required String latestImageUrl}) {
       imageStatus: CharacterImageStatus.ready,
       videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: latestImageUrl,
-      latestVideoUrl: null,
+      latestVideoUrl: latestVideoUrl,
+      latestSquareVideoUrl: latestSquareVideoUrl,
       posterImageUrl: latestImageUrl,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
@@ -125,6 +131,22 @@ Future<void> _pumpUntilFound(
       return;
     }
   }
+}
+
+Future<HomeRoomStage> _pumpUntilStage(
+  WidgetTester tester, {
+  required bool Function(HomeRoomStage stage) predicate,
+  int maxPumps = 20,
+}) async {
+  late HomeRoomStage stage;
+  for (var index = 0; index < maxPumps; index += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    stage = tester.widget<HomeRoomStage>(find.byType(HomeRoomStage));
+    if (predicate(stage)) {
+      return stage;
+    }
+  }
+  return tester.widget<HomeRoomStage>(find.byType(HomeRoomStage));
 }
 
 void main() {
@@ -238,6 +260,85 @@ void main() {
       expect((image.image as NetworkImage).url, resolvedUrl);
       expect(image.fit, BoxFit.cover);
     });
+  });
+
+  testWidgets('prefers the square video url for the home stage', (
+    WidgetTester tester,
+  ) async {
+    const rawImageUrl =
+        'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
+    const rawVideoUrl =
+        'gs://demo-bucket/characters/test-user/videoHistory/demo.mp4';
+    const rawSquareVideoUrl =
+        'gs://demo-bucket/characters/test-user/videoHistory/demo-square.mp4';
+    const resolvedImageUrl = 'https://example.com/resolved-home-stage.png';
+    const resolvedVideoUrl = 'https://example.com/resolved-home-stage.mp4';
+    const resolvedSquareVideoUrl =
+        'https://example.com/resolved-home-stage-square.mp4';
+
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        repository: _buildRepository(
+          latestImageUrl: rawImageUrl,
+          latestVideoUrl: rawVideoUrl,
+          latestSquareVideoUrl: rawSquareVideoUrl,
+        ),
+        overrides: [
+          imageUrlResolverProvider.overrideWithValue(
+            _FakeImageUrlResolver(const {
+              rawImageUrl: resolvedImageUrl,
+              rawVideoUrl: resolvedVideoUrl,
+              rawSquareVideoUrl: resolvedSquareVideoUrl,
+            }),
+          ),
+        ],
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
+    );
+    final stage = await _pumpUntilStage(
+      tester,
+      predicate: (stage) =>
+          stage.videoUrl == resolvedSquareVideoUrl &&
+          stage.imageUrl == resolvedImageUrl,
+    );
+    expect(stage.videoUrl, resolvedSquareVideoUrl);
+    expect(stage.imageUrl, resolvedImageUrl);
+  });
+
+  testWidgets('falls back to the image when only the raw video url exists', (
+    WidgetTester tester,
+  ) async {
+    const rawImageUrl =
+        'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
+    const rawVideoUrl =
+        'gs://demo-bucket/characters/test-user/videoHistory/demo.mp4';
+    const resolvedImageUrl = 'https://example.com/resolved-home-stage.png';
+    const resolvedVideoUrl = 'https://example.com/resolved-home-stage.mp4';
+
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        repository: _buildRepository(
+          latestImageUrl: rawImageUrl,
+          latestVideoUrl: rawVideoUrl,
+        ),
+        overrides: [
+          imageUrlResolverProvider.overrideWithValue(
+            _FakeImageUrlResolver(const {
+              rawImageUrl: resolvedImageUrl,
+              rawVideoUrl: resolvedVideoUrl,
+            }),
+          ),
+        ],
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
+    );
+    final stage = await _pumpUntilStage(
+      tester,
+      predicate: (stage) =>
+          stage.videoUrl == null && stage.imageUrl == resolvedImageUrl,
+    );
+    expect(stage.videoUrl, isNull);
+    expect(stage.imageUrl, resolvedImageUrl);
   });
 
   testWidgets('shows assistant history and sends a new message in chat mode', (

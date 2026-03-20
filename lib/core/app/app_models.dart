@@ -86,6 +86,7 @@ class CharacterSnapshot {
     this.videoStatus = CharacterVideoStatus.idle,
     this.latestImageUrl,
     this.latestVideoUrl,
+    this.latestSquareVideoUrl,
     this.posterImageUrl,
     this.lastGeneratedAt,
     this.starterGreeting,
@@ -99,6 +100,7 @@ class CharacterSnapshot {
   final CharacterVideoStatus videoStatus;
   final String? latestImageUrl;
   final String? latestVideoUrl;
+  final String? latestSquareVideoUrl;
   final String? posterImageUrl;
   final DateTime? lastGeneratedAt;
   final String? starterGreeting;

@@ -204,6 +204,7 @@ class FirebaseAppRepository implements AppRepository {
         ),
         latestImageUrl: data['lastGeneratedImageUrl'] as String?,
         latestVideoUrl: data['lastGeneratedVideoUrl'] as String?,
+        latestSquareVideoUrl: data['lastGeneratedSquareVideoUrl'] as String?,
         posterImageUrl: data['lastVideoPosterImageUrl'] as String?,
         lastGeneratedAt: _parseTimestamp(data['lastImageGeneratedAt']),
         starterGreeting: data['starterGreeting'] as String?,

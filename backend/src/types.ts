@@ -24,6 +24,7 @@ export type ImageDraft = {
   imageUrl?: string | null;
   dateKey?: string;
   latestVideoUrl?: string | null;
+  latestSquareVideoUrl?: string | null;
   posterImageUrl?: string | null;
   videoStatus?: VideoGenerationStatus;
 };
@@ -34,6 +35,7 @@ export type VideoDraft = {
   title: string;
   promptExcerpt: string;
   videoUrl?: string | null;
+  squareVideoUrl?: string | null;
   posterImageUrl?: string | null;
   dateKey?: string;
 };

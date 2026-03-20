@@ -3,6 +3,8 @@ import {
   buildMotionPromptExcerpt,
   buildPromptExcerpt,
   CharacterImageService,
+  parseCropdetectCandidates,
+  resolveSquareVariantDebugInfo,
 } from "./character-image-service.js";
 import { buildAppDateKey, buildAppDateWindow } from "./app-date.js";
 import { StoredDailySummary } from "../types.js";
@@ -12,6 +14,9 @@ class FakeRepository {
     name: "Mori",
     visualPromptBase: "soft illustrated companion",
     visualEvolutionMemo: "落ち着いた成長が続いている。",
+    lastGeneratedVideoUrl: "gs://demo-bucket/characters/test-user/videoHistory/previous.mp4",
+    lastGeneratedSquareVideoUrl:
+      "gs://demo-bucket/characters/test-user/videoHistory/previous-square.mp4",
   };
 
   recentSummaries: StoredDailySummary[] = [
@@ -158,22 +163,72 @@ class FakeImageStore {
 }
 
 class FakeVideoStore {
+  loadCalls = 0;
+
   buildOutputGcsUri() {
     return "gs://demo-bucket/characters/test-user/videoHistory";
   }
 
-  async save(params: { generatedUri?: string }) {
-    return params.generatedUri ?? "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4";
+  async save(params: { generatedUri?: string; variant?: string }) {
+    if (params.generatedUri) {
+      return params.generatedUri;
+    }
+    if (params.variant === "square") {
+      return "gs://demo-bucket/characters/test-user/videoHistory/demo-square.mp4";
+    }
+    return "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4";
+  }
+
+  async load() {
+    this.loadCalls += 1;
+    return {
+      bytes: Buffer.from("video-bytes"),
+      mimeType: "video/mp4",
+    };
+  }
+}
+
+class FakeVideoProcessor {
+  calls = 0;
+  inputs: Array<{ videoBytes: Buffer; mimeType: string }> = [];
+
+  async createSquareVariant(params: {
+    videoBytes: Buffer<ArrayBufferLike>;
+    mimeType: string;
+  }): Promise<{
+    videoBytes: Buffer<ArrayBufferLike>;
+    mimeType: string;
+    debugInfo?: unknown;
+  }> {
+    this.calls += 1;
+    this.inputs.push({ videoBytes: params.videoBytes, mimeType: params.mimeType });
+    return {
+      videoBytes: Buffer.from("square-video-bytes"),
+      mimeType: "video/mp4",
+    };
+  }
+}
+
+class FailingVideoProcessor extends FakeVideoProcessor {
+  override async createSquareVariant(): Promise<{
+    videoBytes: Buffer<ArrayBufferLike>;
+    mimeType: string;
+    debugInfo?: unknown;
+  }> {
+    throw new Error("square crop failed");
   }
 }
 
 const repository = new FakeRepository();
 const aiService = new FakeAiService();
+const videoStore = new FakeVideoStore();
+const videoProcessor = new FakeVideoProcessor();
 const service = new CharacterImageService(
   repository as never,
   aiService as never,
   new FakeImageStore(),
-  new FakeVideoStore(),
+  videoStore,
+  videoProcessor as never,
 );
 
 const created = await service.generateAndPersist({
@@ -189,10 +244,18 @@ assert.equal(repository.markedVideoGenerating.length, 1);
 assert.equal(repository.savedImages.length, 1);
 assert.equal(repository.savedVideos.length, 1);
 assert.equal(created.latestVideoUrl, "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4");
+assert.equal(
+  created.latestSquareVideoUrl,
+  "gs://demo-bucket/characters/test-user/videoHistory/demo-square.mp4",
+);
 assert.equal(created.videoStatus, "ready");
 assert.equal(aiService.motionVideoCalls, 1);
 assert.equal(aiService.motionVideoInputs[0]?.mimeType, "image/png");
 assert.equal(aiService.motionVideoInputs[0]?.imageBytes.toString(), "image-bytes");
+assert.equal(videoStore.loadCalls, 1);
+assert.equal(videoProcessor.calls, 1);
+assert.equal(videoProcessor.inputs[0]?.mimeType, "video/mp4");
+assert.equal(videoProcessor.inputs[0]?.videoBytes.toString(), "video-bytes");
 
 const failedRepository = new FakeRepository();
 const failedService = new CharacterImageService(
@@ -200,6 +263,7 @@ const failedService = new CharacterImageService(
   new FailingImageAiService() as never,
   new FakeImageStore(),
   new FakeVideoStore(),
+  new FakeVideoProcessor() as never,
 );
 
 await assert.rejects(() =>
@@ -217,6 +281,7 @@ const failedVideoService = new CharacterImageService(
   new FailingVideoAiService() as never,
   new FakeImageStore(),
   new FakeVideoStore(),
+  new FakeVideoProcessor() as never,
 );
 
 const failedVideoResult = await failedVideoService.generateAndPersist({
@@ -227,8 +292,105 @@ const failedVideoResult = await failedVideoService.generateAndPersist({
 
 assert.equal(failedVideoRepository.savedImages.length, 1);
 assert.equal(failedVideoRepository.savedVideos.length, 1);
-assert.equal(failedVideoResult.latestVideoUrl, null);
+assert.equal(
+  failedVideoResult.latestVideoUrl,
+  "gs://demo-bucket/characters/test-user/videoHistory/previous.mp4",
+);
+assert.equal(
+  failedVideoResult.latestSquareVideoUrl,
+  "gs://demo-bucket/characters/test-user/videoHistory/previous-square.mp4",
+);
 assert.equal(failedVideoResult.videoStatus, "failed");
+
+const cropFailureRepository = new FakeRepository();
+const cropFailureService = new CharacterImageService(
+  cropFailureRepository as never,
+  new FakeAiService() as never,
+  new FakeImageStore(),
+  new FakeVideoStore(),
+  new FailingVideoProcessor() as never,
+);
+
+const cropFailureResult = await cropFailureService.generateAndPersist({
+  userId: "test-user",
+  title: "更新した姿",
+  now: new Date("2026-03-18T09:00:00+09:00"),
+});
+
+assert.equal(
+  cropFailureResult.latestVideoUrl,
+  "gs://demo-bucket/characters/test-user/videoHistory/demo.mp4",
+);
+assert.equal(
+  cropFailureResult.latestSquareVideoUrl,
+  "gs://demo-bucket/characters/test-user/videoHistory/previous-square.mp4",
+);
+assert.equal(cropFailureResult.videoStatus, "ready");
+
+const candidates = parseCropdetectCandidates(`
+[Parsed_cropdetect_0 @ 0x0000] x1:0 x2:1279 y1:0 y2:719 w:1280 h:720 x:0 y:0 pts:0 t:0.000000 crop=1280:720:0:0
+[Parsed_cropdetect_0 @ 0x0000] x1:90 x2:1189 y1:0 y2:719 w:1100 h:720 x:90 y:0 pts:1 t:0.033333 crop=1100:720:90:0
+`);
+assert.deepEqual(candidates, [
+  { width: 1280, height: 720, x: 0, y: 0 },
+  { width: 1100, height: 720, x: 90, y: 0 },
+]);
+
+const detectedDebugInfo = resolveSquareVariantDebugInfo({
+  inputWidth: 1280,
+  inputHeight: 720,
+  cropdetectOutput: `
+[Parsed_cropdetect_0 @ 0x0000] crop=1040:720:120:0
+[Parsed_cropdetect_0 @ 0x0000] crop=1100:720:90:0
+`,
+});
+assert.equal(detectedDebugInfo.detection, "detected");
+assert.deepEqual(detectedDebugInfo.contentRect, {
+  width: 1100,
+  height: 720,
+  x: 90,
+  y: 0,
+});
+assert.deepEqual(detectedDebugInfo.squareRect, {
+  width: 720,
+  height: 720,
+  x: 280,
+  y: 0,
+});
+
+const fullFrameDebugInfo = resolveSquareVariantDebugInfo({
+  inputWidth: 1280,
+  inputHeight: 720,
+  cropdetectOutput: "",
+});
+assert.equal(fullFrameDebugInfo.detection, "full_frame");
+assert.deepEqual(fullFrameDebugInfo.contentRect, {
+  width: 1280,
+  height: 720,
+  x: 0,
+  y: 0,
+});
+assert.deepEqual(fullFrameDebugInfo.squareRect, {
+  width: 720,
+  height: 720,
+  x: 280,
+  y: 0,
+});
+
+const unstableDebugInfo = resolveSquareVariantDebugInfo({
+  inputWidth: 1280,
+  inputHeight: 720,
+  cropdetectOutput: `
+[Parsed_cropdetect_0 @ 0x0000] crop=880:420:200:150
+`,
+});
+assert.equal(unstableDebugInfo.detection, "unstable");
+assert.deepEqual(unstableDebugInfo.contentRect, {
+  width: 1280,
+  height: 720,
+  x: 0,
+  y: 0,
+});
 
 assert.equal(buildAppDateKey(new Date("2026-03-17T02:59:00+09:00")), "2026-03-16");
 assert.equal(buildAppDateKey(new Date("2026-03-17T03:00:00+09:00")), "2026-03-17");
