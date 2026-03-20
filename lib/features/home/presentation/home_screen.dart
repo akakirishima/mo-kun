@@ -86,8 +86,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _focusNode = FocusNode();
     _focusNode.addListener(_handleFocusChanged);
     _messageScrollController = ScrollController();
-    _voiceRecorder =
-        widget.voiceRecorder ?? DeviceVoiceRecorderController();
+    _voiceRecorder = widget.voiceRecorder ?? DeviceVoiceRecorderController();
     _voicePlayer = widget.voicePlayer ?? DeviceVoicePlayerController();
     _restoreLostAttachmentIfNeeded();
   }
@@ -131,7 +130,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (_overlayMode == mode) {
       return;
     }
-    if (_overlayMode == HomeOverlayMode.voice && mode != HomeOverlayMode.voice) {
+    if (_overlayMode == HomeOverlayMode.voice &&
+        mode != HomeOverlayMode.voice) {
       await _resetVoiceMode();
     }
     if (!mounted) {
@@ -230,7 +230,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           .send(
             session: session,
             text: message,
-            imageBytes: attachment == null ? null : await attachment.readAsBytes(),
+            imageBytes: attachment == null
+                ? null
+                : await attachment.readAsBytes(),
             imageMimeType: attachment == null
                 ? null
                 : _inferImageMimeTypeFromPath(attachment.path),
@@ -590,15 +592,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                        child: _HomeTopBar(
-                          onSettingsTap: widget.onSettingsTap,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                        child: _HomeBubble(
-                          text: bubbleText,
-                          isLive: _voiceState != HomeVoiceState.idle,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _HomeBubble(
+                                text: bubbleText,
+                                isLive: _voiceState != HomeVoiceState.idle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            _PixelToolbarButton(
+                              buttonKey: const ValueKey<String>(
+                                'home-settings-button',
+                              ),
+                              icon: NesIcons.wrench,
+                              tooltip: '設定',
+                              onPressed: widget.onSettingsTap,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -673,14 +685,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: _InlineDismissButton(
-                      buttonKey: const ValueKey<String>('home-chat-back-button'),
+                      buttonKey: const ValueKey<String>(
+                        'home-chat-back-button',
+                      ),
                       onPressed: () {
                         unawaited(_setOverlayMode(HomeOverlayMode.none));
                       },
                     ),
                   ),
                 ),
-                SizedBox(height: chatStageHeight, child: Center(child: stage)),
+                SizedBox(
+                  height: chatStageHeight,
+                  child: Center(child: stage),
+                ),
                 Expanded(
                   child: ListView.separated(
                     key: const ValueKey<String>('home-message-layer'),
@@ -691,13 +708,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       final resolvedMessageImageUrl = message.imageUrl == null
                           ? null
                           : ref
-                                  .watch(
-                                    resolvedImageUrlProvider(message.imageUrl),
-                                  )
-                                  .valueOrNull ??
-                              (message.imageUrl!.startsWith('http')
-                                  ? message.imageUrl
-                                  : null);
+                                    .watch(
+                                      resolvedImageUrlProvider(
+                                        message.imageUrl,
+                                      ),
+                                    )
+                                    .valueOrNull ??
+                                (message.imageUrl!.startsWith('http')
+                                    ? message.imageUrl
+                                    : null);
                       return ChatMessageBubble(
                         key: ValueKey<String>(
                           message.isCurrentUser
@@ -755,30 +774,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     final panel = switch (_overlayMode) {
       HomeOverlayMode.voice => _VoicePanel(
-          voiceState: _voiceState,
-          recordingDuration: _recordingDuration,
-          transcriptText: _latestTranscriptText,
-          assistantText: _latestAssistantText,
-          errorText: _voiceErrorMessage,
-          onClose: () {
-            unawaited(_setOverlayMode(HomeOverlayMode.none));
-          },
-          onPrimaryTap: () {
-            unawaited(_handleVoicePrimaryTap());
-          },
-        ),
+        voiceState: _voiceState,
+        recordingDuration: _recordingDuration,
+        transcriptText: _latestTranscriptText,
+        assistantText: _latestAssistantText,
+        errorText: _voiceErrorMessage,
+        onClose: () {
+          unawaited(_setOverlayMode(HomeOverlayMode.none));
+        },
+        onPrimaryTap: () {
+          unawaited(_handleVoicePrimaryTap());
+        },
+      ),
       HomeOverlayMode.photo => _PhotoPanel(
-          isBusy: _isPickingImage,
-          onClose: () {
-            unawaited(_setOverlayMode(HomeOverlayMode.none));
-          },
-          onCameraTap: () {
-            unawaited(_handleAttachmentTap(ImageSource.camera));
-          },
-          onGalleryTap: () {
-            unawaited(_handleAttachmentTap(ImageSource.gallery));
-          },
-        ),
+        isBusy: _isPickingImage,
+        onClose: () {
+          unawaited(_setOverlayMode(HomeOverlayMode.none));
+        },
+        onCameraTap: () {
+          unawaited(_handleAttachmentTap(ImageSource.camera));
+        },
+        onGalleryTap: () {
+          unawaited(_handleAttachmentTap(ImageSource.gallery));
+        },
+      ),
       _ => null,
     };
 
@@ -848,29 +867,6 @@ String _formatRecordingDuration(Duration duration) {
   return '$minutes:$seconds';
 }
 
-class _HomeTopBar extends StatelessWidget {
-  const _HomeTopBar({
-    required this.onSettingsTap,
-  });
-
-  final VoidCallback onSettingsTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Spacer(),
-        _PixelToolbarButton(
-          buttonKey: const ValueKey<String>('home-settings-button'),
-          icon: NesIcons.wrench,
-          tooltip: '設定',
-          onPressed: onSettingsTap,
-        ),
-      ],
-    );
-  }
-}
-
 class _PixelToolbarButton extends StatelessWidget {
   const _PixelToolbarButton({
     required this.buttonKey,
@@ -912,6 +908,7 @@ class _HomeBubble extends StatelessWidget {
     final palette = AppearanceScope.paletteOf(context).home;
 
     return Align(
+      alignment: Alignment.topLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 340),
         child: Stack(
@@ -931,13 +928,13 @@ class _HomeBubble extends StatelessWidget {
                       width: 10,
                       height: 10,
                       margin: const EdgeInsets.only(top: 6, right: 10),
-                      color: const Color(0xFFEE7D9C),
+                      color: palette.transcriptBadgeIcon,
                     ),
                   Expanded(
                     child: Text(
                       text,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF3E3B42),
+                        color: palette.headerText,
                         height: 1.34,
                         fontWeight: FontWeight.w700,
                       ),
@@ -946,11 +943,7 @@ class _HomeBubble extends StatelessWidget {
                 ],
               ),
             ),
-            const Positioned(
-              left: 40,
-              bottom: -12,
-              child: _BubbleTail(),
-            ),
+            const Positioned(left: 40, bottom: -12, child: _BubbleTail()),
           ],
         ),
       ),
@@ -988,12 +981,13 @@ class _TailBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).home;
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.94),
-        border: Border.all(color: const Color(0xFFE8A0C4), width: 2),
+        border: Border.all(color: palette.panelOutline, width: 2),
       ),
     );
   }
@@ -1100,7 +1094,9 @@ class _HomeHeroPanel extends StatelessWidget {
                   fillColor: const Color(0xFFFFE0EF),
                   borderColor: const Color(0xFFC7739A),
                   iconColor: const Color(0xFF8F4567),
-                  icon: isSubmittingImage ? NesIcons.hourglassMiddle : NesIcons.redo,
+                  icon: isSubmittingImage
+                      ? NesIcons.hourglassMiddle
+                      : NesIcons.redo,
                   onTap: isSubmittingImage ? null : onRegenerateTap,
                 ),
               ),
@@ -1435,8 +1431,9 @@ class _VoicePanel extends StatelessWidget {
               HomeVoiceState.error => NesIcons.redo,
               HomeVoiceState.idle => NesIcons.audio,
             },
-            onPressed:
-                voiceState == HomeVoiceState.uploading ? null : onPrimaryTap,
+            onPressed: voiceState == HomeVoiceState.uploading
+                ? null
+                : onPrimaryTap,
           ),
           if (transcriptText != null && transcriptText!.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -1513,7 +1510,9 @@ class _PhotoPanel extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _PanelActionButton(
-                  buttonKey: const ValueKey<String>('home-photo-gallery-button'),
+                  buttonKey: const ValueKey<String>(
+                    'home-photo-gallery-button',
+                  ),
                   label: '選ぶ',
                   fillColor: const Color(0xFFFFD9EB),
                   borderColor: const Color(0xFFC36A93),
@@ -1698,9 +1697,19 @@ class _InfoChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 6),
-          Text(body, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35)),
+          Text(
+            body,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(height: 1.35),
+          ),
         ],
       ),
     );
@@ -1825,9 +1834,9 @@ class _RegenerateImageSheetState extends State<_RegenerateImageSheet> {
                 const SizedBox(height: 8),
                 Text(
                   '今回だけ反映したい雰囲気や補足を短く入れます。',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.subtitleText,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: palette.subtitleText),
                 ),
                 const SizedBox(height: 14),
                 Material(

@@ -20,7 +20,7 @@ type CharacterProfileInput = {
   weakPoints: string[];
 };
 
-type MessageContext = Array<{ role?: string; text?: string; [key: string]: unknown }>;
+type MessageContext = Array<{ role?: string; text?: string;[key: string]: unknown }>;
 
 type GeneratedImageAsset = {
   mimeType: string;
@@ -206,12 +206,12 @@ export class AiService {
         model: this.config.geminiModel,
         contents: params.photo
           ? [
-              createPartFromText(prompt),
-              createPartFromBase64(
-                params.photo.photoBytes.toString("base64"),
-                params.photo.mimeType,
-              ),
-            ]
+            createPartFromText(prompt),
+            createPartFromBase64(
+              params.photo.photoBytes.toString("base64"),
+              params.photo.mimeType,
+            ),
+          ]
           : prompt,
         config: {
           systemInstruction: buildAssistantSystemInstruction(
@@ -462,23 +462,38 @@ export class AiService {
   }
 }
 
+
+
+
 export function buildAssistantSystemInstruction(
   characterName: string,
   personaPrompt?: string,
 ): string {
   return [
-    `あなたは${characterName}として表現される、ユーザー自身です。`,
+    `あなたは${characterName}として表現される、ユーザーの親しいパートナーです。`,
     "以下の人格設定に従って会話してください。",
-    personaPrompt?.trim() || "ユーザーの内省を支え、自然に返答してください。",
+    personaPrompt?.trim() || "ユーザーの日常に寄り添い、親しみやすく自然に返答してください。",
     "返答ルール:",
     "- 日本語で答える",
-    "- 会話の立ち位置は『自分自身に対する返答』に寄せる",
+    "- 会話の立ち位置は『親しい友人としてチャットで語りかけるトーン』に寄せる",
+    "- 独り言のような体言止めは避け、「〜だね」「〜かな？」といった温かい口語で会話を返すこと",
+
+    // ▼ ここから追加・強化したルール ▼
+    "- 短すぎる1文だけの返答は避け、必ず2〜4文程度の長さで返すこと", // 長さの指定
+    "- 「お、イラストだね」といった事実の確認だけで終わらず、必ず感想（「すごい可愛い！」「色使いがいいね」など）や、ユーザーへのポジティブな問いかけを繋げて会話を広げること", // 深さの指定
+    "- 実際のチャットのように、文章の間に適度な改行を挟んで、2連続でメッセージを送っているようなテンポ感を出すこと", // 連投っぽさの演出
+    // ▲ ここまで ▲
+
     "- 写真が入力に含まれる場合は、写真の内容に対して返答する",
     "- 写真の内容が分かるなら、それを前提に自然に返す",
     "- 食事が分かるなら料理名を、場所が分かるなら場所名を、返答として返す",
     "- 写真の内容が曖昧な場合だけ、見えた候補を挙げて確認する",
   ].join("\n");
 }
+
+
+
+
 
 export function buildAssistantPrompt(
   recentMessages: MessageContext,
@@ -1181,7 +1196,7 @@ function normalizeRoomSceneItems(value: unknown): string[] {
   return normalizedItems;
 }
 
-function buildMessagePromptText(message: { text?: string; [key: string]: unknown }): string | null {
+function buildMessagePromptText(message: { text?: string;[key: string]: unknown }): string | null {
   const normalizedText = normalizePromptText(message.text);
   const photoSummary = extractPhotoSummary(message);
 
@@ -1197,7 +1212,7 @@ function buildMessagePromptText(message: { text?: string; [key: string]: unknown
   return null;
 }
 
-function buildDailySummaryMessageText(message: { text?: string; [key: string]: unknown }): string | null {
+function buildDailySummaryMessageText(message: { text?: string;[key: string]: unknown }): string | null {
   const normalizedText = normalizePromptText(message.text);
   const photoSummary = extractPhotoSummary(message);
 
