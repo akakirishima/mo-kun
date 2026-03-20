@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:nes_ui/nes_ui.dart';
 
 class ChatMessageBubble extends StatelessWidget {
@@ -34,7 +33,12 @@ class ChatMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).chat;
+    const bubbleBorderColor = Color(0xFF5A3727);
+    const bubbleTextColor = Color(0xFF352218);
+    const characterFillColor = Color(0xFFF6E7CC);
+    const userFillColor = Color(0xFFE6F0CC);
+    const metaTextColor = Color(0xFF24150E);
+    const errorMetaTextColor = Color(0xFF7A1F16);
     final hasImage =
         (imagePath != null && imagePath!.isNotEmpty) ||
         (imageUrl != null && imageUrl!.isNotEmpty);
@@ -43,10 +47,9 @@ class ChatMessageBubble extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         NesContainer(
-          backgroundColor: isCurrentUser
-              ? palette.userBubbleFill
-              : palette.characterBubbleFill,
-          borderColor: isCurrentUser ? palette.userText : palette.characterText,
+          backgroundColor: (isCurrentUser ? userFillColor : characterFillColor)
+              .withValues(alpha: 0.92),
+          borderColor: bubbleBorderColor,
           padding: EdgeInsets.symmetric(
             horizontal: hasImage ? 8 : 14,
             vertical: hasImage ? 8 : 11,
@@ -70,10 +73,9 @@ class ChatMessageBubble extends StatelessWidget {
                   Text(
                     text!,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: isCurrentUser
-                          ? palette.userText
-                          : palette.characterText,
+                      color: bubbleTextColor,
                       height: 1.35,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
               ],
@@ -85,10 +87,8 @@ class ChatMessageBubble extends StatelessWidget {
           left: isCurrentUser ? null : 14,
           bottom: -10,
           child: _PixelTail(
-            fillColor: isCurrentUser
-                ? palette.userBubbleFill
-                : palette.characterBubbleFill,
-            borderColor: isCurrentUser ? palette.userText : palette.characterText,
+            fillColor: isCurrentUser ? userFillColor : characterFillColor,
+            borderColor: bubbleBorderColor,
             alignRight: isCurrentUser,
           ),
         ),
@@ -113,20 +113,18 @@ class ChatMessageBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (statusLabel != null)
-                      Text(
-                        statusLabel!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: palette.metaText,
-                        ),
+                      _MetaChip(
+                        label: statusLabel!,
+                        textColor: statusLabel == '送信失敗'
+                            ? errorMetaTextColor
+                            : metaTextColor,
                       ),
                     if (statusLabel != null && timestamp != null)
                       const SizedBox(width: 4),
                     if (timestamp != null)
-                      Text(
-                        timestamp!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: palette.metaText,
-                        ),
+                      _MetaChip(
+                        label: timestamp!,
+                        textColor: metaTextColor,
                       ),
                   ],
                 ),
@@ -156,7 +154,7 @@ class ChatMessageBubble extends StatelessWidget {
                     child: Text(
                       senderName!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: palette.metaText,
+                        color: bubbleBorderColor,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -169,17 +167,36 @@ class ChatMessageBubble extends StatelessWidget {
                 if (timestamp != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, left: 6),
-                    child: Text(
-                      timestamp!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: palette.metaText,
-                      ),
+                    child: _MetaChip(
+                      label: timestamp!,
+                      textColor: metaTextColor,
                     ),
                   ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({
+    required this.label,
+    required this.textColor,
+  });
+
+  final String label;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: textColor,
+        fontWeight: FontWeight.w800,
       ),
     );
   }
@@ -201,18 +218,18 @@ class _PixelTail extends StatelessWidget {
     final blocks = <Widget>[
       _TailSegment(
         width: 16,
-        fillColor: fillColor,
-        borderColor: borderColor,
+        fillColor: fillColor.withValues(alpha: 0.18),
+        borderColor: borderColor.withValues(alpha: 0.82),
       ),
       _TailSegment(
         width: 10,
-        fillColor: fillColor,
-        borderColor: borderColor,
+        fillColor: fillColor.withValues(alpha: 0.18),
+        borderColor: borderColor.withValues(alpha: 0.82),
       ),
       _TailSegment(
         width: 6,
-        fillColor: fillColor,
-        borderColor: borderColor,
+        fillColor: fillColor.withValues(alpha: 0.18),
+        borderColor: borderColor.withValues(alpha: 0.82),
       ),
     ];
 
@@ -254,21 +271,22 @@ class _CharacterAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).chat;
+    const avatarBorderColor = Color(0xFF5A3727);
+    const avatarFillColor = Color(0xFFF6E7CC);
 
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: palette.avatarGradient.first,
-        border: Border.all(color: palette.avatarText, width: 2),
+        color: avatarFillColor,
+        border: Border.all(color: avatarBorderColor, width: 2),
       ),
       alignment: Alignment.center,
       child: NesIcon(
         iconData: NesIcons.user,
         size: const Size.square(18),
-        primaryColor: palette.avatarText,
-        secondaryColor: palette.avatarBorder,
+        primaryColor: avatarBorderColor,
+        secondaryColor: Colors.white,
       ),
     );
   }
@@ -288,23 +306,20 @@ class _ChatImageAttachment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).chat;
     final localPath = imagePath;
     final remoteUrl = imageUrl;
     final file = localPath == null ? null : File(localPath);
     final hasFile = file?.existsSync() ?? false;
+    const bubbleBorderColor = Color(0xFF5A3727);
+    const characterFillColor = Color(0xFFF6E7CC);
+    const userFillColor = Color(0xFFE6F0CC);
 
     return Container(
       width: 188,
       height: 188,
       decoration: BoxDecoration(
-        color: isCurrentUser
-            ? palette.userBubbleFill.withValues(alpha: 0.42)
-            : palette.characterBubbleFill.withValues(alpha: 0.42),
-        border: Border.all(
-          color: isCurrentUser ? palette.userText : palette.characterText,
-          width: 2,
-        ),
+        color: isCurrentUser ? userFillColor : characterFillColor,
+        border: Border.all(color: bubbleBorderColor, width: 2),
       ),
       child: hasFile
           ? Image.file(file!, fit: BoxFit.cover)
@@ -312,7 +327,7 @@ class _ChatImageAttachment extends StatelessWidget {
           ? Image.network(remoteUrl, fit: BoxFit.cover)
           : _MissingChatImagePlaceholder(
               imagePath: localPath ?? remoteUrl ?? '',
-              accentColor: isCurrentUser ? palette.userText : palette.metaText,
+              accentColor: bubbleBorderColor,
             ),
     );
   }

@@ -64,6 +64,7 @@ class _ImageScreenState extends ConsumerState<ImageScreen> {
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).image;
+    final canPop = Navigator.canPop(context);
     final session = ref.watch(sessionProvider).valueOrNull;
     final characterId = session?.characterId;
     final character = characterId == null
@@ -91,6 +92,16 @@ class _ImageScreenState extends ConsumerState<ImageScreen> {
                 child: Row(
                   key: const ValueKey<String>('image-screen'),
                   children: [
+                    IconButton(
+                      key: const ValueKey<String>('image-back-button'),
+                      onPressed: canPop
+                          ? () => Navigator.of(context).pop()
+                          : null,
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      tooltip: '戻る',
+                      color: palette.settingsIcon,
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,13 +123,14 @@ class _ImageScreenState extends ConsumerState<ImageScreen> {
                         ],
                       ),
                     ),
-                    IconButton(
-                      key: const ValueKey<String>('image-settings-button'),
-                      onPressed: widget.onSettingsTap,
-                      icon: const Icon(Icons.settings_outlined),
-                      tooltip: '設定',
-                      color: palette.settingsIcon,
-                    ),
+                    if (!canPop)
+                      IconButton(
+                        key: const ValueKey<String>('image-settings-button'),
+                        onPressed: widget.onSettingsTap,
+                        icon: const Icon(Icons.settings_outlined),
+                        tooltip: '設定',
+                        color: palette.settingsIcon,
+                      ),
                   ],
                 ),
               ),
@@ -346,7 +358,7 @@ class _LatestImageCard extends StatelessWidget {
                       key: ValueKey<String>('image-latest-loading'),
                     ),
                   ),
-                  error: (_, __) => const _ImagePlaceholder(
+                  error: (_, _) => const _ImagePlaceholder(
                     icon: Icons.broken_image_outlined,
                     label: '画像 URL の解決に失敗しました',
                     widgetKey: ValueKey<String>('image-latest-error'),
@@ -489,7 +501,7 @@ class _ImageHistoryTile extends ConsumerWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   ),
-                  error: (_, __) => const _HistoryThumbnailPlaceholder(
+                  error: (_, _) => const _HistoryThumbnailPlaceholder(
                     widgetKey: ValueKey<String>('image-history-error'),
                   ),
                 ),

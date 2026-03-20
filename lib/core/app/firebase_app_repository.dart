@@ -5,9 +5,11 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
+import 'package:gdgoc_2026_prototype/core/app/character_profile_derivation.dart';
 import 'package:gdgoc_2026_prototype/firebase_options.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -16,12 +18,14 @@ class FirebaseAppRepository implements AppRepository {
   FirebaseAppRepository._({
     required this.auth,
     required this.firestore,
+    required this.storage,
     required this.client,
     required this.baseUri,
   });
 
   final FirebaseAuth auth;
   final FirebaseFirestore firestore;
+  final FirebaseStorage storage;
   final http.Client client;
   final Uri baseUri;
 
@@ -42,6 +46,7 @@ class FirebaseAppRepository implements AppRepository {
     return FirebaseAppRepository._(
       auth: auth,
       firestore: FirebaseFirestore.instance,
+      storage: FirebaseStorage.instance,
       client: http.Client(),
       baseUri: Uri.parse(baseUrl),
     );
@@ -66,12 +71,49 @@ class FirebaseAppRepository implements AppRepository {
       'partnerStyle': input.partnerStyle,
       'weakPoints': input.weakPoints,
     });
+    await updateUserProfile(userId: auth.currentUser!.uid, profile: input);
     return AppSession(
       userId: auth.currentUser!.uid,
       needsOnboarding: false,
       characterId: response['characterId'] as String?,
       threadId: response['threadId'] as String?,
     );
+  }
+
+  @override
+  Stream<UserProfileInput?> watchUserProfile(String userId) {
+    return _userProfileDoc(userId).snapshots().map((snapshot) {
+      if (!snapshot.exists) {
+        return null;
+      }
+      final data = snapshot.data() ?? const <String, dynamic>{};
+      return UserProfileInput(
+        displayName: data['displayName'] as String? ?? '',
+        goal: data['goal'] as String? ?? '',
+        partnerStyle: data['partnerStyle'] as String? ?? '',
+        weakPoints: List<String>.from(data['weakPoints'] as List? ?? const []),
+      );
+    });
+  }
+
+  @override
+  Future<void> updateUserProfile({
+    required String userId,
+    required UserProfileInput profile,
+  }) async {
+    final derived = deriveCharacterProfileFields(profile);
+    await _userProfileDoc(userId).set({
+      'displayName': profile.displayName,
+      'goal': profile.goal,
+      'partnerStyle': profile.partnerStyle,
+      'weakPoints': profile.weakPoints,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    await firestore.collection('characters').doc(userId).set({
+      'personaPrompt': derived.personaPrompt,
+      'visualPromptBase': derived.visualPromptBase,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   @override
@@ -317,6 +359,78 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
+  Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
+    required String userId,
+  }) {
+    return _homeBackgroundPreferencesDoc(userId).snapshots().map((snapshot) {
+      if (!snapshot.exists) {
+        return null;
+      }
+      final data = snapshot.data() ?? const <String, dynamic>{};
+      return HomeBackgroundPreference(
+        themeId: data['homeBackgroundThemeId'] as String? ?? 'yuuyake',
+        customImageUrl: data['homeBackgroundCustomImageUrl'] as String?,
+        updatedAt: _parseTimestamp(data['updatedAt']),
+      );
+    });
+  }
+
+  @override
+  Future<void> updateCharacterSettings({
+    required String characterId,
+    required CharacterSettings settings,
+  }) async {
+    await firestore.collection('characters').doc(characterId).set({
+      'name': settings.name,
+      'starterGreeting': settings.starterGreeting,
+      'personaPrompt': settings.personaPrompt,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> selectHomeBackgroundTheme({
+    required String userId,
+    required String themeId,
+  }) async {
+    await _homeBackgroundPreferencesDoc(userId).set({
+      'homeBackgroundThemeId': themeId,
+      'homeBackgroundCustomImageUrl': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> uploadCustomHomeBackground({
+    required String userId,
+    required Uint8List imageBytes,
+    required String imageMimeType,
+    required String imageFilename,
+  }) async {
+    final preferencesRef = _homeBackgroundPreferencesDoc(userId);
+    final existing = await preferencesRef.get();
+    final existingData = existing.data() ?? const <String, dynamic>{};
+    final currentThemeId =
+        existingData['homeBackgroundThemeId'] as String? ?? 'yuuyake';
+    final extension = _inferFileExtension(imageFilename, imageMimeType);
+    final fileRef = storage.ref(
+      'users/$userId/home_backgrounds/custom-${DateTime.now().microsecondsSinceEpoch}$extension',
+    );
+
+    await fileRef.putData(
+      imageBytes,
+      SettableMetadata(contentType: _normalizeImageContentType(imageMimeType)),
+    );
+    final downloadUrl = await fileRef.getDownloadURL();
+
+    await preferencesRef.set({
+      'homeBackgroundThemeId': currentThemeId,
+      'homeBackgroundCustomImageUrl': downloadUrl,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
   Future<void> dispose() async {
     client.close();
   }
@@ -472,5 +586,39 @@ class FirebaseAppRepository implements AppRepository {
     }
 
     return MediaType(parts[0], parts[1]);
+  }
+
+  DocumentReference<Map<String, dynamic>> _homeBackgroundPreferencesDoc(
+    String userId,
+  ) {
+    return firestore.collection('users').doc(userId).collection('preferences').doc('ui');
+  }
+
+  DocumentReference<Map<String, dynamic>> _userProfileDoc(String userId) {
+    return firestore
+        .collection('users')
+        .doc(userId)
+        .collection('preferences')
+        .doc('profile');
+  }
+
+  String _normalizeImageContentType(String? mimeType) {
+    final normalized = mimeType?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return 'image/jpeg';
+    }
+    return normalized;
+  }
+
+  String _inferFileExtension(String filename, String? mimeType) {
+    final dotIndex = filename.lastIndexOf('.');
+    if (dotIndex != -1 && dotIndex < filename.length - 1) {
+      return filename.substring(dotIndex);
+    }
+    return switch (_normalizeImageContentType(mimeType)) {
+      'image/png' => '.png',
+      'image/webp' => '.webp',
+      _ => '.jpg',
+    };
   }
 }

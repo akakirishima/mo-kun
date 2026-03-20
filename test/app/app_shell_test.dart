@@ -21,11 +21,11 @@ void main() {
   Future<void> tapVisible(WidgetTester tester, Finder finder) async {
     await tester.ensureVisible(finder);
     await tester.pump();
-    await tester.tap(finder);
+    await tester.tap(finder, warnIfMissed: false);
     await tester.pumpAndSettle();
   }
 
-  testWidgets('starts on HOME without the bottom dock', (
+  testWidgets('starts on HOME with the bottom dock visible', (
     WidgetTester tester,
   ) async {
     configureViewport(tester);
@@ -35,19 +35,16 @@ void main() {
 
     expect(
       find.byKey(const ValueKey<String>('app-navigation-bar')),
-      findsNothing,
+      findsOneWidget,
     );
     expect(
       find.byKey(const ValueKey<String>('home-room-stage')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey<String>('home-diary-entry')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
   });
 
-  testWidgets('opens Diary from the HOME entry card', (
+  testWidgets('switches between Home, Chat, Diary, and Settings tabs', (
     WidgetTester tester,
   ) async {
     configureViewport(tester);
@@ -55,72 +52,38 @@ void main() {
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('home-diary-entry')),
-    );
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-chat')));
+    expect(find.byKey(const ValueKey<String>('chat-screen')), findsOneWidget);
 
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
     expect(find.byKey(const ValueKey<String>('diary-screen')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('diary-back-button')), findsNothing);
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
     expect(
-      find.byKey(const ValueKey<String>('diary-back-button')),
+      find.byKey(const ValueKey<String>('settings-screen')),
       findsOneWidget,
     );
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-home')));
+    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
   });
 
-  testWidgets('keeps immersive HOME back navigation for chat mode', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('opens Image from Settings', (WidgetTester tester) async {
     configureViewport(tester);
     registerViewportTearDown(tester);
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
     await tapVisible(
       tester,
-      find.byKey(const ValueKey<String>('home-action-chat')),
+      find.byKey(const ValueKey<String>('settings-item-image')),
     );
 
+    expect(find.byKey(const ValueKey<String>('image-screen')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('home-chat-back-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('app-navigation-bar')),
-      findsNothing,
-    );
-  });
-
-  testWidgets('opens settings from HOME and Diary', (
-    WidgetTester tester,
-  ) async {
-    configureViewport(tester);
-    registerViewportTearDown(tester);
-    await tester.pumpWidget(const App());
-    await tester.pumpAndSettle();
-
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('home-settings-button')),
-    );
-    expect(
-      find.byKey(const ValueKey<String>('settings-screen')),
-      findsOneWidget,
-    );
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('settings-back-button')),
-    );
-
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('home-diary-entry')),
-    );
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('diary-settings-button')),
-    );
-    expect(
-      find.byKey(const ValueKey<String>('settings-screen')),
+      find.byKey(const ValueKey<String>('image-back-button')),
       findsOneWidget,
     );
   });

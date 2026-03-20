@@ -96,10 +96,16 @@ FakeAppRepository buildFakeRepository() {
         promptExcerpt: '静かに積み上がってきた印象',
         status: CharacterImageStatus.ready,
         generatedAt: previousMonthDate,
-        imageUrl: 'https://example.com/last-month.png',
+      imageUrl: 'https://example.com/last-month.png',
         dateKey: previousMonthDateKey,
       ),
     ],
+    initialUserProfile: const UserProfileInput(
+      displayName: 'Sano',
+      goal: '毎日の進捗を軽く残す',
+      partnerStyle: 'やさしく整理して背中を押してほしい',
+      weakPoints: <String>['後回しにしやすい', '朝に動き出しが遅い'],
+    ),
   );
 }
 

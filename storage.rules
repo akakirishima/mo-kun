@@ -14,5 +14,10 @@ service firebase.storage {
       allow read: if signedIn() && request.auth.uid == userId;
       allow write: if false;
     }
+
+    match /users/{userId}/home_backgrounds/{allPaths=**} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId;
+    }
   }
 }

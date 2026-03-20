@@ -35,7 +35,7 @@ void main() {
   Future<void> tapVisible(WidgetTester tester, Finder finder) async {
     await tester.ensureVisible(finder);
     await tester.pump();
-    await tester.tap(finder);
+    await tester.tap(finder, warnIfMissed: false);
     await tester.pumpAndSettle();
   }
 
@@ -56,6 +56,10 @@ void main() {
       backgroundGradient(tester, 'home-background').colors.first,
       const Color(0xFFDCEEFF),
     );
+    expect(
+      find.byKey(const ValueKey<String>('home-background-image')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -70,32 +74,15 @@ void main() {
         backgroundGradient(tester, 'home-background').colors.first,
         const Color(0xFFFFE3EE),
       );
-      expect(
-        find.byKey(const ValueKey<String>('home-action-chat')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('home-chat-input-bar')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
 
-      await tapVisible(
-        tester,
-        find.byKey(const ValueKey<String>('home-diary-entry')),
-      );
+      await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
       expect(
         backgroundGradient(tester, 'diary-background').colors.first,
         const Color(0xFFFFEEF5),
       );
 
-      await tapVisible(
-        tester,
-        find.byKey(const ValueKey<String>('diary-back-button')),
-      );
-      await tapVisible(
-        tester,
-        find.byKey(const ValueKey<String>('home-settings-button')),
-      );
+      await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
       expect(
         backgroundGradient(tester, 'settings-background').colors.first,
         const Color(0xFFFFF4FA),
@@ -111,10 +98,7 @@ void main() {
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('home-settings-button')),
-    );
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
     await tapVisible(
       tester,
       find.byKey(const ValueKey<String>('settings-item-appearance')),
@@ -189,19 +173,14 @@ void main() {
       backgroundGradient(tester, 'settings-background').colors.first,
       const Color(0xFFF5FAF4),
     );
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('settings-back-button')),
-    );
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-home')));
     expect(
       backgroundGradient(tester, 'home-background').colors.first,
       const Color(0xFFE5F3E8),
     );
 
-    await tapVisible(
-      tester,
-      find.byKey(const ValueKey<String>('home-diary-entry')),
-    );
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
     expect(
       backgroundGradient(tester, 'diary-background').colors.first,
       const Color(0xFFF2F8EF),

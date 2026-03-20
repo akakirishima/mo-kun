@@ -232,3 +232,42 @@ class VoiceChatResult {
   final String? userMessageId;
   final String? assistantMessageId;
 }
+
+class HomeBackgroundPreference {
+  const HomeBackgroundPreference({
+    required this.themeId,
+    this.customImageUrl,
+    this.updatedAt,
+  });
+
+  final String themeId;
+  final String? customImageUrl;
+  final DateTime? updatedAt;
+
+  bool get hasCustomImage =>
+      customImageUrl != null && customImageUrl!.trim().isNotEmpty;
+
+  HomeBackgroundPreference copyWith({
+    String? themeId,
+    String? customImageUrl,
+    DateTime? updatedAt,
+  }) {
+    return HomeBackgroundPreference(
+      themeId: themeId ?? this.themeId,
+      customImageUrl: customImageUrl ?? this.customImageUrl,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+
+class CharacterSettings {
+  const CharacterSettings({
+    required this.name,
+    required this.starterGreeting,
+    required this.personaPrompt,
+  });
+
+  final String name;
+  final String starterGreeting;
+  final String personaPrompt;
+}

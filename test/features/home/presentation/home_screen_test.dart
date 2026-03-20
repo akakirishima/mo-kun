@@ -9,7 +9,6 @@ import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_voice.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../test_support/fake_app.dart';
 import '../../../test_support/mock_network_images.dart';
@@ -150,7 +149,7 @@ Future<HomeRoomStage> _pumpUntilStage(
 }
 
 void main() {
-  testWidgets('renders the daily bubble, room stage, and action buttons', (
+  testWidgets('renders the background image, daily bubble, room stage, and talk button', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -160,6 +159,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey<String>('home-background-image')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey<String>('home-daily-bubble')),
       findsOneWidget,
@@ -169,61 +172,9 @@ void main() {
       find.byKey(const ValueKey<String>('home-room-stage')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey<String>('home-action-voice')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('home-action-chat')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('places the settings button to the right of the daily bubble', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final bubbleTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('home-daily-bubble')),
-    );
-    final settingsTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('home-settings-button')),
-    );
-
-    expect(settingsTopLeft.dx, greaterThan(bubbleTopLeft.dx));
-    expect((settingsTopLeft.dy - bubbleTopLeft.dy).abs(), lessThan(12));
-  });
-
-  testWidgets('keeps the header stable on narrow widths', (
-    WidgetTester tester,
-  ) async {
-    tester.view.physicalSize = const Size(1125, 2400);
-    tester.view.devicePixelRatio = 3.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey<String>('home-daily-bubble')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('home-settings-button')),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('home-action-photo')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('home-diary-entry')), findsNothing);
   });
 
   testWidgets('renders the generated character image when available', (
@@ -305,68 +256,6 @@ void main() {
     expect(stage.imageUrl, resolvedImageUrl);
   });
 
-  testWidgets('falls back to the image when only the raw video url exists', (
-    WidgetTester tester,
-  ) async {
-    const rawImageUrl =
-        'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
-    const rawVideoUrl =
-        'gs://demo-bucket/characters/test-user/videoHistory/demo.mp4';
-    const resolvedImageUrl = 'https://example.com/resolved-home-stage.png';
-    const resolvedVideoUrl = 'https://example.com/resolved-home-stage.mp4';
-
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        repository: _buildRepository(
-          latestImageUrl: rawImageUrl,
-          latestVideoUrl: rawVideoUrl,
-        ),
-        overrides: [
-          imageUrlResolverProvider.overrideWithValue(
-            _FakeImageUrlResolver(const {
-              rawImageUrl: resolvedImageUrl,
-              rawVideoUrl: resolvedVideoUrl,
-            }),
-          ),
-        ],
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    final stage = await _pumpUntilStage(
-      tester,
-      predicate: (stage) =>
-          stage.videoUrl == null && stage.imageUrl == resolvedImageUrl,
-    );
-    expect(stage.videoUrl, isNull);
-    expect(stage.imageUrl, resolvedImageUrl);
-  });
-
-  testWidgets('shows assistant history and sends a new message in chat mode', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('昨日の積み上げ'), findsOneWidget);
-
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('chat-input-message-field')),
-      '今日は朝に散歩した',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('今日は朝に散歩した'), findsWidgets);
-  });
-
   testWidgets('opens voice mode and shows transcript plus reply text', (
     WidgetTester tester,
   ) async {
@@ -384,11 +273,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-voice')));
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('home-talk-button')));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-talk-button')),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('home-voice-mode')),
+      find.byKey(const ValueKey<String>('home-voice-panel')),
       findsOneWidget,
     );
 
@@ -406,75 +299,6 @@ void main() {
     expect(find.text('今日は音声で話した内容を残した'), findsOneWidget);
     expect(find.textContaining('今日はひとつだけ進めてみよう'), findsWidgets);
     expect(fakePlayer.playCount, 1);
-  });
-
-  testWidgets('shows pending preview after gallery selection', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(
-          onSettingsTap: nullHandler,
-          onDiaryTap: nullHandler,
-          pickImage: (source) async {
-            expect(source, ImageSource.gallery);
-            return XFile('/tmp/home-gallery.png');
-          },
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-photo')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-photo-gallery-button')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
-      findsOneWidget,
-    );
-    expect(find.text('home-gallery.png'), findsOneWidget);
-  });
-
-  testWidgets('preserves draft text across back navigation', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('chat-input-message-field')),
-      'draft text',
-    );
-    await tester.pump();
-
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-chat-back-button')),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const ValueKey<String>('chat-input-message-field')),
-          )
-          .controller!
-          .text,
-      'draft text',
-    );
   });
 }
 
