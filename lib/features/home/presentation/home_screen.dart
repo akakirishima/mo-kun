@@ -47,7 +47,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   static const _horizontalPadding = 18.0;
   static const _actionBarHeight = 84.0;
 
@@ -69,6 +70,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _latestTranscriptText;
   String? _latestAssistantText;
   bool _isSubmittingImage = false;
+  double _lastKeyboardInset = 0;
+  String? _lastPlayedAssistantMessageId;
 
   bool get _canSend =>
       _draftText.trim().isNotEmpty || _pendingAttachment != null;
@@ -78,21 +81,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = TextEditingController()..addListener(_handleInputChanged);
     _focusNode = FocusNode();
+    _focusNode.addListener(_handleFocusChanged);
     _messageScrollController = ScrollController();
-    _voiceRecorder =
-        widget.voiceRecorder ?? DeviceVoiceRecorderController();
+    _voiceRecorder = widget.voiceRecorder ?? DeviceVoiceRecorderController();
     _voicePlayer = widget.voicePlayer ?? DeviceVoicePlayerController();
     _restoreLostAttachmentIfNeeded();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _recordingTicker?.cancel();
     _controller
       ..removeListener(_handleInputChanged)
       ..dispose();
+    _focusNode.removeListener(_handleFocusChanged);
     _focusNode.dispose();
     _messageScrollController.dispose();
     unawaited(_voiceRecorder.dispose());
@@ -106,11 +112,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
+  void _handleFocusChanged() {
+    if (_focusNode.hasFocus) {
+      _scrollMessagesToBottom();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (_isChatMode && _focusNode.hasFocus) {
+      _scrollMessagesToBottom();
+    }
+  }
+
   Future<void> _setOverlayMode(HomeOverlayMode mode) async {
     if (_overlayMode == mode) {
       return;
     }
-    if (_overlayMode == HomeOverlayMode.voice && mode != HomeOverlayMode.voice) {
+    if (_overlayMode == HomeOverlayMode.voice &&
+        mode != HomeOverlayMode.voice) {
       await _resetVoiceMode();
     }
     if (!mounted) {
@@ -120,6 +141,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _overlayMode = mode;
     });
     widget.onOverlayModeChanged?.call(mode);
+    if (mode == HomeOverlayMode.chat) {
+      _scrollMessagesToBottom(jump: true);
+    }
   }
 
   Future<void> _restoreLostAttachmentIfNeeded() async {
@@ -206,7 +230,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           .send(
             session: session,
             text: message,
-            imageBytes: attachment == null ? null : await attachment.readAsBytes(),
+            imageBytes: attachment == null
+                ? null
+                : await attachment.readAsBytes(),
             imageMimeType: attachment == null
                 ? null
                 : _inferImageMimeTypeFromPath(attachment.path),
@@ -362,10 +388,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           audioBytes != null &&
           audioBytes.isNotEmpty &&
           mimeType != null &&
-          mimeType.isNotEmpty) {
+          mimeType.isNotEmpty &&
+          _shouldPlayAssistantVoice(result.assistantMessageId)) {
         setState(() {
           _voiceState = HomeVoiceState.playing;
         });
+        _lastPlayedAssistantMessageId = result.assistantMessageId;
         await _voicePlayer.play(audioBytes, mimeType: mimeType);
       }
 
@@ -405,13 +433,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  void _scrollMessagesToBottom() {
+  bool _shouldPlayAssistantVoice(String? assistantMessageId) {
+    if (assistantMessageId == null || assistantMessageId.isEmpty) {
+      return true;
+    }
+    return _lastPlayedAssistantMessageId != assistantMessageId;
+  }
+
+  void _scrollMessagesToBottom({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messageScrollController.hasClients) {
         return;
       }
+      final target = _messageScrollController.position.maxScrollExtent;
+      if (jump) {
+        _messageScrollController.jumpTo(target);
+        return;
+      }
       _messageScrollController.animateTo(
-        _messageScrollController.position.maxScrollExtent,
+        target,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
       );
@@ -552,15 +592,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                        child: _HomeTopBar(
-                          onSettingsTap: widget.onSettingsTap,
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                        child: _HomeBubble(
-                          text: bubbleText,
-                          isLive: _voiceState != HomeVoiceState.idle,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _HomeBubble(
+                                text: bubbleText,
+                                isLive: _voiceState != HomeVoiceState.idle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            _PixelToolbarButton(
+                              buttonKey: const ValueKey<String>(
+                                'home-settings-button',
+                              ),
+                              icon: NesIcons.wrench,
+                              tooltip: '設定',
+                              onPressed: widget.onSettingsTap,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -608,6 +658,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String imageStatusLabel,
     required String characterName,
   }) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    if (_isChatMode && keyboardInset != _lastKeyboardInset) {
+      _lastKeyboardInset = keyboardInset;
+      if (keyboardInset > 0) {
+        _scrollMessagesToBottom();
+      }
+    }
+
     if (_isChatMode) {
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -616,8 +674,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             math.max(constraints.maxHeight * 0.24, 120.0),
           );
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.fromLTRB(18, 0, 18, keyboardInset),
             child: Column(
               children: [
                 Align(
@@ -625,14 +685,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: _InlineDismissButton(
-                      buttonKey: const ValueKey<String>('home-chat-back-button'),
+                      buttonKey: const ValueKey<String>(
+                        'home-chat-back-button',
+                      ),
                       onPressed: () {
                         unawaited(_setOverlayMode(HomeOverlayMode.none));
                       },
                     ),
                   ),
                 ),
-                SizedBox(height: chatStageHeight, child: Center(child: stage)),
+                SizedBox(
+                  height: chatStageHeight,
+                  child: Center(child: stage),
+                ),
                 Expanded(
                   child: ListView.separated(
                     key: const ValueKey<String>('home-message-layer'),
@@ -643,13 +708,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       final resolvedMessageImageUrl = message.imageUrl == null
                           ? null
                           : ref
-                                  .watch(
-                                    resolvedImageUrlProvider(message.imageUrl),
-                                  )
-                                  .valueOrNull ??
-                              (message.imageUrl!.startsWith('http')
-                                  ? message.imageUrl
-                                  : null);
+                                    .watch(
+                                      resolvedImageUrlProvider(
+                                        message.imageUrl,
+                                      ),
+                                    )
+                                    .valueOrNull ??
+                                (message.imageUrl!.startsWith('http')
+                                    ? message.imageUrl
+                                    : null);
                       return ChatMessageBubble(
                         key: ValueKey<String>(
                           message.isCurrentUser
@@ -707,30 +774,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final panel = switch (_overlayMode) {
       HomeOverlayMode.voice => _VoicePanel(
-          voiceState: _voiceState,
-          recordingDuration: _recordingDuration,
-          transcriptText: _latestTranscriptText,
-          assistantText: _latestAssistantText,
-          errorText: _voiceErrorMessage,
-          onClose: () {
-            unawaited(_setOverlayMode(HomeOverlayMode.none));
-          },
-          onPrimaryTap: () {
-            unawaited(_handleVoicePrimaryTap());
-          },
-        ),
+        voiceState: _voiceState,
+        recordingDuration: _recordingDuration,
+        transcriptText: _latestTranscriptText,
+        assistantText: _latestAssistantText,
+        errorText: _voiceErrorMessage,
+        onClose: () {
+          unawaited(_setOverlayMode(HomeOverlayMode.none));
+        },
+        onPrimaryTap: () {
+          unawaited(_handleVoicePrimaryTap());
+        },
+      ),
       HomeOverlayMode.photo => _PhotoPanel(
-          isBusy: _isPickingImage,
-          onClose: () {
-            unawaited(_setOverlayMode(HomeOverlayMode.none));
-          },
-          onCameraTap: () {
-            unawaited(_handleAttachmentTap(ImageSource.camera));
-          },
-          onGalleryTap: () {
-            unawaited(_handleAttachmentTap(ImageSource.gallery));
-          },
-        ),
+        isBusy: _isPickingImage,
+        onClose: () {
+          unawaited(_setOverlayMode(HomeOverlayMode.none));
+        },
+        onCameraTap: () {
+          unawaited(_handleAttachmentTap(ImageSource.camera));
+        },
+        onGalleryTap: () {
+          unawaited(_handleAttachmentTap(ImageSource.gallery));
+        },
+      ),
       _ => null,
     };
 
@@ -800,29 +867,6 @@ String _formatRecordingDuration(Duration duration) {
   return '$minutes:$seconds';
 }
 
-class _HomeTopBar extends StatelessWidget {
-  const _HomeTopBar({
-    required this.onSettingsTap,
-  });
-
-  final VoidCallback onSettingsTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Spacer(),
-        _PixelToolbarButton(
-          buttonKey: const ValueKey<String>('home-settings-button'),
-          icon: NesIcons.wrench,
-          tooltip: '設定',
-          onPressed: onSettingsTap,
-        ),
-      ],
-    );
-  }
-}
-
 class _PixelToolbarButton extends StatelessWidget {
   const _PixelToolbarButton({
     required this.buttonKey,
@@ -864,6 +908,7 @@ class _HomeBubble extends StatelessWidget {
     final palette = AppearanceScope.paletteOf(context).home;
 
     return Align(
+      alignment: Alignment.topLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 340),
         child: Stack(
@@ -883,13 +928,13 @@ class _HomeBubble extends StatelessWidget {
                       width: 10,
                       height: 10,
                       margin: const EdgeInsets.only(top: 6, right: 10),
-                      color: const Color(0xFFEE7D9C),
+                      color: palette.transcriptBadgeIcon,
                     ),
                   Expanded(
                     child: Text(
                       text,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF3E3B42),
+                        color: palette.headerText,
                         height: 1.34,
                         fontWeight: FontWeight.w700,
                       ),
@@ -898,11 +943,7 @@ class _HomeBubble extends StatelessWidget {
                 ],
               ),
             ),
-            const Positioned(
-              left: 40,
-              bottom: -12,
-              child: _BubbleTail(),
-            ),
+            const Positioned(left: 40, bottom: -12, child: _BubbleTail()),
           ],
         ),
       ),
@@ -940,12 +981,13 @@ class _TailBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).home;
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.94),
-        border: Border.all(color: const Color(0xFFE8A0C4), width: 2),
+        border: Border.all(color: palette.panelOutline, width: 2),
       ),
     );
   }
@@ -1052,7 +1094,9 @@ class _HomeHeroPanel extends StatelessWidget {
                   fillColor: const Color(0xFFFFE0EF),
                   borderColor: const Color(0xFFC7739A),
                   iconColor: const Color(0xFF8F4567),
-                  icon: isSubmittingImage ? NesIcons.hourglassMiddle : NesIcons.redo,
+                  icon: isSubmittingImage
+                      ? NesIcons.hourglassMiddle
+                      : NesIcons.redo,
                   onTap: isSubmittingImage ? null : onRegenerateTap,
                 ),
               ),
@@ -1387,8 +1431,9 @@ class _VoicePanel extends StatelessWidget {
               HomeVoiceState.error => NesIcons.redo,
               HomeVoiceState.idle => NesIcons.audio,
             },
-            onPressed:
-                voiceState == HomeVoiceState.uploading ? null : onPrimaryTap,
+            onPressed: voiceState == HomeVoiceState.uploading
+                ? null
+                : onPrimaryTap,
           ),
           if (transcriptText != null && transcriptText!.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -1465,7 +1510,9 @@ class _PhotoPanel extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _PanelActionButton(
-                  buttonKey: const ValueKey<String>('home-photo-gallery-button'),
+                  buttonKey: const ValueKey<String>(
+                    'home-photo-gallery-button',
+                  ),
                   label: '選ぶ',
                   fillColor: const Color(0xFFFFD9EB),
                   borderColor: const Color(0xFFC36A93),
@@ -1650,9 +1697,19 @@ class _InfoChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 6),
-          Text(body, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35)),
+          Text(
+            body,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(height: 1.35),
+          ),
         ],
       ),
     );
@@ -1777,9 +1834,9 @@ class _RegenerateImageSheetState extends State<_RegenerateImageSheet> {
                 const SizedBox(height: 8),
                 Text(
                   '今回だけ反映したい雰囲気や補足を短く入れます。',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: palette.subtitleText,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: palette.subtitleText),
                 ),
                 const SizedBox(height: 14),
                 Material(

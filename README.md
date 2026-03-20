@@ -24,7 +24,7 @@ GDGoC Japan Hackathon 2026 参加プロジェクト
 - AI / ML: Vertex AI, Gemini, Cloud Speech-to-Text, Cloud Text-to-Speech
 
 ## AI Integration
-- chat model: `gemini-2.5-flash`
+- chat model: `gemini-2.5-pro`
 - image model: `gemini-2.5-flash-image`
 - `VERTEX_LOCATION=global` を前提にしています
 

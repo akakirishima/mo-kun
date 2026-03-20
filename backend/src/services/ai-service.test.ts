@@ -29,7 +29,22 @@ const prompt = buildAssistantPrompt(
 
 assert.match(prompt, /パートナー: まずは深呼吸しよう/);
 assert.match(prompt, /ユーザー: 今日は筋トレした/);
-assert.match(prompt, /今回のユーザー入力: 夜はストレッチもした/);
+assert.match(prompt, /今回のユーザー入力はテキストです/);
+assert.match(prompt, /今回のユーザー入力テキスト: 夜はストレッチもした/);
+
+const photoPrompt = buildAssistantPrompt(
+  [{ role: "user", text: "これ食べた" }],
+  "",
+  {
+    hasPhoto: true,
+    needsConfirmation: true,
+    confirmationPrompt: "何の写真か短く教えて。",
+  },
+);
+
+assert.match(photoPrompt, /写真が1枚含まれています/);
+assert.match(photoPrompt, /今回のユーザー入力テキスト: なし/);
+assert.match(photoPrompt, /写真が曖昧なら確認してよい/);
 
 const instruction = buildAssistantSystemInstruction(
   "Mori",
@@ -38,12 +53,11 @@ const instruction = buildAssistantSystemInstruction(
 
 assert.match(instruction, /Mori/);
 assert.match(instruction, /やわらかい口調/);
-assert.match(instruction, /2〜5文程度/);
-assert.match(instruction, /自然にねぎらってよい/);
-assert.match(instruction, /引用しすぎない/);
+assert.match(instruction, /写真が入力に含まれる場合は、写真の内容に対して返答する/);
+assert.match(instruction, /料理名/);
 
 const dailySummaryInstruction = buildDailySummarySystemInstruction();
-assert.match(dailySummaryInstruction, /日次ダイアリー用/);
+assert.match(dailySummaryInstruction, /日記文/);
 assert.match(dailySummaryInstruction, /JSON 以外を返さない/);
 assert.match(dailySummaryInstruction, /diaryBody/);
 
@@ -61,9 +75,9 @@ const dailySummaryPrompt = buildDailySummaryPrompt({
   ],
 });
 assert.match(dailySummaryPrompt, /対象日: 2026-03-16/);
-assert.match(dailySummaryPrompt, /assistant: まずは落ち着いて整理しよう/);
-assert.match(dailySummaryPrompt, /user: 今日は UI を整えて、報告も 1 つ送った/);
-assert.match(dailySummaryPrompt, /写真メモ: 参考書の写真に見える/);
+assert.doesNotMatch(dailySummaryPrompt, /assistant:/);
+assert.match(dailySummaryPrompt, /今日は UI を整えて、報告も 1 つ送った/);
+assert.match(dailySummaryPrompt, /写真では 参考書の写真に見える/);
 assert.match(dailySummaryPrompt, /doneThings/);
 assert.match(dailySummaryPrompt, /diaryBody/);
 
@@ -77,7 +91,6 @@ assert.equal(
   normalizeAssistantReply("「なに？」だと？筋トレも開発も、両方"),
   "「なに？」だと？筋トレも開発も、両方。",
 );
-
 const fallbackDailySummary = buildFallbackDailySummary({
   dateKey: "2026-03-16",
   messages: [
@@ -92,6 +105,15 @@ assert.equal(fallbackDailySummary.doneThings.length, 2);
 assert.match(fallbackDailySummary.diaryBody, /今日は/);
 assert.match(fallbackDailySummary.diaryBody, /明日は/);
 assert.match(fallbackDailySummary.reflection, /UI の余白も整えた/);
+assert.equal(
+  normalizeGeneratedDailySummary({
+    dateKey: "2026-03-16",
+    rawText:
+      '{"title":"少し前に進めた日","diaryBody":"user: 今日はラーメンの写真を送った。\\n写真メモ: 夜に食べたラーメンが残っている。","mood":"穏やか","doneThings":["ラーメンを食べた"],"reflection":"お腹が落ち着いた。","tomorrowNote":"明日も無理せず進める。"}',
+    fallback: fallbackDailySummary,
+  })?.diaryBody,
+  "今日はラーメンの写真を送った。\n夜に食べたラーメンが残っている。",
+);
 
 const normalizedDailySummary = normalizeGeneratedDailySummary({
   dateKey: "2026-03-16",

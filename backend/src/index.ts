@@ -166,10 +166,6 @@ app.post(
           mimeType: photoMimeType ?? inferImageMimeType(photoFile.originalname),
         })
       : null;
-    const effectiveUserText = buildEffectiveUserText({
-      text,
-      photoAnalysis,
-    });
     let assistantText: string;
     try {
       assistantText = await aiService.generateAssistantReply({
@@ -177,7 +173,16 @@ app.post(
         personaPrompt:
           typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
         recentMessages,
-        userText: effectiveUserText,
+        userText: text,
+        photo:
+          photoFile?.buffer?.length && photoMimeType
+            ? {
+                photoBytes: photoFile.buffer,
+                mimeType: photoMimeType,
+                needsConfirmation: photoAnalysis?.needsConfirmation ?? false,
+                confirmationPrompt: photoAnalysis?.confirmationPrompt,
+              }
+            : undefined,
       });
     } catch (error) {
       console.error("Assistant reply fallback activated", {
@@ -211,6 +216,10 @@ app.post(
       messages: dayMessages,
     });
     await repository.saveDailySummary(authedRequest.user.uid, summary);
+    await dailyBubbleService.refreshTodayBubbleFromSummary({
+      userId: authedRequest.user.uid,
+      summary,
+    });
 
     response.json({
       threadId,
@@ -302,6 +311,10 @@ app.post(
         messages: dayMessages,
       });
       await repository.saveDailySummary(authedRequest.user.uid, summary);
+      await dailyBubbleService.refreshTodayBubbleFromSummary({
+        userId: authedRequest.user.uid,
+        summary,
+      });
 
       try {
         const synthesized = await speechService.synthesizeAssistantSpeech({
@@ -391,7 +404,10 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
         messages,
       });
       await repository.saveDailySummary(userId, summary);
-      await dailyBubbleService.ensureTodayBubble({ userId });
+      await dailyBubbleService.refreshTodayBubbleFromSummary({
+        userId,
+        summary,
+      });
       await imageService.generateAndPersist({
         userId,
         title: "昨日の報告を反映した姿",
@@ -411,30 +427,6 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
 app.listen(config.port, () => {
   console.log(`mo-kun backend listening on ${config.port}`);
 });
-
-function buildEffectiveUserText(params: {
-  text: string;
-  photoAnalysis: {
-    summary: string;
-    reactionHint: string;
-    confirmationPrompt: string;
-    needsConfirmation: boolean;
-  } | null;
-}) {
-  const parts = [
-    params.text.trim(),
-    params.photoAnalysis?.summary?.trim() ? `写真メモ: ${params.photoAnalysis.summary.trim()}` : "",
-    params.photoAnalysis?.reactionHint?.trim()
-      ? `会話ヒント: ${params.photoAnalysis.reactionHint.trim()}`
-      : "",
-    params.photoAnalysis?.needsConfirmation &&
-      params.photoAnalysis.confirmationPrompt.trim()
-      ? `確認したい点: ${params.photoAnalysis.confirmationPrompt.trim()}`
-      : "",
-  ].filter((value) => value.length > 0);
-
-  return parts.join("\n");
-}
 
 function inferImageMimeType(filename?: string) {
   const lower = filename?.toLowerCase() ?? "";
@@ -460,6 +452,7 @@ function normalizeIncomingImageMimeType(
 function buildFallbackAssistantReply(params: {
   userText: string;
   photoAnalysis: {
+    category: string;
     summary: string;
     activity: string;
     food: string;
@@ -471,35 +464,45 @@ function buildFallbackAssistantReply(params: {
 }) {
   const analysis = params.photoAnalysis;
   if (analysis != null) {
-    const lead = analysis.reactionHint.trim().length > 0
-      ? analysis.reactionHint.trim()
-      : "写真を受け取った。今日の流れをちゃんと残せている。";
-    const detail = [
-      analysis.activity.trim(),
-      analysis.food.trim().length > 0 ? `${analysis.food.trim()}を食べたかも` : "",
-      analysis.locationGuess.trim(),
-    ].filter((value) => value.length > 0).join("、");
+    const food = analysis.food.trim();
+    const locationGuess = analysis.locationGuess.trim();
+    const activity = analysis.activity.trim();
+    const confirmationPrompt = analysis.confirmationPrompt.trim();
 
-    if (analysis.needsConfirmation && analysis.confirmationPrompt.trim().length > 0) {
-      return detail.length > 0
-        ? `${lead} ${detail}ようにも見える。${analysis.confirmationPrompt.trim()}`
-        : `${lead} ${analysis.confirmationPrompt.trim()}`;
+    if (analysis.needsConfirmation) {
+      if (food.length > 0) {
+        return `これ、${food}っぽく見えるけど合ってる？`;
+      }
+      if (locationGuess.length > 0) {
+        return `これ、${locationGuess}の写真っぽく見えるけど合ってる？`;
+      }
+      if (activity.length > 0) {
+        return `これ、${activity}ところっぽく見えるけど合ってる？`;
+      }
+      if (confirmationPrompt.length > 0) {
+        return confirmationPrompt;
+      }
+      return "これ、何の写真か一言だけ教えて。";
     }
 
-    if (detail.length > 0) {
-      return `${lead} ${detail}流れとして残しておく。`;
+    if (food.length > 0) {
+      return `${food}を食べたんだね。`;
     }
-
+    if (locationGuess.length > 0) {
+      return `${locationGuess}に行ったんだね。`;
+    }
+    if (activity.length > 0) {
+      return `${activity}んだね。`;
+    }
     if (analysis.summary.trim().length > 0) {
-      return `${lead} ${analysis.summary.trim()}`;
+      return analysis.summary.trim();
     }
-
-    return lead;
+    return "写真、受け取ったよ。";
   }
 
   if (params.userText.trim().length > 0) {
-    return "受け取った。その流れをこのまま今日の記録につないでいこう。";
+    return "受け取ったよ。";
   }
 
-  return "受け取った。今日のことをひとつ残せたのはいい流れ。";
+  return "受け取ったよ。";
 }

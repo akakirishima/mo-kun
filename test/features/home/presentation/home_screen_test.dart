@@ -154,10 +154,58 @@ void main() {
     );
   });
 
+  testWidgets('places the settings button to the right of the daily bubble', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final bubbleTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey<String>('home-daily-bubble')),
+    );
+    final settingsTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey<String>('home-settings-button')),
+    );
+
+    expect(settingsTopLeft.dx, greaterThan(bubbleTopLeft.dx));
+    expect((settingsTopLeft.dy - bubbleTopLeft.dy).abs(), lessThan(12));
+  });
+
+  testWidgets('keeps the header stable on narrow widths', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1125, 2400);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-daily-bubble')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('home-settings-button')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('renders the generated character image when available', (
     WidgetTester tester,
   ) async {
-    const rawUrl = 'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
+    const rawUrl =
+        'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
     const resolvedUrl = 'https://example.com/resolved-home-stage.png';
 
     await mockNetworkImages(() async {
@@ -235,7 +283,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('home-action-voice')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey<String>('home-voice-mode')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('home-voice-mode')),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.byKey(const ValueKey<String>('home-voice-primary-button')),

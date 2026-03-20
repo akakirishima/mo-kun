@@ -40,19 +40,22 @@
   - `IMAGE_BUCKET`
   - `SPEECH_LANGUAGE_CODE`
   - `TTS_LANGUAGE_CODE`
+  - `TTS_MODEL_NAME`
   - `TTS_AUDIO_ENCODING`
 - Recommended initial values:
   - `VERTEX_LOCATION=global`
-  - `GEMINI_MODEL=gemini-2.5-flash`
+  - `GEMINI_MODEL=gemini-2.5-pro`
   - `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`
   - `GEMINI_TEMPERATURE=0.7`
   - `GEMINI_MAX_OUTPUT_TOKENS=220`
   - `SPEECH_LANGUAGE_CODE=ja-JP`
   - `TTS_LANGUAGE_CODE=ja-JP`
+  - `TTS_MODEL_NAME=gemini-2.5-flash-tts`
   - `TTS_AUDIO_ENCODING=MP3`
 - `IMAGE_BUCKET` should be the Firebase Storage bucket name without `gs://`.
-- `TTS_VOICE_NAME` is optional.
-- `/v1/chat/messages` returns `503 assistant_generation_failed` when Gemini fails.
+- `TTS_VOICE_NAME` defaults to `Kore`.
+- `TTS_PROMPT` is optional and defaults to a calm inner-voice prompt.
+- `/v1/chat/messages` returns a fallback assistant reply when Gemini fails after photo analysis, and `503 assistant_generation_failed` only when no safe fallback can be built.
 - `/v1/characters/image` returns `503 generate_image_failed` when Gemini image generation fails.
 - `/v1/chat/voice` may succeed partially: if TTS fails after the assistant text was generated and stored, the response returns text with `audioStatus=failed`.
 

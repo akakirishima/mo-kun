@@ -20,7 +20,7 @@ type CharacterProfileInput = {
   weakPoints: string[];
 };
 
-type MessageContext = Array<{ role?: string; text?: string; [key: string]: unknown }>;
+type MessageContext = Array<{ role?: string; text?: string;[key: string]: unknown }>;
 
 type GeneratedImageAsset = {
   mimeType: string;
@@ -63,6 +63,13 @@ type PhotoAnalysisCandidate = {
   needsConfirmation?: unknown;
   confirmationPrompt?: unknown;
   reactionHint?: unknown;
+};
+
+type AssistantPhotoInput = {
+  photoBytes: Buffer;
+  mimeType: string;
+  needsConfirmation?: boolean;
+  confirmationPrompt?: string;
 };
 
 const DAILY_SUMMARY_RESPONSE_JSON_SCHEMA = {
@@ -171,14 +178,14 @@ export class AiService {
         `ユーザーの目標: ${profile.goal}`,
         `話し方の方向性: ${profile.partnerStyle}`,
         `注意点: ${weakPoints}`,
-        "立ち位置: 自分を整理し、次の一歩を静かに促す。",
+        "立ち位置: 自分を整理し、次の一歩を促す。",
       ].join("\n"),
       visualPromptBase: [
         DEFAULT_ROOM_VISUAL_PROMPT_BASE,
         profile.goal ? `goal mood hint: ${profile.goal}` : null,
         profile.partnerStyle ? `inner voice tone hint: ${profile.partnerStyle}` : null,
       ].filter((value): value is string => value != null && value.length > 0).join(", "),
-      starterGreeting: "今日は何を残したい？",
+      starterGreeting: "今日は何をした？",
     };
   }
 
@@ -187,11 +194,25 @@ export class AiService {
     personaPrompt?: string;
     recentMessages: MessageContext;
     userText: string;
+    photo?: AssistantPhotoInput;
   }): Promise<string> {
     try {
+      const prompt = buildAssistantPrompt(params.recentMessages, params.userText, {
+        hasPhoto: params.photo != null,
+        needsConfirmation: params.photo?.needsConfirmation ?? false,
+        confirmationPrompt: params.photo?.confirmationPrompt,
+      });
       const response = await this.client.models.generateContent({
         model: this.config.geminiModel,
-        contents: buildAssistantPrompt(params.recentMessages, params.userText),
+        contents: params.photo
+          ? [
+            createPartFromText(prompt),
+            createPartFromBase64(
+              params.photo.photoBytes.toString("base64"),
+              params.photo.mimeType,
+            ),
+          ]
+          : prompt,
         config: {
           systemInstruction: buildAssistantSystemInstruction(
             params.characterName,
@@ -224,7 +245,7 @@ export class AiService {
     recentSummaries: StoredDailySummary[];
   }): Promise<string> {
     if (params.recentSummaries.length === 0) {
-      return "まだ大きな変化は少なく、始まりの印象を保ちながら静かに成長している。";
+      return "まだ大きな変化は少なく、静かに成長している。";
     }
 
     try {
@@ -441,35 +462,47 @@ export class AiService {
   }
 }
 
+
+
+
 export function buildAssistantSystemInstruction(
   characterName: string,
   personaPrompt?: string,
 ): string {
   return [
-    `あなたは${characterName}として表現される、ユーザー自身の内なる声です。`,
+    `あなたは${characterName}として表現される、ユーザーの親しいパートナーです。`,
     "以下の人格設定に従って会話してください。",
-    personaPrompt?.trim() || "ユーザーの内省を支え、短く自然に返答してください。",
+    personaPrompt?.trim() || "ユーザーの日常に寄り添い、親しみやすく自然に返答してください。",
     "返答ルール:",
     "- 日本語で答える",
-    "- 短すぎず不自然にならない範囲で返す",
-    "- 必要に応じて2〜5文程度で返してよい",
-    "- ユーザーの今日の報告や気分を受け止める",
-    "- 必要なら自然にねぎらってよい",
-    "- 会話の立ち位置は『自分を整理する内なる声』に寄せる",
-    "- 軽い後押しはしてよいが、伴走者や外部の第三者のようには振る舞わない",
-    "- 会話が続けやすいように、一言だけやわらかく広げてもよい",
-    "- ユーザーの発話をそのまま引用しすぎない",
-    "- メタな説明やログ風の書き方をしない",
-    "- 返答は必ず言い切りで終え、途中で切れたような文末にしない",
-    "- 断定や説教を避け、会話として違和感のない表現にする",
-    "- 明日の見た目や日記への反映を必要以上に強調しない",
-    "- 『今日もがんばれ自分』に近い、落ち着いた内省の温度感を保つ",
+    "- 会話の立ち位置は『親しい友人としてチャットで語りかけるトーン』に寄せる",
+    "- 独り言のような体言止めは避け、「〜だね」「〜かな？」といった温かい口語で会話を返すこと",
+
+    // ▼ ここから追加・強化したルール ▼
+    "- 短すぎる1文だけの返答は避け、必ず2〜4文程度の長さで返すこと", // 長さの指定
+    "- 「お、イラストだね」といった事実の確認だけで終わらず、必ず感想（「すごい可愛い！」「色使いがいいね」など）や、ユーザーへのポジティブな問いかけを繋げて会話を広げること", // 深さの指定
+    "- 実際のチャットのように、文章の間に適度な改行を挟んで、2連続でメッセージを送っているようなテンポ感を出すこと", // 連投っぽさの演出
+    // ▲ ここまで ▲
+
+    "- 写真が入力に含まれる場合は、写真の内容に対して返答する",
+    "- 写真の内容が分かるなら、それを前提に自然に返す",
+    "- 食事が分かるなら料理名を、場所が分かるなら場所名を、返答として返す",
+    "- 写真の内容が曖昧な場合だけ、見えた候補を挙げて確認する",
   ].join("\n");
 }
+
+
+
+
 
 export function buildAssistantPrompt(
   recentMessages: MessageContext,
   userText: string,
+  options?: {
+    hasPhoto?: boolean;
+    needsConfirmation?: boolean;
+    confirmationPrompt?: string;
+  },
 ): string {
   const historyLines = recentMessages
     .map((message) => {
@@ -494,8 +527,14 @@ export function buildAssistantPrompt(
     "以下は直近の会話履歴です。",
     historyLines.length > 0 ? historyLines.join("\n") : "履歴なし",
     "",
-    `今回のユーザー入力: ${userText.trim()}`,
-    "上の流れを踏まえて、会話として自然な返答を1つだけ作ってください。",
+    options?.hasPhoto
+      ? "今回のユーザー入力には写真が1枚含まれています。写真を直接見て返答してください。"
+      : "今回のユーザー入力はテキストです。",
+    `今回のユーザー入力テキスト: ${userText.trim() || "なし"}`,
+    options?.needsConfirmation
+      ? `写真が曖昧なら確認してよい。${options.confirmationPrompt?.trim() || ""}`.trim()
+      : "",
+    "上の流れを踏まえて、会話として自然な返答を作ってください。",
   ].join("\n");
 }
 
@@ -515,7 +554,7 @@ export function buildVisualEvolutionPrompt(recentSummaries: StoredDailySummary[]
     .join("\n\n");
 
   return [
-    "直近7日分の振り返りから、自分を投影したキャラクターの見た目ににじむ成長だけを短く要約してください。",
+    "直近7日分の振り返りから、自分を投影したキャラクターの見た目ににじむ成長だけを要約してください。",
     "数値や実績を直接書かず、表情・姿勢・雰囲気・服装ディテールに落ちる変化だけをまとめてください。",
     "",
     summaryLines,
@@ -524,14 +563,12 @@ export function buildVisualEvolutionPrompt(recentSummaries: StoredDailySummary[]
 
 export function buildDailyBubbleSystemInstruction(): string {
   return [
-    "あなたは、その日の始まりに表示する短い吹き出し文を作るアシスタントです。",
-    "前日の振り返りをもとに、今日の一歩を静かに促す。",
+    "あなたは、その日の始まりに表示する吹き出し文を作るアシスタントです。",
+    "前日の振り返りをもとに、今日の一歩を促す。",
     "出力ルール:",
     "- 日本語",
     "- text のみを持つ JSON を返す",
-    "- 1〜2文、最大 60 文字程度",
-    "- 立ち位置は『自分の内なる声』",
-    "- 強すぎる励ましや説教を避ける",
+    "- 立ち位置は『自分の声』",
     "- 前日の内容を軽く受けて、今日やることをひとこと促す",
   ].join("\n");
 }
@@ -558,22 +595,15 @@ export function buildDailyBubblePrompt(previousSummary: StoredDailySummary): str
 
 export function buildDailySummarySystemInstruction(): string {
   return [
-    "あなたは日次ダイアリー用の要約を作るアシスタントです。",
-    "会話ログを読み、ユーザーが実際に話した事実だけをもとに1日の記録をまとめてください。",
-    "画像解析の要約が含まれる場合は、それもその日の報告として扱ってよいですが、断定せず自然な推定表現を保ってください。",
+    "あなたは、その日のことを自分で振り返る日記文を作るアシスタントです。",
+    "ユーザーが残した内容だけを材料にして、その日を自然な日記としてまとめてください。",
+    "画像に関する内容が含まれる場合は、それもその日の出来事として扱ってよいですが、見えていない事実は断定しないでください。",
     "出力ルール:",
-    "- 日本語で自然な表現にする",
-    "- assistant の発話は文脈としてだけ使い、成果として書かない",
+    "- まず diaryBody を、日記として自然に読める本文にする",
     "- ユーザーが言っていない事実を補わない",
-    "- title は短い日記見出しにする",
-    "- diaryBody は日記本文として 2〜3 文の自然な文章にする",
-    "- diaryBody では『今日は〜した。明日は〜できたらいいな。』のように、日記として素直に読める文体を優先する",
-    "- diaryBody にラベルや箇条書きや JSON 的な列挙感を入れない",
-    "- mood は 1 語から短いフレーズで表す",
-    "- doneThings は 0〜4 件の短い文字列にする",
-    "- reflection は 1〜2 文で静かに振り返る",
-    "- tomorrowNote は次につながる短い一言にする",
-    "- 情報が少ない日は、少ないこと自体をやわらかく表現する",
+    "- title は日記の見出しとして付ける",
+    "- mood / doneThings / reflection / tomorrowNote は diaryBody に沿って自然に埋める",
+    "- 情報が少ない日は、少ないこと自体を静かに書く",
     "- JSON 以外を返さない",
   ].join("\n");
 }
@@ -582,33 +612,24 @@ export function buildDailySummaryPrompt(params: {
   dateKey: string;
   messages: MessageContext;
 }): string {
-  const historyLines = params.messages
+  const materialLines = params.messages
     .map((message) => {
-      const text = buildMessagePromptText(message);
-      if (!text) {
+      if (message.role !== "user") {
         return null;
       }
-
-      if (message.role === "assistant") {
-        return `assistant: ${text}`;
-      }
-
-      if (message.role === "user") {
-        return `user: ${text}`;
-      }
-
-      return null;
+      return buildDailySummaryMessageText(message);
     })
     .filter((line): line is string => line != null)
-    .slice(-28);
+    .slice(-20);
 
   return [
     `対象日: ${params.dateKey}`,
-    "以下はその日の会話ログです。ユーザーの発言を中心に日次サマリーを作成してください。",
-    "会話ログ:",
-    historyLines.length > 0 ? historyLines.join("\n") : "履歴なし",
+    "以下はその日にユーザーが残した内容です。これをもとに、その日を自分で振り返る日記を書いてください。",
+    "まず diaryBody を自然な日記として考え、その内容に合わせて他のキーも埋めてください。",
+    "材料:",
+    materialLines.length > 0 ? materialLines.join("\n") : "履歴なし",
     "",
-    "JSON の各キー:",
+    "必要な JSON キー:",
     "- title",
     "- diaryBody",
     "- mood",
@@ -622,7 +643,6 @@ export function buildVisualEvolutionSystemInstruction(): string {
   return [
     "あなたはキャラクターデザイン用の要約メモを作るアシスタントです。",
     "出力ルール:",
-    "- 日本語で2〜4文に収める",
     "- 同一キャラクターの連続性を保つ方向で書く",
     "- 変化は自然で小さく積み上がるものだけを書く",
     "- 努力は表情、姿勢、服装ディテール、雰囲気に翻訳する",
@@ -640,12 +660,12 @@ export function buildPhotoAnalysisSystemInstruction(): string {
     "- 厳密認識よりも、体験を壊さない自然な推定を優先する",
     "- 分からない場合は断定せず unknown や空文字を使う",
     "- locationGuess は推定表現にする",
-    "- 食事写真なら food を入れる",
-    "- 観光やランドマークなら locationGuess を入れる",
-    "- activity は短い動作表現にする",
+    "- 食事写真なら、food にはできるだけ具体的な料理名を入れる",
+    "- 観光やランドマークなら、locationGuess にはできるだけ具体的な地名やスポット名を入れる",
+    "- activity は動作表現にする",
     "- confidence は high / medium / low のいずれか",
     "- 曖昧なら needsConfirmation=true にし、confirmationPrompt を自然文で返す",
-    "- reactionHint は会話リアクションに使える短い一言にする",
+    "- reactionHint は会話リアクションに使える一言にする",
   ].join("\n");
 }
 
@@ -653,6 +673,7 @@ export function buildPhotoAnalysisPrompt(userText?: string): string {
   return [
     "写真を見て、ユーザーが何をしているか、何を食べたか、どこに行った可能性があるかを推定してください。",
     "入力テキストがある場合は写真解釈の補助として使ってよいが、見えていない事実を断定しないでください。",
+    "料理やランドマークが分かる場合は、できるだけ具体名を返してください。",
     "",
     `補助テキスト: ${normalizePromptText(userText) ?? "なし"}`,
     "",
@@ -915,11 +936,7 @@ export function normalizeAssistantReply(text?: string): string | null {
     return null;
   }
 
-  if (normalized.length <= 600) {
-    return finalizeAssistantReply(normalized);
-  }
-
-  return finalizeAssistantReply(normalized.slice(0, 597).trimEnd());
+  return finalizeAssistantReply(normalized);
 }
 
 export function extractGeneratedImage(response: unknown): GeneratedImageAsset {
@@ -1122,6 +1139,9 @@ function normalizeDiaryBody(value: unknown): string | null {
 
   const normalized = value
     .replace(/\r\n/g, "\n")
+    .replace(/\buser\s*:\s*/gi, "")
+    .replace(/\bassistant\s*:\s*/gi, "")
+    .replace(/写真メモ\s*:\s*/g, "")
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 0)
@@ -1176,7 +1196,7 @@ function normalizeRoomSceneItems(value: unknown): string[] {
   return normalizedItems;
 }
 
-function buildMessagePromptText(message: { text?: string; [key: string]: unknown }): string | null {
+function buildMessagePromptText(message: { text?: string;[key: string]: unknown }): string | null {
   const normalizedText = normalizePromptText(message.text);
   const photoSummary = extractPhotoSummary(message);
 
@@ -1188,6 +1208,22 @@ function buildMessagePromptText(message: { text?: string; [key: string]: unknown
   }
   if (photoSummary) {
     return `写真メモ: ${photoSummary}`;
+  }
+  return null;
+}
+
+function buildDailySummaryMessageText(message: { text?: string;[key: string]: unknown }): string | null {
+  const normalizedText = normalizePromptText(message.text);
+  const photoSummary = extractPhotoSummary(message);
+
+  if (normalizedText && photoSummary) {
+    return `${normalizedText}\n写真では ${photoSummary}`;
+  }
+  if (normalizedText) {
+    return normalizedText;
+  }
+  if (photoSummary) {
+    return `写真では ${photoSummary}`;
   }
   return null;
 }

@@ -1,7 +1,7 @@
 import { AppRepository } from "../repositories/app-repository.js";
 import { AiService } from "./ai-service.js";
 import { buildAppDateKey, previousAppDateKey } from "./app-date.js";
-import { StoredDailyBubble } from "../types.js";
+import { DailySummaryDraft, StoredDailyBubble, StoredDailySummary } from "../types.js";
 
 export class DailyBubbleService {
   constructor(
@@ -20,6 +20,7 @@ export class DailyBubbleService {
       return existing;
     }
 
+    const todaySummary = await this.repository.getDailySummary(params.userId, dateKey);
     const sourceDateKey = previousAppDateKey(dateKey);
     const previousSummary = await this.repository.getDailySummary(
       params.userId,
@@ -27,7 +28,7 @@ export class DailyBubbleService {
     );
     const bubble = await this.aiService.generateDailyBubble({
       dateKey,
-      previousSummary: previousSummary ?? undefined,
+      previousSummary: todaySummary ?? previousSummary ?? undefined,
     });
     await this.repository.saveDailyBubble(params.userId, bubble);
 
@@ -35,5 +36,16 @@ export class DailyBubbleService {
       ...bubble,
       generatedAt: now.toISOString(),
     };
+  }
+
+  async refreshTodayBubbleFromSummary(params: {
+    userId: string;
+    summary: DailySummaryDraft | StoredDailySummary;
+  }): Promise<void> {
+    const bubble = await this.aiService.generateDailyBubble({
+      dateKey: params.summary.dateKey,
+      previousSummary: params.summary,
+    });
+    await this.repository.saveDailyBubble(params.userId, bubble);
   }
 }
