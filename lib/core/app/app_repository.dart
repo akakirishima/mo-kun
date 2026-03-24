@@ -9,6 +9,13 @@ abstract class AppRepository {
 
   Future<AppSession> completeOnboarding(UserProfileInput input);
 
+  Stream<UserProfileInput?> watchUserProfile(String userId);
+
+  Future<void> updateUserProfile({
+    required String userId,
+    required UserProfileInput profile,
+  });
+
   Stream<List<ChatMessage>> watchChatMessages(String threadId);
 
   Future<void> sendChatMessage({
@@ -32,6 +39,11 @@ abstract class AppRepository {
 
   Stream<CharacterSnapshot?> watchCharacter(String characterId);
 
+  Future<void> updateCharacterSettings({
+    required String characterId,
+    required CharacterSettings settings,
+  });
+
   Stream<List<CharacterImageVersion>> watchImageHistory(String characterId);
 
   Stream<List<CharacterImageVersion>> watchDiaryImageHistory({
@@ -52,6 +64,22 @@ abstract class AppRepository {
   Stream<List<DailySummary>> watchMonthlyDailySummaries({
     required String userId,
     required DateTime month,
+  });
+
+  Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
+    required String userId,
+  });
+
+  Future<void> selectHomeBackgroundTheme({
+    required String userId,
+    required String themeId,
+  });
+
+  Future<void> uploadCustomHomeBackground({
+    required String userId,
+    required Uint8List imageBytes,
+    required String imageMimeType,
+    required String imageFilename,
   });
 
   Future<void> dispose() async {}

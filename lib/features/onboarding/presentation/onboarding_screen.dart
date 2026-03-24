@@ -108,7 +108,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         _FieldBlock(
                           label: '呼ばれたい名前',
                           controller: _displayNameController,
-                          hintText: '例: さの',
+                          hintText: '例: やまだ',
                           onChanged: (_) => setState(() {}),
                         ),
                         _FieldBlock(

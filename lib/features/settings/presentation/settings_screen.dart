@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
+import 'package:gdgoc_2026_prototype/features/image/presentation/image_screen.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/appearance_settings_screen.dart';
+import 'package:gdgoc_2026_prototype/features/settings/presentation/character_settings_screen.dart';
+import 'package:gdgoc_2026_prototype/features/settings/presentation/home_background_settings_screen.dart';
+import 'package:gdgoc_2026_prototype/features/settings/presentation/profile_settings_screen.dart';
 import 'package:nes_ui/nes_ui.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -10,11 +14,46 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settingsColors = AppearanceScope.paletteOf(context).settings;
+    final canPop = Navigator.canPop(context);
 
     void openAppearanceSettings() {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => const AppearanceSettingsScreen(),
+        ),
+      );
+    }
+
+    void openImageSettings() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ImageScreen(
+            onSettingsTap: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
+    }
+
+    void openHomeBackgroundSettings() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const HomeBackgroundSettingsScreen(),
+        ),
+      );
+    }
+
+    void openProfileSettings() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const ProfileSettingsScreen(),
+        ),
+      );
+    }
+
+    void openCharacterSettings() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const CharacterSettingsScreen(),
         ),
       );
     }
@@ -42,14 +81,17 @@ class SettingsScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
                 child: Row(
                   children: [
-                    NesButton.icon(
-                      key: const ValueKey<String>('settings-back-button'),
-                      onPressed: () => Navigator.of(context).pop(),
-                      type: NesButtonType.normal,
-                      icon: NesIcons.leftArrowIndicator,
-                      iconSize: const Size.square(18),
-                      buttonWidth: 28,
-                    ),
+                    if (canPop)
+                      NesButton.icon(
+                        key: const ValueKey<String>('settings-back-button'),
+                        onPressed: () => Navigator.of(context).pop(),
+                        type: NesButtonType.normal,
+                        icon: NesIcons.leftArrowIndicator,
+                        iconSize: const Size.square(18),
+                        buttonWidth: 28,
+                      )
+                    else
+                      const SizedBox(width: 48),
                     Expanded(
                       child: Text(
                         'Settings',
@@ -72,13 +114,14 @@ class SettingsScreen extends StatelessWidget {
                       title: 'General',
                       items: [
                         _SettingsItemData(
-                          tileKey: ValueKey<String>('settings-item-profile'),
+                          tileKey: const ValueKey<String>('settings-item-profile'),
                           icon: NesIcons.user,
                           title: 'プロフィール',
                           subtitle: '表示名やアバターの設定',
+                          onTap: openProfileSettings,
                         ),
                         _SettingsItemData(
-                          tileKey: ValueKey<String>(
+                          tileKey: const ValueKey<String>(
                             'settings-item-notifications',
                           ),
                           icon: NesIcons.bell,
@@ -96,18 +139,35 @@ class SettingsScreen extends StatelessWidget {
                             'settings-item-appearance',
                           ),
                           icon: NesIcons.gem,
-                          title: '表示',
+                          title: 'デザイン',
                           subtitle: 'テーマや見た目の調整',
                           onTap: openAppearanceSettings,
                         ),
                         _SettingsItemData(
-                          tileKey: ValueKey<String>('settings-item-ai'),
+                          tileKey: const ValueKey<String>(
+                            'settings-item-home-background',
+                          ),
+                          icon: NesIcons.gallery,
+                          title: 'HOME背景',
+                          subtitle: '昼・夕焼け・夜空 / カスタム画像',
+                          onTap: openHomeBackgroundSettings,
+                        ),
+                        _SettingsItemData(
+                          tileKey: const ValueKey<String>('settings-item-image'),
+                          icon: NesIcons.gallery,
+                          title: 'Image',
+                          subtitle: '生成画像と履歴の確認',
+                          onTap: openImageSettings,
+                        ),
+                        _SettingsItemData(
+                          tileKey: const ValueKey<String>('settings-item-ai'),
                           icon: NesIcons.robot,
                           title: 'AI / キャラクター',
                           subtitle: '内なる声の反応や雰囲気の調整',
+                          onTap: openCharacterSettings,
                         ),
                         _SettingsItemData(
-                          tileKey: ValueKey<String>('settings-item-help'),
+                          tileKey: const ValueKey<String>('settings-item-help'),
                           icon: NesIcons.questionMark,
                           title: 'ヘルプ',
                           subtitle: '使い方とサポート情報',

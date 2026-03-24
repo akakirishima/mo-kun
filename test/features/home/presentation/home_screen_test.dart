@@ -8,7 +8,7 @@ import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart';
 import 'package:gdgoc_2026_prototype/features/home/presentation/home_voice.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_room_stage.dart';
 
 import '../../../test_support/fake_app.dart';
 import '../../../test_support/mock_network_images.dart';
@@ -75,7 +75,11 @@ class _FakeVoicePlayer implements VoicePlayerController {
   Future<void> stop() async {}
 }
 
-FakeAppRepository _buildRepository({required String latestImageUrl}) {
+FakeAppRepository _buildRepository({
+  required String latestImageUrl,
+  String? latestVideoUrl,
+  String? latestSquareVideoUrl,
+}) {
   final now = DateTime(2026, 3, 18, 10, 0);
   return FakeAppRepository(
     initialSession: const AppSession(
@@ -90,7 +94,11 @@ FakeAppRepository _buildRepository({required String latestImageUrl}) {
       personaPrompt: '自分の流れを静かに整理して返す内なる声。',
       visualPromptBase: '会話内容に応じて見た目が少し変わる自己投影キャラクター。',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: latestImageUrl,
+      latestVideoUrl: latestVideoUrl,
+      latestSquareVideoUrl: latestSquareVideoUrl,
+      posterImageUrl: latestImageUrl,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
     ),
@@ -124,8 +132,24 @@ Future<void> _pumpUntilFound(
   }
 }
 
+Future<HomeRoomStage> _pumpUntilStage(
+  WidgetTester tester, {
+  required bool Function(HomeRoomStage stage) predicate,
+  int maxPumps = 20,
+}) async {
+  late HomeRoomStage stage;
+  for (var index = 0; index < maxPumps; index += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    stage = tester.widget<HomeRoomStage>(find.byType(HomeRoomStage));
+    if (predicate(stage)) {
+      return stage;
+    }
+  }
+  return tester.widget<HomeRoomStage>(find.byType(HomeRoomStage));
+}
+
 void main() {
-  testWidgets('renders the daily bubble, room stage, and action buttons', (
+  testWidgets('renders the background image, daily bubble, room stage, and talk button', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -135,6 +159,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey<String>('home-background-image')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey<String>('home-daily-bubble')),
       findsOneWidget,
@@ -144,61 +172,9 @@ void main() {
       find.byKey(const ValueKey<String>('home-room-stage')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey<String>('home-action-voice')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('home-action-chat')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('places the settings button to the right of the daily bubble', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final bubbleTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('home-daily-bubble')),
-    );
-    final settingsTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('home-settings-button')),
-    );
-
-    expect(settingsTopLeft.dx, greaterThan(bubbleTopLeft.dx));
-    expect((settingsTopLeft.dy - bubbleTopLeft.dy).abs(), lessThan(12));
-  });
-
-  testWidgets('keeps the header stable on narrow widths', (
-    WidgetTester tester,
-  ) async {
-    tester.view.physicalSize = const Size(1125, 2400);
-    tester.view.devicePixelRatio = 3.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey<String>('home-daily-bubble')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('home-settings-button')),
-      findsOneWidget,
-    );
-    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('home-action-photo')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('home-diary-entry')), findsNothing);
   });
 
   testWidgets('renders the generated character image when available', (
@@ -237,30 +213,47 @@ void main() {
     });
   });
 
-  testWidgets('shows assistant history and sends a new message in chat mode', (
+  testWidgets('prefers the square video url for the home stage', (
     WidgetTester tester,
   ) async {
+    const rawImageUrl =
+        'gs://demo-bucket/characters/test-user/imageHistory/demo.png';
+    const rawVideoUrl =
+        'gs://demo-bucket/characters/test-user/videoHistory/demo.mp4';
+    const rawSquareVideoUrl =
+        'gs://demo-bucket/characters/test-user/videoHistory/demo-square.mp4';
+    const resolvedImageUrl = 'https://example.com/resolved-home-stage.png';
+    const resolvedVideoUrl = 'https://example.com/resolved-home-stage.mp4';
+    const resolvedSquareVideoUrl =
+        'https://example.com/resolved-home-stage-square.mp4';
+
     await tester.pumpWidget(
       wrapWithTestApp(
+        repository: _buildRepository(
+          latestImageUrl: rawImageUrl,
+          latestVideoUrl: rawVideoUrl,
+          latestSquareVideoUrl: rawSquareVideoUrl,
+        ),
+        overrides: [
+          imageUrlResolverProvider.overrideWithValue(
+            _FakeImageUrlResolver(const {
+              rawImageUrl: resolvedImageUrl,
+              rawVideoUrl: resolvedVideoUrl,
+              rawSquareVideoUrl: resolvedSquareVideoUrl,
+            }),
+          ),
+        ],
         child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
       ),
     );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('昨日の積み上げ'), findsOneWidget);
-
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('chat-input-message-field')),
-      '今日は朝に散歩した',
+    final stage = await _pumpUntilStage(
+      tester,
+      predicate: (stage) =>
+          stage.videoUrl == resolvedSquareVideoUrl &&
+          stage.imageUrl == resolvedImageUrl,
     );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey<String>('chat-input-send')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('今日は朝に散歩した'), findsWidgets);
+    expect(stage.videoUrl, resolvedSquareVideoUrl);
+    expect(stage.imageUrl, resolvedImageUrl);
   });
 
   testWidgets('opens voice mode and shows transcript plus reply text', (
@@ -280,11 +273,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-voice')));
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('home-talk-button')));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-talk-button')),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('home-voice-mode')),
+      find.byKey(const ValueKey<String>('home-voice-panel')),
       findsOneWidget,
     );
 
@@ -302,75 +299,6 @@ void main() {
     expect(find.text('今日は音声で話した内容を残した'), findsOneWidget);
     expect(find.textContaining('今日はひとつだけ進めてみよう'), findsWidgets);
     expect(fakePlayer.playCount, 1);
-  });
-
-  testWidgets('shows pending preview after gallery selection', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(
-          onSettingsTap: nullHandler,
-          onDiaryTap: nullHandler,
-          pickImage: (source) async {
-            expect(source, ImageSource.gallery);
-            return XFile('/tmp/home-gallery.png');
-          },
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-photo')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-photo-gallery-button')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey<String>('home-chat-pending-preview')),
-      findsOneWidget,
-    );
-    expect(find.text('home-gallery.png'), findsOneWidget);
-  });
-
-  testWidgets('preserves draft text across back navigation', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.byKey(const ValueKey<String>('chat-input-message-field')),
-      'draft text',
-    );
-    await tester.pump();
-
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-chat-back-button')),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey<String>('home-action-chat')));
-    await tester.pumpAndSettle();
-
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const ValueKey<String>('chat-input-message-field')),
-          )
-          .controller!
-          .text,
-      'draft text',
-    );
   });
 }
 

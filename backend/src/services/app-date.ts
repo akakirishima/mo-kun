@@ -2,6 +2,8 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const APP_DAY_CUTOFF_HOUR = 3;
 
+export type SceneSlot = "morning" | "day" | "night";
+
 export function buildAppDateKey(now: Date): string {
   const shifted = new Date(
     now.getTime() + JST_OFFSET_MS - (APP_DAY_CUTOFF_HOUR * 60 * 60 * 1000),
@@ -34,4 +36,23 @@ export function buildAppDateWindow(dateKey: string): { startAt: Date; endAt: Dat
 export function previousAppDateKey(dateKey: string): string {
   const { startAt } = buildAppDateWindow(dateKey);
   return buildAppDateKey(new Date(startAt.getTime() - 1));
+}
+
+export function resolveJstDate(now: Date): Date {
+  return new Date(now.getTime() + JST_OFFSET_MS);
+}
+
+export function resolveSceneSlot(now: Date): SceneSlot {
+  const hour = resolveJstDate(now).getUTCHours();
+  if (hour >= 5 && hour <= 10) {
+    return "morning";
+  }
+  if (hour >= 11 && hour <= 16) {
+    return "day";
+  }
+  return "night";
+}
+
+export function listSceneSlots(): SceneSlot[] {
+  return ["morning", "day", "night"];
 }

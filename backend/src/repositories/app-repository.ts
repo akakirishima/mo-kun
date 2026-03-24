@@ -9,6 +9,8 @@ import {
   SessionResponse,
   StoredDailyBubble,
   StoredDailySummary,
+  VideoDraft,
+  VideoGenerationStatus,
 } from "../types.js";
 import { buildAppDateWindow } from "../services/app-date.js";
 
@@ -274,6 +276,68 @@ export class AppRepository {
     }
     await this.db.collection("characters").doc(params.userId).set(update, {
       merge: true,
+    });
+  }
+
+  async markCharacterVideoGenerating(params: {
+    userId: string;
+    posterImageUrl?: string | null;
+  }) {
+    const now = Timestamp.now();
+    const update: Record<string, unknown> = {
+      videoGenerationStatus: "generating",
+      updatedAt: now,
+    };
+    if (params.posterImageUrl !== undefined) {
+      update.lastVideoPosterImageUrl = params.posterImageUrl;
+    }
+    await this.db.collection("characters").doc(params.userId).set(update, {
+      merge: true,
+    });
+  }
+
+  async saveCharacterVideo(params: {
+    userId: string;
+    video: VideoDraft;
+    status?: VideoGenerationStatus;
+    sourceImageUrl?: string | null;
+  }) {
+    const now = Timestamp.now();
+    const characterRef = this.db.collection("characters").doc(params.userId);
+    const historyRef = characterRef.collection("videoHistory").doc();
+    const status = params.status ?? "ready";
+    const characterUpdate: Record<string, unknown> = {
+      videoGenerationStatus: status,
+      updatedAt: now,
+    };
+
+    if (params.sourceImageUrl !== undefined) {
+      characterUpdate.lastVideoSourceImageUrl = params.sourceImageUrl;
+    }
+    if (params.video.posterImageUrl !== undefined) {
+      characterUpdate.lastVideoPosterImageUrl = params.video.posterImageUrl ?? null;
+    }
+    if (status === "ready") {
+      characterUpdate.lastGeneratedVideoUrl = params.video.videoUrl ?? null;
+      if (params.video.squareVideoUrl !== undefined && params.video.squareVideoUrl !== null) {
+        characterUpdate.lastGeneratedSquareVideoUrl = params.video.squareVideoUrl;
+      }
+      characterUpdate.lastVideoGeneratedAt = now;
+      characterUpdate.lastVideoPrompt = params.video.promptExcerpt;
+    }
+
+    await this.db.runTransaction(async (transaction) => {
+      transaction.set(characterRef, characterUpdate, { merge: true });
+      transaction.set(historyRef, {
+        title: params.video.title,
+        promptExcerpt: params.video.promptExcerpt,
+        videoUrl: params.video.videoUrl ?? null,
+        squareVideoUrl: params.video.squareVideoUrl ?? null,
+        posterImageUrl: params.video.posterImageUrl ?? null,
+        status,
+        generatedAt: now,
+        dateKey: params.video.dateKey ?? null,
+      });
     });
   }
 

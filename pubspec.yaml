@@ -47,6 +47,7 @@ dependencies:
   just_audio: ^0.10.5
   path_provider: ^2.1.5
   nes_ui: ^0.30.0
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/images/home_backgrounds/
 
   fonts:
     - family: NotoSansJP

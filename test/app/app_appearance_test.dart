@@ -22,9 +22,28 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  void configureViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(1600, 3200);
+    tester.view.devicePixelRatio = 2.0;
+  }
+
+  void registerViewportTearDown(WidgetTester tester) {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    await tester.ensureVisible(finder);
+    await tester.pump();
+    await tester.tap(finder, warnIfMissed: false);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('restores the saved appearance preset on startup', (
     WidgetTester tester,
   ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
     SharedPreferences.setMockInitialValues(<String, Object>{
       AppearanceController.storageKey: 'sky',
     });
@@ -37,11 +56,17 @@ void main() {
       backgroundGradient(tester, 'home-background').colors.first,
       const Color(0xFFDCEEFF),
     );
+    expect(
+      find.byKey(const ValueKey<String>('home-background-image')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
     'default blossom preset is applied across home diary and settings',
     (WidgetTester tester) async {
+      configureViewport(tester);
+      registerViewportTearDown(tester);
       await tester.pumpWidget(const App());
       await tester.pumpAndSettle();
 
@@ -49,28 +74,15 @@ void main() {
         backgroundGradient(tester, 'home-background').colors.first,
         const Color(0xFFFFE3EE),
       );
-      expect(
-        find.byKey(const ValueKey<String>('home-action-chat')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('home-chat-input-bar')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey<String>('home-diary-entry')));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
       expect(
         backgroundGradient(tester, 'diary-background').colors.first,
         const Color(0xFFFFEEF5),
       );
 
-      await tester.tap(find.byKey(const ValueKey<String>('diary-back-button')));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey<String>('home-settings-button')),
-      );
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
       expect(
         backgroundGradient(tester, 'settings-background').colors.first,
         const Color(0xFFFFF4FA),
@@ -81,17 +93,16 @@ void main() {
   testWidgets('opens appearance settings and applies a new preset', (
     WidgetTester tester,
   ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-settings-button')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
+    await tapVisible(
+      tester,
       find.byKey(const ValueKey<String>('settings-item-appearance')),
     );
-    await tester.pumpAndSettle();
 
     expect(
       find.byKey(const ValueKey<String>('appearance-settings-screen')),
@@ -127,10 +138,10 @@ void main() {
       1,
     );
 
-    await tester.tap(
+    await tapVisible(
+      tester,
       find.byKey(const ValueKey<String>('appearance-preset-forest')),
     );
-    await tester.pumpAndSettle();
 
     expect(scaffoldBackgroundColor(tester), const Color(0xFFF6FBF6));
     expect(
@@ -154,25 +165,22 @@ void main() {
       0,
     );
 
-    await tester.tap(
+    await tapVisible(
+      tester,
       find.byKey(const ValueKey<String>('appearance-settings-back-button')),
     );
-    await tester.pumpAndSettle();
     expect(
       backgroundGradient(tester, 'settings-background').colors.first,
       const Color(0xFFF5FAF4),
     );
-    await tester.tap(
-      find.byKey(const ValueKey<String>('settings-back-button')),
-    );
-    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-home')));
     expect(
       backgroundGradient(tester, 'home-background').colors.first,
       const Color(0xFFE5F3E8),
     );
 
-    await tester.tap(find.byKey(const ValueKey<String>('home-diary-entry')));
-    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
     expect(
       backgroundGradient(tester, 'diary-background').colors.first,
       const Color(0xFFF2F8EF),

@@ -63,7 +63,6 @@ export class SpeechService {
       const [response] = await this.textToSpeechClient.synthesizeSpeech({
         input: {
           text: normalizeTtsText(params.text),
-          prompt: buildAssistantTtsPrompt(this.config.ttsPrompt),
         },
         voice: {
           languageCode: this.config.ttsLanguageCode,
@@ -105,13 +104,4 @@ function normalizeTtsText(text: string): string {
   return normalized.length <= 320
     ? normalized
     : `${normalized.slice(0, 317).trimEnd()}...`;
-}
-
-function buildAssistantTtsPrompt(basePrompt: string): string {
-  return [
-    basePrompt.trim(),
-    "自然な会話として読む。",
-    "機械的に区切らず、短い文でも少しだけ呼吸を感じるテンポで話す。",
-    "説教っぽくせず、静かに寄り添う温度感を保つ。",
-  ].join(" ");
 }

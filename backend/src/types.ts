@@ -16,10 +16,27 @@ export type CharacterDraft = {
   starterGreeting: string;
 };
 
+export type SceneSlot = "morning" | "day" | "night";
+
 export type ImageDraft = {
   title: string;
   promptExcerpt: string;
   imageUrl?: string | null;
+  dateKey?: string;
+  latestVideoUrl?: string | null;
+  latestSquareVideoUrl?: string | null;
+  posterImageUrl?: string | null;
+  videoStatus?: VideoGenerationStatus;
+};
+
+export type VideoGenerationStatus = "idle" | "generating" | "ready" | "failed";
+
+export type VideoDraft = {
+  title: string;
+  promptExcerpt: string;
+  videoUrl?: string | null;
+  squareVideoUrl?: string | null;
+  posterImageUrl?: string | null;
   dateKey?: string;
 };
 
@@ -58,4 +75,3 @@ export type PhotoAnalysisDraft = {
   confirmationPrompt: string;
   reactionHint: string;
 };
-

@@ -3,6 +3,7 @@ import {
   buildAssistantPrompt,
   buildAssistantSystemInstruction,
   buildCharacterImagePrompt,
+  buildCharacterMotionPrompt,
   buildDailySummaryPrompt,
   buildDailySummarySystemInstruction,
   buildFallbackDailySummary,
@@ -55,6 +56,9 @@ assert.match(instruction, /Mori/);
 assert.match(instruction, /やわらかい口調/);
 assert.match(instruction, /写真が入力に含まれる場合は、写真の内容に対して返答する/);
 assert.match(instruction, /料理名/);
+assert.doesNotMatch(instruction, /2〜4文程度/);
+assert.doesNotMatch(instruction, /各文を完結させる/);
+assert.doesNotMatch(instruction, /適度な改行/);
 
 const dailySummaryInstruction = buildDailySummarySystemInstruction();
 assert.match(dailySummaryInstruction, /日記文/);
@@ -81,15 +85,19 @@ assert.match(dailySummaryPrompt, /写真では 参考書の写真に見える/);
 assert.match(dailySummaryPrompt, /doneThings/);
 assert.match(dailySummaryPrompt, /diaryBody/);
 
-assert.equal(normalizeAssistantReply(" こんにちは\n"), "こんにちは。");
-assert.equal(normalizeAssistantReply("   \n  "), null);
+assert.equal(normalizeAssistantReply(" こんにちは\n"), " こんにちは\n");
+assert.equal(normalizeAssistantReply("   \n  "), "   \n  ");
 assert.equal(
   normalizeAssistantReply("そうか、頑張ったんだな。次も少しずつ続けようよ"),
-  "そうか、頑張ったんだな。次も少しずつ続けようよ。",
+  "そうか、頑張ったんだな。次も少しずつ続けようよ",
 );
 assert.equal(
   normalizeAssistantReply("「なに？」だと？筋トレも開発も、両方"),
-  "「なに？」だと？筋トレも開発も、両方。",
+  "「なに？」だと？筋トレも開発も、両方",
+);
+assert.equal(
+  normalizeAssistantReply("いい流れだね。次は焦らず、"),
+  "いい流れだね。次は焦らず、",
 );
 const fallbackDailySummary = buildFallbackDailySummary({
   dateKey: "2026-03-16",
@@ -221,13 +229,29 @@ const imagePrompt = buildCharacterImagePrompt({
 });
 
 assert.match(imagePrompt, /pixel-art isometric room illustration/);
-assert.match(imagePrompt, /wide horizontal composition/);
+assert.match(imagePrompt, /wide horizontal composition/i);
 assert.match(imagePrompt, /character stands or sits near the center/);
 assert.match(imagePrompt, /desk top item: ノートPC/);
 assert.match(imagePrompt, /表情に少し自信が出てきた/);
 assert.match(imagePrompt, /少し春っぽい空気感/);
 assert.match(imagePrompt, /構図ルール/);
 assert.match(imagePrompt, /縦長の人物ポートレートにしない/);
+
+const motionPrompt = buildCharacterMotionPrompt({
+  characterName: "Mori",
+  visualEvolutionMemo: "表情に少し自信が出てきた。",
+  todaySummary: "日付: 2026-03-16\nやったこと: UI を整えた",
+  sceneItems: ["ノートPC", "付せんメモ"],
+  sceneSlot: "night",
+  optionalNote: "少し春っぽい空気感",
+});
+
+assert.match(motionPrompt, /Camera fixed/i);
+assert.match(motionPrompt, /tiny idle motions/i);
+assert.match(motionPrompt, /preserve the exact room layout/i);
+assert.match(motionPrompt, /ノートPC/);
+assert.match(motionPrompt, /少し春っぽい空気感/);
+assert.match(motionPrompt, /late-night light|evening/i);
 
 const generatedImage = extractGeneratedImage({
   candidates: [

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:nes_ui/nes_ui.dart';
 
 class ChatInputBar extends StatelessWidget {
@@ -37,12 +36,16 @@ class ChatInputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final palette = AppearanceScope.paletteOf(context).chat;
+    const borderColor = Color(0xFF5A3727);
+    const textColor = Color(0xFF352218);
+    const shellColor = Color(0xFFF6E7CC);
+    const fieldColor = Color(0xFFF3EBD8);
+    const hintColor = Color(0xFF7A5A49);
 
     return NesContainer(
       key: const ValueKey<String>('chat-input-shell'),
-      backgroundColor: palette.composerShell.withValues(alpha: 0.96),
-      borderColor: palette.composerIcon,
+      backgroundColor: shellColor.withValues(alpha: 0.92),
+      borderColor: borderColor,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       painterBuilder: NesContainerSquareCornerPainter.new,
       child: Row(
@@ -62,30 +65,37 @@ class ChatInputBar extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Material(
-                color: Colors.transparent,
-                child: TextField(
-                  key: const ValueKey<String>('chat-input-message-field'),
-                  controller: controller,
-                  focusNode: focusNode,
-                  readOnly: readOnly,
-                  onChanged: onChanged,
-                  onSubmitted: onSubmitted,
-                  textInputAction: TextInputAction.send,
-                  decoration: InputDecoration(
-                    hintText: hintText,
-                    hintStyle: theme.textTheme.bodyLarge?.copyWith(
-                      color: palette.composerHint,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: fieldColor,
+                  border: Border.all(color: borderColor, width: 2),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: TextField(
+                    key: const ValueKey<String>('chat-input-message-field'),
+                    controller: controller,
+                    focusNode: focusNode,
+                    readOnly: readOnly,
+                    onChanged: onChanged,
+                    onSubmitted: onSubmitted,
+                    textInputAction: TextInputAction.send,
+                    decoration: InputDecoration(
+                      hintText: hintText,
+                      hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                        color: hintColor,
+                      ),
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 11,
+                      ),
                     ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 11,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: palette.composerText,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -128,7 +138,7 @@ class _ChatActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = AppearanceScope.paletteOf(context).chat;
+    const borderColor = Color(0xFF5A3727);
 
     return Semantics(
       button: true,
@@ -141,7 +151,7 @@ class _ChatActionButton extends StatelessWidget {
             icon: icon,
             onPress: onPressed,
             size: const Size.square(24),
-            primaryColor: palette.composerIcon,
+            primaryColor: borderColor,
             secondaryColor: Colors.white,
           ),
         ),

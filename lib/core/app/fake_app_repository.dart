@@ -1,10 +1,10 @@
-import 'dart:typed_data';
-
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
+import 'package:gdgoc_2026_prototype/core/app/character_profile_derivation.dart';
 
 class FakeAppRepository implements AppRepository {
   FakeAppRepository({
@@ -15,6 +15,8 @@ class FakeAppRepository implements AppRepository {
     List<DailySummary>? initialSummaries,
     DailyBubble? initialDailyBubble,
     List<CharacterImageVersion>? initialImageHistory,
+    HomeBackgroundPreference? initialHomeBackgroundPreference,
+    UserProfileInput? initialUserProfile,
   }) : _session =
            initialSession ??
            const AppSession(userId: 'demo-user', needsOnboarding: true) {
@@ -26,6 +28,8 @@ class FakeAppRepository implements AppRepository {
     );
     _dailyBubble = initialDailyBubble ?? _defaultDailyBubble();
     _imageHistory = initialImageHistory ?? <CharacterImageVersion>[];
+    _homeBackgroundPreference = initialHomeBackgroundPreference;
+    _userProfile = initialUserProfile;
     _emitAll();
   }
 
@@ -36,6 +40,9 @@ class FakeAppRepository implements AppRepository {
   final _dailyBubbleController = StreamController<DailyBubble?>.broadcast();
   final _imageHistoryController =
       StreamController<List<CharacterImageVersion>>.broadcast();
+  final _homeBackgroundPreferenceController =
+      StreamController<HomeBackgroundPreference?>.broadcast();
+  final _userProfileController = StreamController<UserProfileInput?>.broadcast();
 
   AppSession _session;
   CharacterSnapshot? _character;
@@ -43,6 +50,8 @@ class FakeAppRepository implements AppRepository {
   List<DailySummary> _summaries = <DailySummary>[];
   DailyBubble? _dailyBubble;
   List<CharacterImageVersion> _imageHistory = <CharacterImageVersion>[];
+  HomeBackgroundPreference? _homeBackgroundPreference;
+  UserProfileInput? _userProfile;
 
   @override
   Future<AppSession> initializeSession() async => _session;
@@ -53,12 +62,15 @@ class FakeAppRepository implements AppRepository {
     _character = CharacterSnapshot(
       id: 'character-${_session.userId}',
       name: input.displayName.isEmpty ? 'Self' : input.displayName,
-      personaPrompt:
-          'You are the user\'s reflective inner voice.',
+      personaPrompt: 'You are the user\'s reflective inner voice.',
       visualPromptBase:
           'Soft illustrated self-projection character, reflects recent self-improvement.',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
+      latestVideoUrl: null,
+      latestSquareVideoUrl: null,
+      posterImageUrl: null,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
     );
@@ -74,7 +86,8 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: _dateKey(now),
         title: 'はじまりの日',
-        diaryBody: '今日はプロフィールを登録して、自分を投影したキャラクターを迎えた。'
+        diaryBody:
+            '今日はプロフィールを登録して、自分を投影したキャラクターを迎えた。'
             '\n明日はまず小さな報告を1つ送れたらいいな。',
         mood: 'わくわく',
         doneThings: ['プロフィールを登録した', 'キャラクターを作った'],
@@ -98,6 +111,7 @@ class FakeAppRepository implements AppRepository {
       text: '今日はひとこと残すだけでいい。まずは今やることを置いていこう。',
       generatedAt: now,
     );
+    _userProfile = input;
     _session = _session.copyWith(
       needsOnboarding: false,
       characterId: _character!.id,
@@ -111,6 +125,40 @@ class FakeAppRepository implements AppRepository {
   Stream<List<ChatMessage>> watchChatMessages(String threadId) async* {
     yield List<ChatMessage>.unmodifiable(_messages);
     yield* _chatController.stream;
+  }
+
+  @override
+  Stream<UserProfileInput?> watchUserProfile(String userId) async* {
+    yield _userProfile;
+    yield* _userProfileController.stream;
+  }
+
+  @override
+  Future<void> updateUserProfile({
+    required String userId,
+    required UserProfileInput profile,
+  }) async {
+    _userProfile = profile;
+    final character = _character;
+    if (character != null) {
+      final derived = deriveCharacterProfileFields(profile);
+      _character = CharacterSnapshot(
+        id: character.id,
+        name: character.name,
+        personaPrompt: derived.personaPrompt,
+        visualPromptBase: derived.visualPromptBase,
+        imageStatus: character.imageStatus,
+        videoStatus: character.videoStatus,
+        latestImageUrl: character.latestImageUrl,
+        latestVideoUrl: character.latestVideoUrl,
+        latestSquareVideoUrl: character.latestSquareVideoUrl,
+        posterImageUrl: character.posterImageUrl,
+        lastGeneratedAt: character.lastGeneratedAt,
+        starterGreeting: character.starterGreeting,
+      );
+      _characterController.add(_character);
+    }
+    _userProfileController.add(_userProfile);
   }
 
   @override
@@ -152,6 +200,7 @@ class FakeAppRepository implements AppRepository {
         imageAnalysis: photoAnalysis,
       ),
     ];
+
     final todayDateKey = _dateKey(now);
     final existingSummary = _summaryForDate(todayDateKey);
     final photoActivity = photoAnalysis?.activity;
@@ -195,7 +244,11 @@ class FakeAppRepository implements AppRepository {
       personaPrompt: _character?.personaPrompt ?? '',
       visualPromptBase: _character?.visualPromptBase ?? '',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
+      latestVideoUrl: null,
+      latestSquareVideoUrl: null,
+      posterImageUrl: null,
       lastGeneratedAt: now,
       starterGreeting: _character?.starterGreeting,
     );
@@ -247,7 +300,8 @@ class FakeAppRepository implements AppRepository {
       DailySummary(
         dateKey: _dateKey(now),
         title: '声で整理した日',
-        diaryBody: '今日は音声で気持ちを整理して、ひとつ先の動きを言葉にした。'
+        diaryBody:
+            '今日は音声で気持ちを整理して、ひとつ先の動きを言葉にした。'
             '\n明日はその続きを短く残せたらいいな。',
         mood: '穏やか',
         doneThings: const <String>['音声で整理した'],
@@ -282,6 +336,10 @@ class FakeAppRepository implements AppRepository {
     ].join(' / ');
     final imageUrl =
         'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.png';
+    final videoUrl =
+        'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}.mp4';
+    final squareVideoUrl =
+        'https://example.com/generated/${_session.userId}/${now.microsecondsSinceEpoch}-square.mp4';
 
     _imageHistory = [
       CharacterImageVersion(
@@ -301,7 +359,11 @@ class FakeAppRepository implements AppRepository {
       personaPrompt: _character?.personaPrompt ?? '',
       visualPromptBase: _character?.visualPromptBase ?? '',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.ready,
       latestImageUrl: imageUrl,
+      latestVideoUrl: videoUrl,
+      latestSquareVideoUrl: squareVideoUrl,
+      posterImageUrl: imageUrl,
       lastGeneratedAt: now,
       starterGreeting: _character?.starterGreeting,
     );
@@ -312,6 +374,32 @@ class FakeAppRepository implements AppRepository {
   Stream<CharacterSnapshot?> watchCharacter(String characterId) async* {
     yield _character;
     yield* _characterController.stream;
+  }
+
+  @override
+  Future<void> updateCharacterSettings({
+    required String characterId,
+    required CharacterSettings settings,
+  }) async {
+    final current = _character;
+    if (current == null) {
+      return;
+    }
+    _character = CharacterSnapshot(
+      id: current.id,
+      name: settings.name,
+      personaPrompt: settings.personaPrompt,
+      visualPromptBase: current.visualPromptBase,
+      imageStatus: current.imageStatus,
+      videoStatus: current.videoStatus,
+      latestImageUrl: current.latestImageUrl,
+      latestVideoUrl: current.latestVideoUrl,
+      latestSquareVideoUrl: current.latestSquareVideoUrl,
+      posterImageUrl: current.posterImageUrl,
+      lastGeneratedAt: current.lastGeneratedAt,
+      starterGreeting: settings.starterGreeting,
+    );
+    _characterController.add(_character);
   }
 
   @override
@@ -340,7 +428,7 @@ class FakeAppRepository implements AppRepository {
   }) async* {
     yield _summaryForDate(dateKey);
     yield* _dailySummariesController.stream.map(
-        (summaries) => _findSummaryByDate(summaries, dateKey),
+      (summaries) => _findSummaryByDate(summaries, dateKey),
     );
   }
 
@@ -367,22 +455,65 @@ class FakeAppRepository implements AppRepository {
   }
 
   @override
+  Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
+    required String userId,
+  }) async* {
+    yield _homeBackgroundPreference;
+    yield* _homeBackgroundPreferenceController.stream;
+  }
+
+  @override
+  Future<void> selectHomeBackgroundTheme({
+    required String userId,
+    required String themeId,
+  }) async {
+    _homeBackgroundPreference = HomeBackgroundPreference(
+      themeId: themeId,
+      updatedAt: DateTime.now(),
+    );
+    _emitHomeBackgroundPreference();
+  }
+
+  @override
+  Future<void> uploadCustomHomeBackground({
+    required String userId,
+    required Uint8List imageBytes,
+    required String imageMimeType,
+    required String imageFilename,
+  }) async {
+    _homeBackgroundPreference = HomeBackgroundPreference(
+      themeId: _homeBackgroundPreference?.themeId ?? 'yuuyake',
+      customImageUrl: 'https://example.com/backgrounds/$imageFilename',
+      updatedAt: DateTime.now(),
+    );
+    _emitHomeBackgroundPreference();
+  }
+
+  @override
   Future<void> dispose() async {
     await _chatController.close();
     await _characterController.close();
     await _dailySummariesController.close();
     await _dailyBubbleController.close();
     await _imageHistoryController.close();
+    await _homeBackgroundPreferenceController.close();
+    await _userProfileController.close();
   }
 
   void _emitAll() {
     _chatController.add(List<ChatMessage>.unmodifiable(_messages));
     _characterController.add(_character);
+    _userProfileController.add(_userProfile);
     _dailySummariesController.add(List<DailySummary>.unmodifiable(_summaries));
     _dailyBubbleController.add(_dailyBubble);
     _imageHistoryController.add(
       List<CharacterImageVersion>.unmodifiable(_imageHistory),
     );
+    _emitHomeBackgroundPreference();
+  }
+
+  void _emitHomeBackgroundPreference() {
+    _homeBackgroundPreferenceController.add(_homeBackgroundPreference);
   }
 
   DailyBubble _defaultDailyBubble() {

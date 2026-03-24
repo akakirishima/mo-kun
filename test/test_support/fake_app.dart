@@ -27,6 +27,7 @@ FakeAppRepository buildFakeRepository() {
       personaPrompt: '自分の流れを静かに整理して返す内なる声。',
       visualPromptBase: '会話内容に応じて見た目が少し変わる自己投影キャラクター。',
       imageStatus: CharacterImageStatus.ready,
+      videoStatus: CharacterVideoStatus.idle,
       lastGeneratedAt: now,
       starterGreeting: '今日は何を残したい？',
     ),
@@ -95,10 +96,16 @@ FakeAppRepository buildFakeRepository() {
         promptExcerpt: '静かに積み上がってきた印象',
         status: CharacterImageStatus.ready,
         generatedAt: previousMonthDate,
-        imageUrl: 'https://example.com/last-month.png',
+      imageUrl: 'https://example.com/last-month.png',
         dateKey: previousMonthDateKey,
       ),
     ],
+    initialUserProfile: const UserProfileInput(
+      displayName: 'Sano',
+      goal: '毎日の進捗を軽く残す',
+      partnerStyle: 'やさしく整理して背中を押してほしい',
+      weakPoints: <String>['後回しにしやすい', '朝に動き出しが遅い'],
+    ),
   );
 }
 

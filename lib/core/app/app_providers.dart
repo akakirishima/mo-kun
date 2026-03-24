@@ -35,6 +35,13 @@ final selectedDiaryMonthProvider = StateProvider<DateTime>((ref) {
   return ref.watch(currentDiaryMonthProvider);
 });
 
+final userProfileProvider = StreamProvider.family<UserProfileInput?, String>((
+  ref,
+  userId,
+) {
+  return ref.watch(appRepositoryProvider).watchUserProfile(userId);
+});
+
 final diaryMonthNavigationControllerProvider =
     Provider<DiaryMonthNavigationController>(
       (ref) => DiaryMonthNavigationController(ref),
@@ -133,6 +140,13 @@ final monthlyDailySummariesProvider =
           );
     });
 
+final homeBackgroundPreferenceProvider =
+    StreamProvider.family<HomeBackgroundPreference?, String>((ref, userId) {
+      return ref
+          .watch(appRepositoryProvider)
+          .watchHomeBackgroundPreference(userId: userId);
+    });
+
 final diaryImageHistoryProvider =
     StreamProvider.family<List<CharacterImageVersion>, AppSession>((
       ref,
@@ -199,6 +213,23 @@ class OnboardingController {
         .completeOnboarding(input);
     _ref.invalidate(sessionProvider);
     return session;
+  }
+}
+
+final userProfileControllerProvider = Provider<UserProfileController>(
+  (ref) => UserProfileController(ref),
+);
+
+class UserProfileController {
+  UserProfileController(this._ref);
+
+  final Ref _ref;
+
+  Future<void> save(UserProfileInput profile) async {
+    final session = await _ref.read(sessionProvider.future);
+    await _ref
+        .read(appRepositoryProvider)
+        .updateUserProfile(userId: session.userId, profile: profile);
   }
 }
 
@@ -272,6 +303,32 @@ class RegenerateCharacterImageController {
   }
 }
 
+final characterSettingsControllerProvider =
+    Provider<CharacterSettingsController>(
+      (ref) => CharacterSettingsController(ref),
+    );
+
+class CharacterSettingsController {
+  CharacterSettingsController(this._ref);
+
+  final Ref _ref;
+
+  Future<void> save(CharacterSettings settings) async {
+    final session = await _ref.read(sessionProvider.future);
+    final characterId = session.characterId;
+    if (characterId == null) {
+      throw StateError('Missing character id.');
+    }
+
+    await _ref
+        .read(appRepositoryProvider)
+        .updateCharacterSettings(
+          characterId: characterId,
+          settings: settings,
+        );
+  }
+}
+
 final sendVoiceMessageControllerProvider = Provider<SendVoiceMessageController>(
   (ref) => SendVoiceMessageController(ref),
 );
@@ -300,6 +357,39 @@ class SendVoiceMessageController {
           mimeType: mimeType,
           durationMs: durationMs,
           clientMessageId: 'voice-${now.microsecondsSinceEpoch}',
+        );
+  }
+}
+
+final homeBackgroundControllerProvider = Provider<HomeBackgroundController>(
+  (ref) => HomeBackgroundController(ref),
+);
+
+class HomeBackgroundController {
+  HomeBackgroundController(this._ref);
+
+  final Ref _ref;
+
+  Future<void> selectTheme(String themeId) async {
+    final session = await _ref.read(sessionProvider.future);
+    await _ref
+        .read(appRepositoryProvider)
+        .selectHomeBackgroundTheme(userId: session.userId, themeId: themeId);
+  }
+
+  Future<void> uploadCustomImage({
+    required Uint8List imageBytes,
+    required String imageMimeType,
+    required String imageFilename,
+  }) async {
+    final session = await _ref.read(sessionProvider.future);
+    await _ref
+        .read(appRepositoryProvider)
+        .uploadCustomHomeBackground(
+          userId: session.userId,
+          imageBytes: imageBytes,
+          imageMimeType: imageMimeType,
+          imageFilename: imageFilename,
         );
   }
 }
