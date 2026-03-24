@@ -6,6 +6,7 @@ export type AppConfig = {
   veoModel: string;
   geminiTemperature: number;
   geminiMaxOutputTokens: number;
+  geminiThinkingBudget: number;
   imageBucket: string;
   speechLanguageCode: string;
   ttsLanguageCode: string;
@@ -26,7 +27,8 @@ export function loadConfig(): AppConfig {
       process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image',
     veoModel: process.env.VEO_MODEL ?? 'veo-3.1-generate-001',
     geminiTemperature: Number(process.env.GEMINI_TEMPERATURE ?? 0.5),
-    geminiMaxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? 480),
+    geminiMaxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? 2048),
+    geminiThinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 128),
     imageBucket: process.env.IMAGE_BUCKET ?? 'local-bucket',
     speechLanguageCode: process.env.SPEECH_LANGUAGE_CODE ?? 'ja-JP',
     ttsLanguageCode: process.env.TTS_LANGUAGE_CODE ?? 'ja-JP',

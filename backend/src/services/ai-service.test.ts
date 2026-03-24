@@ -56,6 +56,9 @@ assert.match(instruction, /Mori/);
 assert.match(instruction, /やわらかい口調/);
 assert.match(instruction, /写真が入力に含まれる場合は、写真の内容に対して返答する/);
 assert.match(instruction, /料理名/);
+assert.doesNotMatch(instruction, /2〜4文程度/);
+assert.doesNotMatch(instruction, /各文を完結させる/);
+assert.doesNotMatch(instruction, /適度な改行/);
 
 const dailySummaryInstruction = buildDailySummarySystemInstruction();
 assert.match(dailySummaryInstruction, /日記文/);
@@ -82,15 +85,19 @@ assert.match(dailySummaryPrompt, /写真では 参考書の写真に見える/);
 assert.match(dailySummaryPrompt, /doneThings/);
 assert.match(dailySummaryPrompt, /diaryBody/);
 
-assert.equal(normalizeAssistantReply(" こんにちは\n"), "こんにちは。");
-assert.equal(normalizeAssistantReply("   \n  "), null);
+assert.equal(normalizeAssistantReply(" こんにちは\n"), " こんにちは\n");
+assert.equal(normalizeAssistantReply("   \n  "), "   \n  ");
 assert.equal(
   normalizeAssistantReply("そうか、頑張ったんだな。次も少しずつ続けようよ"),
-  "そうか、頑張ったんだな。次も少しずつ続けようよ。",
+  "そうか、頑張ったんだな。次も少しずつ続けようよ",
 );
 assert.equal(
   normalizeAssistantReply("「なに？」だと？筋トレも開発も、両方"),
-  "「なに？」だと？筋トレも開発も、両方。",
+  "「なに？」だと？筋トレも開発も、両方",
+);
+assert.equal(
+  normalizeAssistantReply("いい流れだね。次は焦らず、"),
+  "いい流れだね。次は焦らず、",
 );
 const fallbackDailySummary = buildFallbackDailySummary({
   dateKey: "2026-03-16",

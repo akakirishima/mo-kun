@@ -239,9 +239,19 @@ export class AiService {
           ),
           temperature: this.config.geminiTemperature,
           maxOutputTokens: this.config.geminiMaxOutputTokens,
+          thinkingConfig: {
+            thinkingBudget: this.config.geminiThinkingBudget,
+          },
         },
       });
       const normalized = normalizeAssistantReply(response.text);
+      console.info("Assistant raw model output", {
+        model: this.config.geminiModel,
+        maxOutputTokens: this.config.geminiMaxOutputTokens,
+        thinkingBudget: this.config.geminiThinkingBudget,
+        finishReasons: extractFinishReasons(response),
+        rawText: response.text ?? null,
+      });
       if (!normalized) {
         throw new AiServiceError("gemini_empty_response");
       }
@@ -577,13 +587,6 @@ export function buildAssistantSystemInstruction(
     "- 日本語で答える",
     "- 会話の立ち位置は『親しい友人としてチャットで語りかけるトーン』に寄せる",
     "- 独り言のような体言止めは避け、「〜だね」「〜かな？」といった温かい口語で会話を返すこと",
-
-    // ▼ ここから追加・強化したルール ▼
-    "- 短すぎる1文だけの返答は避け、必ず2〜4文程度の長さで返すこと", // 長さの指定
-    "- 「お、イラストだね」といった事実の確認だけで終わらず、必ず感想（「すごい可愛い！」「色使いがいいね」など）や、ユーザーへのポジティブな問いかけを繋げて会話を広げること", // 深さの指定
-    "- 実際のチャットのように、文章の間に適度な改行を挟んで、2連続でメッセージを送っているようなテンポ感を出すこと", // 連投っぽさの演出
-    // ▲ ここまで ▲
-
     "- 写真が入力に含まれる場合は、写真の内容に対して返答する",
     "- 写真の内容が分かるなら、それを前提に自然に返す",
     "- 食事が分かるなら料理名を、場所が分かるなら場所名を、返答として返す",
@@ -1112,16 +1115,10 @@ export function normalizeGeneratedDailyBubbleText(rawText?: string | null): stri
 }
 
 export function normalizeAssistantReply(text?: string): string | null {
-  if (!text) {
+  if (text == null || text === "") {
     return null;
   }
-
-  const normalized = text.replace(/\r\n/g, "\n").trim();
-  if (!normalized) {
-    return null;
-  }
-
-  return finalizeAssistantReply(normalized);
+  return text;
 }
 
 export function extractGeneratedImage(response: unknown): GeneratedImageAsset {
@@ -1181,6 +1178,24 @@ function extractResponseParts(
   };
 
   return candidateContainer.candidates?.flatMap((candidate) => candidate.content?.parts ?? []) ?? [];
+}
+
+function extractFinishReasons(response: unknown): string[] {
+  if (typeof response !== "object" || response == null) {
+    return [];
+  }
+
+  const candidates = (response as {
+    candidates?: Array<{ finishReason?: unknown }>;
+  }).candidates;
+
+  if (!Array.isArray(candidates)) {
+    return [];
+  }
+
+  return candidates
+    .map((candidate) => candidate.finishReason)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
 }
 
 async function sleep(ms: number) {
@@ -1615,27 +1630,6 @@ function resolveRoomVisualPromptBase(visualPromptBase: string): string {
     return DEFAULT_ROOM_VISUAL_PROMPT_BASE;
   }
   return normalized;
-}
-
-function finalizeAssistantReply(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-
-  if (/[。！？!?」]$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (/[、,:：]$/.test(trimmed)) {
-    const sentenceEndMatches = [...trimmed.matchAll(/[。！？!?]/g)];
-    const lastSentenceEnd = sentenceEndMatches.at(-1);
-    if (lastSentenceEnd && lastSentenceEnd.index != null) {
-      return trimmed.slice(0, lastSentenceEnd.index + 1).trim();
-    }
-  }
-
-  return `${trimmed}。`;
 }
 
 function extractErrorMessage(error: unknown): string {
