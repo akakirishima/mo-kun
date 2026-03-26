@@ -583,8 +583,9 @@ class _CoverPixelFramePainter extends CustomPainter {
     void corner(double left, double top, bool right, bool bottom) {
       final x = right ? size.width - inset - length : inset;
       final y = bottom ? size.height - inset - length : inset;
+      final horizontalY = bottom ? size.height - inset - thickness : y;
       canvas.drawRect(
-        Rect.fromLTWH(x, right ? y : y, length, thickness),
+        Rect.fromLTWH(x, horizontalY, length, thickness),
         framePaint,
       );
       canvas.drawRect(
