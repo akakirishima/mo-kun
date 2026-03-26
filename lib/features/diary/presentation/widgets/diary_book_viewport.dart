@@ -250,8 +250,6 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     return DiaryDayPage(
       entry: entry,
       monthNumber: _monthNumber,
-      dateLabel: '$_monthNumber月${entry.dayNumber}日',
-      onDateTap: widget.onOpenSelector,
       bottomClearance: widget.dayPageBottomClearance,
     );
   }

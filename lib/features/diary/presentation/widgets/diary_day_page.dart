@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/models/diary_book.dart';
-import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_day_selector.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_retro_components.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_vertical_text.dart';
 
@@ -19,15 +18,11 @@ class DiaryDayPage extends ConsumerWidget {
     super.key,
     required this.entry,
     required this.monthNumber,
-    required this.dateLabel,
-    required this.onDateTap,
     required this.bottomClearance,
   });
 
   final DiaryDayEntry entry;
   final String monthNumber;
-  final String dateLabel;
-  final VoidCallback onDateTap;
   final double bottomClearance;
 
   @override
@@ -50,8 +45,6 @@ class DiaryDayPage extends ConsumerWidget {
           const horizontalPadding = 16.0;
           const topPadding = 14.0;
           const bottomPadding = 8.0;
-          const selectorHeight = 34.0;
-          const selectorGap = 6.0;
           const sectionGap = 8.0;
 
           final contentBottomGap = bottomClearance.clamp(16.0, 32.0);
@@ -60,8 +53,6 @@ class DiaryDayPage extends ConsumerWidget {
               topPadding -
               bottomPadding -
               contentBottomGap -
-              selectorHeight -
-              selectorGap -
               sectionGap;
           final illustrationHeight = (verticalBudget * 0.42).clamp(
             186.0,
@@ -84,38 +75,6 @@ class DiaryDayPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    height: selectorHeight,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: DiaryInlineSelector(
-                        key: ValueKey<String>(
-                          'diary-entry-date-selector-${entry.dayNumber}',
-                        ),
-                        label: dateLabel,
-                        onTap: onDateTap,
-                        textColor: palette.ink.withValues(alpha: 0.74),
-                        backgroundColor: palette.cardFill.withValues(
-                          alpha: 0.72,
-                        ),
-                        borderColor: palette.paperEdge.withValues(alpha: 0.88),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        textStyle: TextStyle(
-                          fontFamily: 'NotoSansJP',
-                          color: palette.ink.withValues(alpha: 0.78),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.28,
-                          decoration: TextDecoration.none,
-                          shadows: const [],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: selectorGap),
                   SizedBox(
                     key: ValueKey<String>(
                       'diary-entry-illustration-${entry.dayNumber}',
@@ -328,18 +287,6 @@ class _DiaryEntryIllustration extends StatelessWidget {
               dayNumber: entry.dayNumber,
               palette: entry.illustrationPalette,
             ),
-          ),
-        ),
-        Positioned(
-          left: 14,
-          top: 14,
-          child: DiaryRetroBadge(
-            label: entry.highlightLabel,
-            fillColor: Colors.white.withValues(alpha: 0.8),
-            borderColor: Colors.white.withValues(alpha: 0.84),
-            textColor: Colors.black87,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            shadowColor: Colors.black.withValues(alpha: 0.08),
           ),
         ),
       ],

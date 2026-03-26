@@ -47,8 +47,6 @@ void main() {
           child: DiaryDayPage(
             entry: buildEntry(imageUrl: 'https://example.com/today.png'),
             monthNumber: '3',
-            dateLabel: '3月3日',
-            onDateTap: () {},
             bottomClearance: 80,
           ),
           overrides: [
@@ -82,8 +80,6 @@ void main() {
         child: DiaryDayPage(
           entry: buildEntry(),
           monthNumber: '3',
-          dateLabel: '3月3日',
-          onDateTap: () {},
           bottomClearance: 80,
         ),
       ),
