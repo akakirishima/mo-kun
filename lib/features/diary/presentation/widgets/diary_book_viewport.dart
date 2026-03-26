@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -18,8 +19,20 @@ const _pageTurnThreshold = 0.33;
 const _pageTurnFlingVelocity = 850.0;
 const _fullTurnDuration = Duration(milliseconds: 420);
 const _snapBackDuration = Duration(milliseconds: 220);
+const _coverTeaserInitialDelay = Duration(milliseconds: 900);
+const _coverTeaserForwardDuration = Duration(milliseconds: 700);
+const _coverTeaserReverseDuration = Duration(milliseconds: 550);
+const _coverTeaserRepeatDelay = Duration(milliseconds: 3200);
+const _coverTeaserMaxProgress = 0.25;
 
-enum _ViewportPhase { idle, capturing, animating, chainedAnimating }
+enum _ViewportPhase {
+  idle,
+  capturing,
+  animating,
+  chainedAnimating,
+  teaserCapturing,
+  teasing,
+}
 
 enum _DiaryTurnDirection { next, previous }
 
@@ -34,6 +47,8 @@ class DiaryBookViewport extends StatefulWidget {
     required this.onShowPreviousMonth,
     required this.onShowNextMonth,
     required this.dayPageBottomClearance,
+    this.enableCoverTurnTeaser = true,
+    this.isVisible = true,
   });
 
   final DiaryMonthBook book;
@@ -44,13 +59,15 @@ class DiaryBookViewport extends StatefulWidget {
   final VoidCallback onShowPreviousMonth;
   final VoidCallback onShowNextMonth;
   final double dayPageBottomClearance;
+  final bool enableCoverTurnTeaser;
+  final bool isVisible;
 
   @override
   State<DiaryBookViewport> createState() => _DiaryBookViewportState();
 }
 
 class _DiaryBookViewportState extends State<DiaryBookViewport>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final GlobalKey _currentCaptureKey = GlobalKey(
     debugLabel: 'diary-current-page-capture',
   );
@@ -59,6 +76,7 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
   );
 
   late final AnimationController _turnController;
+  late final AnimationController _teaserController;
   late int _displayedPageIndex;
 
   _ViewportPhase _phase = _ViewportPhase.idle;
@@ -77,9 +95,15 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
   bool _commitTurn = false;
   bool _notifyParentOnCommit = false;
   int _captureGeneration = 0;
+  int _teaserGeneration = 0;
+  double _viewportHeight = 0.0;
+  Size? _teaserCaptureSize;
+  Timer? _teaserTimer;
 
   ui.Image? _currentImage;
   ui.Image? _targetImage;
+  ui.Image? _teaserCurrentImage;
+  ui.Image? _teaserTargetImage;
 
   String get _monthNumber {
     final match = RegExp(r'(\d+)月').firstMatch(widget.book.monthLabel);
@@ -94,6 +118,12 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
       vsync: this,
       duration: _fullTurnDuration,
     )..addStatusListener(_handleTurnStatus);
+    _teaserController = AnimationController(vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.isVisible) {
+        _maybeScheduleCoverTeaser(initial: true);
+      }
+    });
   }
 
   @override
@@ -103,15 +133,34 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     final monthChanged =
         widget.book.calendar.monthStart != oldWidget.book.calendar.monthStart;
     final pageCountChanged = widget.book.pageCount != oldWidget.book.pageCount;
+    final bookChanged = widget.book != oldWidget.book;
+    final becameVisible = !oldWidget.isVisible && widget.isVisible;
+    final becameHidden = oldWidget.isVisible && !widget.isVisible;
+
+    if (becameHidden) {
+      _cancelCoverTeaser();
+    }
 
     if (monthChanged || pageCountChanged) {
+      _invalidateTeaserImages();
       _resetToPage(targetPageIndex);
       return;
     }
 
+    if (bookChanged) {
+      _invalidateTeaserImages();
+    }
+
+    if (becameVisible) {
+      _cancelCoverTeaser();
+      _maybeScheduleCoverTeaser(initial: true);
+    }
+
     if (targetPageIndex == _displayedPageIndex &&
         _queuedNavigationTarget == null &&
-        !_isTurning) {
+        !_isTurning &&
+        !_isTeasing) {
+      _maybeScheduleCoverTeaser(initial: bookChanged);
       return;
     }
 
@@ -122,10 +171,13 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
 
   @override
   void dispose() {
+    _teaserTimer?.cancel();
     _turnController
       ..removeStatusListener(_handleTurnStatus)
       ..dispose();
+    _teaserController.dispose();
     _disposeCapturedImages();
+    _disposeTeaserImages();
     super.dispose();
   }
 
@@ -133,6 +185,21 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
       _phase == _ViewportPhase.capturing ||
       _phase == _ViewportPhase.animating ||
       _phase == _ViewportPhase.chainedAnimating;
+
+  bool get _isTeasing =>
+      _phase == _ViewportPhase.teaserCapturing ||
+      _phase == _ViewportPhase.teasing;
+
+  bool get _canRunCoverTeaser =>
+      widget.enableCoverTurnTeaser &&
+      widget.isVisible &&
+      _displayedPageIndex == 0 &&
+      widget.book.pageCount > 1 &&
+      _queuedNavigationTarget == null &&
+      !_gestureTracking &&
+      !_gestureAccepted &&
+      !_isTurning &&
+      !_isTeasing;
 
   int _clampPageIndex(int index) {
     return index.clamp(0, widget.book.pageCount - 1).toInt();
@@ -149,15 +216,35 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     return candidate;
   }
 
+  void _handleOpenSelector() {
+    _cancelCoverTeaser();
+    widget.onOpenSelector();
+  }
+
+  void _handleOpenEntryForDay(int dayNumber) {
+    _cancelCoverTeaser();
+    widget.onOpenEntryForDay(dayNumber);
+  }
+
+  void _handleShowPreviousMonth() {
+    _cancelCoverTeaser(invalidateImages: true);
+    widget.onShowPreviousMonth();
+  }
+
+  void _handleShowNextMonth() {
+    _cancelCoverTeaser(invalidateImages: true);
+    widget.onShowNextMonth();
+  }
+
   Widget _buildPageChild(int index) {
     final entry = widget.book.entryAt(index);
     if (entry == null) {
       return DiaryCoverPage(
         book: widget.book,
-        onSelectorTap: widget.onOpenSelector,
-        onDayTap: widget.onOpenEntryForDay,
-        onPreviousMonthTap: widget.onShowPreviousMonth,
-        onNextMonthTap: widget.onShowNextMonth,
+        onSelectorTap: _handleOpenSelector,
+        onDayTap: _handleOpenEntryForDay,
+        onPreviousMonthTap: _handleShowPreviousMonth,
+        onNextMonthTap: _handleShowNextMonth,
       );
     }
     return DiaryDayPage(
@@ -225,6 +312,183 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     );
   }
 
+  void _disposeTeaserImages() {
+    _teaserCurrentImage?.dispose();
+    _teaserTargetImage?.dispose();
+    _teaserCurrentImage = null;
+    _teaserTargetImage = null;
+  }
+
+  void _invalidateTeaserImages() {
+    _teaserGeneration += 1;
+    _teaserCaptureSize = null;
+    _disposeTeaserImages();
+  }
+
+  void _cancelCoverTeaser({bool invalidateImages = false}) {
+    _teaserTimer?.cancel();
+    _teaserTimer = null;
+    _teaserGeneration += 1;
+    _teaserController
+      ..stop()
+      ..value = 0.0;
+    if (invalidateImages) {
+      _teaserCaptureSize = null;
+      _disposeTeaserImages();
+    }
+    if (_isTeasing && mounted) {
+      setState(() {
+        _phase = _ViewportPhase.idle;
+      });
+    }
+  }
+
+  void _maybeScheduleCoverTeaser({required bool initial}) {
+    if (!_canRunCoverTeaser || !mounted || _teaserTimer != null) {
+      return;
+    }
+
+    _teaserTimer = Timer(
+      initial ? _coverTeaserInitialDelay : _coverTeaserRepeatDelay,
+      () {
+        _teaserTimer = null;
+        _startCoverTeaser();
+      },
+    );
+  }
+
+  Future<void> _startCoverTeaser() async {
+    if (!_canRunCoverTeaser || !mounted) {
+      return;
+    }
+
+    final firstEntryIndex = _adjacentIndexFor(0, _DiaryTurnDirection.next);
+    if (firstEntryIndex == null) {
+      return;
+    }
+
+    final captureSize = Size(_viewportWidth, _viewportHeight);
+    final hasReusableImages =
+        _teaserCurrentImage != null &&
+        _teaserTargetImage != null &&
+        _teaserCaptureSize == captureSize;
+
+    final teaserGeneration = _teaserGeneration + 1;
+    _teaserGeneration = teaserGeneration;
+    _teaserController.value = 0.0;
+
+    if (!hasReusableImages) {
+      setState(() {
+        _phase = _ViewportPhase.teaserCapturing;
+      });
+      await _captureTeaserImages(
+        teaserGeneration: teaserGeneration,
+        stepTargetIndex: firstEntryIndex,
+        captureSize: captureSize,
+      );
+      return;
+    }
+
+    await _runCoverTeaserAnimation(teaserGeneration);
+  }
+
+  Future<void> _captureTeaserImages({
+    required int teaserGeneration,
+    required int stepTargetIndex,
+    required Size captureSize,
+  }) async {
+    await SchedulerBinding.instance.endOfFrame;
+    if (!mounted || teaserGeneration != _teaserGeneration) {
+      return;
+    }
+
+    final currentBoundary =
+        _currentCaptureKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
+    final targetBoundary =
+        _targetCaptureKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
+    if (currentBoundary == null || targetBoundary == null) {
+      _handleTeaserCaptureFailure(teaserGeneration);
+      return;
+    }
+
+    final pixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    final currentImage = await currentBoundary.toImage(pixelRatio: pixelRatio);
+    final targetImage = await targetBoundary.toImage(pixelRatio: pixelRatio);
+
+    if (!mounted || teaserGeneration != _teaserGeneration) {
+      currentImage.dispose();
+      targetImage.dispose();
+      return;
+    }
+
+    _disposeTeaserImages();
+    _teaserCurrentImage = currentImage;
+    _teaserTargetImage = targetImage;
+    _teaserCaptureSize = captureSize;
+
+    if (!mounted ||
+        teaserGeneration != _teaserGeneration ||
+        _displayedPageIndex != 0 ||
+        stepTargetIndex != 1) {
+      return;
+    }
+
+    await _runCoverTeaserAnimation(teaserGeneration);
+  }
+
+  Future<void> _runCoverTeaserAnimation(int teaserGeneration) async {
+    if (!mounted ||
+        teaserGeneration != _teaserGeneration ||
+        _displayedPageIndex != 0 ||
+        _teaserCurrentImage == null ||
+        _teaserTargetImage == null) {
+      return;
+    }
+
+    setState(() {
+      _phase = _ViewportPhase.teasing;
+    });
+
+    try {
+      await _teaserController.animateTo(
+        _coverTeaserMaxProgress,
+        duration: _coverTeaserForwardDuration,
+        curve: Curves.easeOutCubic,
+      );
+      if (!mounted || teaserGeneration != _teaserGeneration) {
+        return;
+      }
+      await _teaserController.animateBack(
+        0.0,
+        duration: _coverTeaserReverseDuration,
+        curve: Curves.easeOutQuad,
+      );
+    } on TickerCanceled {
+      return;
+    }
+
+    if (!mounted || teaserGeneration != _teaserGeneration) {
+      return;
+    }
+
+    setState(() {
+      _phase = _ViewportPhase.idle;
+    });
+    _maybeScheduleCoverTeaser(initial: false);
+  }
+
+  void _handleTeaserCaptureFailure(int teaserGeneration) {
+    if (!mounted || teaserGeneration != _teaserGeneration) {
+      return;
+    }
+    setState(() {
+      _phase = _ViewportPhase.idle;
+    });
+    _maybeScheduleCoverTeaser(initial: false);
+  }
+
   void _disposeCapturedImages() {
     _currentImage?.dispose();
     _targetImage?.dispose();
@@ -255,6 +519,7 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
   }
 
   void _resetToPage(int pageIndex) {
+    _cancelCoverTeaser(invalidateImages: true);
     if (!mounted) {
       return;
     }
@@ -263,9 +528,15 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
       _phase = _ViewportPhase.idle;
       _clearTurnState(clearQueuedNavigation: true);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _maybeScheduleCoverTeaser(initial: true);
+      }
+    });
   }
 
   void _queueExternalNavigation(int targetPageIndex) {
+    _cancelCoverTeaser();
     final clampedTarget = _clampPageIndex(targetPageIndex);
     if (clampedTarget == _displayedPageIndex && !_isTurning) {
       if (_queuedNavigationTarget != null) {
@@ -312,6 +583,7 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
   }
 
   void _handleHorizontalDragStart(DragStartDetails details) {
+    _cancelCoverTeaser();
     if (_isTurning) {
       return;
     }
@@ -628,6 +900,8 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
         _queuedNavigationTarget = null;
       });
     }
+
+    _maybeScheduleCoverTeaser(initial: true);
   }
 
   void _cancelTurn() {
@@ -638,6 +912,7 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
       _phase = _ViewportPhase.idle;
       _clearTurnState(clearQueuedNavigation: false);
     });
+    _maybeScheduleCoverTeaser(initial: true);
   }
 
   Widget _buildAnimatingScene(BuildContext context) {
@@ -682,6 +957,33 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     );
   }
 
+  Widget _buildTeaserAnimatingScene(BuildContext context) {
+    final currentImage = _teaserCurrentImage;
+    final targetImage = _teaserTargetImage;
+    if (currentImage == null || targetImage == null) {
+      return _buildPageFrame(context, _buildPageChild(_displayedPageIndex));
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(child: _buildPageFrame(context, _buildPageChild(1))),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: PageTurnAnimation(
+              key: const ValueKey<String>('diary-cover-turn-teaser'),
+              image: currentImage,
+              animation: _teaserController,
+              direction: PageTurnDirection.forward,
+              edge: PageTurnEdge.left,
+              style: _pageTurnStyle(context),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildViewportContent(BuildContext context) {
     switch (_phase) {
       case _ViewportPhase.idle:
@@ -713,6 +1015,28 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
       case _ViewportPhase.animating:
       case _ViewportPhase.chainedAnimating:
         return _buildAnimatingScene(context);
+      case _ViewportPhase.teaserCapturing:
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: _buildCapturePage(
+                context: context,
+                repaintKey: _targetCaptureKey,
+                index: 1,
+              ),
+            ),
+            Positioned.fill(
+              child: _buildCapturePage(
+                context: context,
+                repaintKey: _currentCaptureKey,
+                index: 0,
+              ),
+            ),
+          ],
+        );
+      case _ViewportPhase.teasing:
+        return _buildTeaserAnimatingScene(context);
     }
   }
 
@@ -727,6 +1051,7 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     return LayoutBuilder(
       builder: (context, constraints) {
         _viewportWidth = math.min(constraints.maxWidth, 640.0);
+        _viewportHeight = constraints.maxHeight;
 
         return Center(
           child: SizedBox(
@@ -766,7 +1091,10 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
                     onHorizontalDragEnd: _handleHorizontalDragEnd,
                     onHorizontalDragCancel: _handleHorizontalDragCancel,
                     child: AnimatedBuilder(
-                      animation: _turnController,
+                      animation: Listenable.merge([
+                        _turnController,
+                        _teaserController,
+                      ]),
                       builder: (context, child) {
                         return _buildViewportContent(context);
                       },

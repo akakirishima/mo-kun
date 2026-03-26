@@ -7,9 +7,14 @@ import 'package:gdgoc_2026_prototype/features/home/presentation/home_screen.dart
 import 'package:gdgoc_2026_prototype/features/settings/presentation/settings_screen.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, this.initialTab = AppTab.home});
+  const AppShell({
+    super.key,
+    this.initialTab = AppTab.home,
+    this.enableDiaryCoverTurnTeaser = true,
+  });
 
   final AppTab initialTab;
+  final bool enableDiaryCoverTurnTeaser;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -55,7 +60,10 @@ class _AppShellState extends State<AppShell> {
                     onDiaryTap: () => _selectTab(AppTab.diary),
                   ),
                   const ChatScreen(),
-                  const DiaryScreen(),
+                  DiaryScreen(
+                    enableCoverTurnTeaser: widget.enableDiaryCoverTurnTeaser,
+                    isVisible: _selectedTab == AppTab.diary,
+                  ),
                   const SettingsScreen(),
                 ],
               ),

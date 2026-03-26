@@ -10,7 +10,14 @@ import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_d
 import 'package:nes_ui/nes_ui.dart';
 
 class DiaryScreen extends ConsumerStatefulWidget {
-  const DiaryScreen({super.key});
+  const DiaryScreen({
+    super.key,
+    this.enableCoverTurnTeaser = true,
+    this.isVisible = true,
+  });
+
+  final bool enableCoverTurnTeaser;
+  final bool isVisible;
 
   @override
   ConsumerState<DiaryScreen> createState() => _DiaryScreenState();
@@ -141,6 +148,8 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                 child: DiaryBookViewport(
                   book: book,
                   currentPageIndex: currentPage,
+                  enableCoverTurnTeaser: widget.enableCoverTurnTeaser,
+                  isVisible: widget.isVisible,
                   dayPageBottomClearance: 8,
                   onOpenSelector: () => _openDaySelector(book),
                   onOpenEntryForDay: (dayNumber) =>

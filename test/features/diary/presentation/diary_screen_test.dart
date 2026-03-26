@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/diary_screen.dart';
+import 'package:page_turn_animation/page_turn_animation.dart';
 
 import '../../../test_support/fake_app.dart';
 import '../../../test_support/mock_network_images.dart';
@@ -22,6 +23,7 @@ class _FakeImageUrlResolver extends ImageUrlResolver {
 }
 
 void main() {
+  const diaryScreen = DiaryScreen(enableCoverTurnTeaser: false);
   final currentMonthLabel = '${DateTime.now().month}月';
   final previousMonthLabel =
       '${DateTime(DateTime.now().year, DateTime.now().month - 1).month}月';
@@ -42,7 +44,7 @@ void main() {
     await mockNetworkImages(() async {
       await tester.pumpWidget(
         wrapWithTestApp(
-          child: const DiaryScreen(),
+          child: diaryScreen,
           overrides: [
             imageUrlResolverProvider.overrideWithValue(
               _FakeImageUrlResolver(const {
@@ -91,10 +93,88 @@ void main() {
     });
   });
 
+  testWidgets('plays the cover turn teaser without leaving the cover', (
+    WidgetTester tester,
+  ) async {
+    const teaserScreen = DiaryScreen(enableCoverTurnTeaser: true);
+
+    await tester.pumpWidget(wrapWithTestApp(child: teaserScreen));
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsNothing,
+    );
+
+    await tester.pump(const Duration(milliseconds: 900));
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 25));
+      if (find
+          .byKey(const ValueKey<String>('diary-cover-turn-teaser'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+    }
+
+    final teaserFinder = find.byKey(
+      const ValueKey<String>('diary-cover-turn-teaser'),
+    );
+    expect(teaserFinder, findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 80));
+
+    final teaser = tester.widget<PageTurnAnimation>(teaserFinder);
+    expect(teaser.animation.value, greaterThan(0.0));
+    expect(teaser.animation.value, lessThanOrEqualTo(0.25));
+
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.pump(const Duration(milliseconds: 650));
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-page')),
+      findsOneWidget,
+    );
+    expect(_findKeysWithPrefix('diary-entry-page-'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('does not run the teaser after moving to an entry page', (
+    WidgetTester tester,
+  ) async {
+    const teaserScreen = DiaryScreen(enableCoverTurnTeaser: true);
+
+    await tester.pumpWidget(wrapWithTestApp(child: teaserScreen));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey<String>('diary-entry-page-$firstRecordedDay')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsNothing,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('opens the selector sheet from the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -119,7 +199,7 @@ void main() {
     await mockNetworkImages(() async {
       await tester.pumpWidget(
         wrapWithTestApp(
-          child: const DiaryScreen(),
+          child: diaryScreen,
           overrides: [
             imageUrlResolverProvider.overrideWithValue(
               _FakeImageUrlResolver(const {
@@ -150,7 +230,7 @@ void main() {
   testWidgets('keeps the calendar frame rect fixed across months', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     final currentRect = tester.getRect(
@@ -178,7 +258,7 @@ void main() {
     await mockNetworkImages(() async {
       await tester.pumpWidget(
         wrapWithTestApp(
-          child: const DiaryScreen(),
+          child: diaryScreen,
           overrides: [
             imageUrlResolverProvider.overrideWithValue(
               _FakeImageUrlResolver(const {
@@ -214,7 +294,7 @@ void main() {
   testWidgets('shows recorded day markers and a today ring on the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     expect(
@@ -236,7 +316,7 @@ void main() {
   testWidgets('does not show a today ring on past months', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -257,7 +337,7 @@ void main() {
     await mockNetworkImages(() async {
       await tester.pumpWidget(
         wrapWithTestApp(
-          child: const DiaryScreen(),
+          child: diaryScreen,
           overrides: [
             imageUrlResolverProvider.overrideWithValue(
               _FakeImageUrlResolver(const {
@@ -288,7 +368,7 @@ void main() {
   testWidgets('opens the selected page from the selector sheet', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -314,7 +394,7 @@ void main() {
   testWidgets('swipes back from the first entry to the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.drag(
@@ -343,7 +423,7 @@ void main() {
   testWidgets('keeps unrecorded days non interactive on the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     final unrecordedDayButton = find.byKey(
@@ -367,7 +447,7 @@ void main() {
   testWidgets('keeps the cover in place when swiping right on the first page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.drag(
@@ -385,7 +465,7 @@ void main() {
   testWidgets('keeps the last page in place when swiping left at the end', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -409,7 +489,7 @@ void main() {
   testWidgets('snaps back when a drag does not cross the threshold', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
     await tester.pumpAndSettle();
 
     await tester.drag(
@@ -436,7 +516,7 @@ void main() {
       await mockNetworkImages(() async {
         await tester.pumpWidget(
           wrapWithTestApp(
-            child: const DiaryScreen(),
+            child: diaryScreen,
             overrides: [
               imageUrlResolverProvider.overrideWithValue(
                 _FakeImageUrlResolver(const {

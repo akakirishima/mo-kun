@@ -27,12 +27,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> waitForDiaryTeaser(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 900));
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 25));
+      if (find
+          .byKey(const ValueKey<String>('diary-cover-turn-teaser'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+    }
+  }
+
   testWidgets('starts on HOME with the bottom dock visible', (
     WidgetTester tester,
   ) async {
     configureViewport(tester);
     registerViewportTearDown(tester);
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
     await tester.pumpAndSettle();
 
     expect(
@@ -58,7 +71,7 @@ void main() {
   ) async {
     configureViewport(tester);
     registerViewportTearDown(tester);
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
     await tester.pumpAndSettle();
 
     await tapVisible(tester, find.byKey(const ValueKey<String>('nav-chat')));
@@ -90,7 +103,7 @@ void main() {
   testWidgets('opens Image from Settings', (WidgetTester tester) async {
     configureViewport(tester);
     registerViewportTearDown(tester);
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
     await tester.pumpAndSettle();
 
     await tapVisible(
@@ -114,7 +127,7 @@ void main() {
   ) async {
     configureViewport(tester);
     registerViewportTearDown(tester);
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
     await tester.pumpAndSettle();
 
     await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
@@ -147,7 +160,7 @@ void main() {
       right: 0,
       bottom: 34,
     );
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
     await tester.pumpAndSettle();
 
     await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
@@ -163,12 +176,67 @@ void main() {
     expect(gap, greaterThanOrEqualTo(12.0));
   });
 
+  testWidgets('plays the diary teaser when the diary tab opens', (
+    WidgetTester tester,
+  ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: true));
+    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsNothing,
+    );
+
+    await waitForDiaryTeaser(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('replays the diary teaser when returning to the cover tab', (
+    WidgetTester tester,
+  ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: true));
+    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+    await waitForDiaryTeaser(tester);
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(milliseconds: 800));
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-chat')));
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsNothing,
+    );
+
+    await waitForDiaryTeaser(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('keeps the first diary entry content close to the dock', (
     WidgetTester tester,
   ) async {
     configureViewport(tester);
     registerViewportTearDown(tester);
-    await tester.pumpWidget(const App());
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
     await tester.pumpAndSettle();
 
     await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
@@ -189,5 +257,30 @@ void main() {
     final gap = dockRect.top - writingPaperRect.bottom;
 
     expect(gap, inInclusiveRange(12.0, 40.0));
+  });
+
+  testWidgets('does not replay the teaser when returning on an entry page', (
+    WidgetTester tester,
+  ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: true));
+    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-chat')));
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+    await tester.pump(const Duration(seconds: 5));
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-turn-teaser')),
+      findsNothing,
+    );
   });
 }
