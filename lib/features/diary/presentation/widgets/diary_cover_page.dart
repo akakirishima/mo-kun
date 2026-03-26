@@ -18,6 +18,10 @@ const _calendarWeekdayLabels = <String>[
 
 const _coverOuterCornerRadius = 10.0;
 const _coverInnerCornerRadius = 8.0;
+const _coverBaseWidth = 356.0;
+const _coverBaseHeight = 640.0;
+const _calendarCardHeight = 286.0;
+const _calendarCardTop = (_coverBaseHeight - _calendarCardHeight) / 2;
 
 class DiaryCoverPage extends StatelessWidget {
   const DiaryCoverPage({
@@ -66,24 +70,22 @@ class DiaryCoverPage extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const baseWidth = 356.0;
-          const baseHeight = 640.0;
           final scale = math.min(
-            constraints.maxWidth / baseWidth,
-            constraints.maxHeight / baseHeight,
+            constraints.maxWidth / _coverBaseWidth,
+            constraints.maxHeight / _coverBaseHeight,
           );
 
           return Align(
             alignment: Alignment.topCenter,
             child: SizedBox(
-              width: baseWidth * scale,
-              height: baseHeight * scale,
+              width: _coverBaseWidth * scale,
+              height: _coverBaseHeight * scale,
               child: FittedBox(
                 alignment: Alignment.topCenter,
                 fit: BoxFit.fill,
                 child: SizedBox(
-                  width: baseWidth,
-                  height: baseHeight,
+                  width: _coverBaseWidth,
+                  height: _coverBaseHeight,
                   child: Stack(
                     children: [
                       Positioned.fill(
@@ -99,9 +101,7 @@ class DiaryCoverPage extends StatelessWidget {
                                   lightColor: Colors.white.withValues(
                                     alpha: 0.075,
                                   ),
-                                  darkColor: coverFrame.withValues(
-                                    alpha: 0.05,
-                                  ),
+                                  darkColor: coverFrame.withValues(alpha: 0.05),
                                 ),
                               ),
                               CustomPaint(
@@ -148,16 +148,12 @@ class DiaryCoverPage extends StatelessWidget {
                                   alpha: 0.92,
                                 ),
                                 border: Border.all(
-                                  color: coverPaperEdge.withValues(
-                                    alpha: 0.86,
-                                  ),
+                                  color: coverPaperEdge.withValues(alpha: 0.86),
                                   width: 2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: coverSpine.withValues(
-                                      alpha: 0.18,
-                                    ),
+                                    color: coverSpine.withValues(alpha: 0.18),
                                     offset: const Offset(0, 4),
                                   ),
                                 ],
@@ -170,9 +166,7 @@ class DiaryCoverPage extends StatelessWidget {
                               bottom: 8,
                               child: CustomPaint(
                                 painter: _BookmarkPixelPainter(
-                                  color: coverPaperEdge.withValues(
-                                    alpha: 0.36,
-                                  ),
+                                  color: coverPaperEdge.withValues(alpha: 0.36),
                                 ),
                               ),
                             ),
@@ -188,25 +182,19 @@ class DiaryCoverPage extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: coverSpine.withValues(alpha: 0.18),
                             border: Border.all(
-                              color: coverSpine.withValues(
-                                alpha: 0.28,
-                              ),
+                              color: coverSpine.withValues(alpha: 0.28),
                               width: 2,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: coverSpine.withValues(
-                                  alpha: 0.12,
-                                ),
+                                color: coverSpine.withValues(alpha: 0.12),
                                 offset: const Offset(0, 4),
                               ),
                             ],
                           ),
                           child: CustomPaint(
                             painter: _SpinePixelPainter(
-                              color: coverSpine.withValues(
-                                alpha: 0.18,
-                              ),
+                              color: coverSpine.withValues(alpha: 0.18),
                             ),
                           ),
                         ),
@@ -264,7 +252,7 @@ class DiaryCoverPage extends StatelessWidget {
                       Positioned(
                         left: 50,
                         right: 44,
-                        top: 232,
+                        top: _calendarCardTop,
                         child: _CalendarCard(
                           calendar: book.calendar,
                           onDayTap: onDayTap,
@@ -301,65 +289,72 @@ class _CalendarCard extends StatelessWidget {
       shadowColor: palette.titleText.withValues(alpha: 0.12),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       textureOpacity: 0.01,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: _calendarWeekdayLabels
-                .map(
-                  (label) => Expanded(
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'NotoSansJP',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: palette.bodyDetail.withValues(alpha: 0.82),
-                        letterSpacing: 0.25,
-                        decoration: TextDecoration.none,
-                        shadows: const [],
+      child: SizedBox(
+        height: _calendarCardHeight,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: _calendarWeekdayLabels
+                  .map(
+                    (label) => Expanded(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'NotoSansJP',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: palette.bodyDetail.withValues(alpha: 0.82),
+                          letterSpacing: 0.25,
+                          decoration: TextDecoration.none,
+                          shadows: const [],
+                        ),
                       ),
                     ),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            height: 1.4,
-            color: palette.ruleLine.withValues(alpha: 0.8),
-          ),
-          const SizedBox(height: 10),
-          for (var week = 0; week < slots.length; week += 7)
-            Padding(
-              padding: EdgeInsets.only(bottom: week + 7 < slots.length ? 4 : 0),
-              child: Row(
-                children: [
-                  for (var weekdayIndex = 0; weekdayIndex < 7; weekdayIndex++)
-                    Expanded(
-                      child: _CalendarDayCell(
-                        weekdayIndex: weekdayIndex,
-                        dayNumber: slots[week + weekdayIndex],
-                        isRecorded:
-                            slots[week + weekdayIndex] != null &&
-                            calendar.isRecordedDay(slots[week + weekdayIndex]!),
-                        isToday:
-                            slots[week + weekdayIndex] != null &&
-                            calendar.isToday(slots[week + weekdayIndex]!),
-                        onTap:
-                            slots[week + weekdayIndex] != null &&
-                                calendar.isRecordedDay(
-                                  slots[week + weekdayIndex]!,
-                                )
-                            ? () => onDayTap(slots[week + weekdayIndex]!)
-                            : null,
-                      ),
-                    ),
-                ],
-              ),
+                  )
+                  .toList(growable: false),
             ),
-        ],
+            const SizedBox(height: 10),
+            Container(
+              height: 1.4,
+              color: palette.ruleLine.withValues(alpha: 0.8),
+            ),
+            const SizedBox(height: 10),
+            for (var week = 0; week < slots.length; week += 7)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: week + 7 < slots.length ? 4 : 0,
+                ),
+                child: Row(
+                  children: [
+                    for (var weekdayIndex = 0; weekdayIndex < 7; weekdayIndex++)
+                      Expanded(
+                        child: _CalendarDayCell(
+                          weekdayIndex: weekdayIndex,
+                          dayNumber: slots[week + weekdayIndex],
+                          isRecorded:
+                              slots[week + weekdayIndex] != null &&
+                              calendar.isRecordedDay(
+                                slots[week + weekdayIndex]!,
+                              ),
+                          isToday:
+                              slots[week + weekdayIndex] != null &&
+                              calendar.isToday(slots[week + weekdayIndex]!),
+                          onTap:
+                              slots[week + weekdayIndex] != null &&
+                                  calendar.isRecordedDay(
+                                    slots[week + weekdayIndex]!,
+                                  )
+                              ? () => onDayTap(slots[week + weekdayIndex]!)
+                              : null,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

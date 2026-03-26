@@ -147,6 +147,31 @@ void main() {
     });
   });
 
+  testWidgets('keeps the calendar frame rect fixed across months', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpAndSettle();
+
+    final currentRect = tester.getRect(
+      find.byKey(const ValueKey<String>('diary-cover-calendar')),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('diary-cover-previous-month')),
+    );
+    await tester.pumpAndSettle();
+
+    final previousRect = tester.getRect(
+      find.byKey(const ValueKey<String>('diary-cover-calendar')),
+    );
+
+    expect(previousRect.top, currentRect.top);
+    expect(previousRect.left, currentRect.left);
+    expect(previousRect.right, currentRect.right);
+    expect(previousRect.height, currentRect.height);
+  });
+
   testWidgets('moves month from the selector sheet', (
     WidgetTester tester,
   ) async {

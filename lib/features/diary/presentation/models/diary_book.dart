@@ -42,7 +42,7 @@ class DiaryMonthCalendar {
       ...List<int?>.filled(leadingBlankCount, null),
       ...List<int?>.generate(dayCount, (index) => index + 1),
     ];
-    final trailingBlankCount = (7 - (filledDays.length % 7)) % 7;
+    final trailingBlankCount = 42 - filledDays.length;
     return [...filledDays, ...List<int?>.filled(trailingBlankCount, null)];
   }
 
