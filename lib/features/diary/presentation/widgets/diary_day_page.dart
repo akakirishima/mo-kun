@@ -54,7 +54,7 @@ class DiaryDayPage extends ConsumerWidget {
           const selectorGap = 6.0;
           const sectionGap = 8.0;
 
-          final contentBottomGap = bottomClearance.clamp(72.0, 96.0);
+          final contentBottomGap = bottomClearance.clamp(16.0, 32.0);
           final verticalBudget =
               constraints.maxHeight -
               topPadding -
@@ -324,7 +324,7 @@ class _DiaryEntryIllustration extends StatelessWidget {
                 strokeWidth: 2,
               ),
             ),
-            error: (_, __) => _DiarySketchPlaceholder(
+            error: (_, _) => _DiarySketchPlaceholder(
               dayNumber: entry.dayNumber,
               palette: entry.illustrationPalette,
             ),

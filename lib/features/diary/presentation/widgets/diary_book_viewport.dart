@@ -733,50 +733,47 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
             key: const ValueKey<String>('diary-book-viewport'),
             width: _viewportWidth,
             height: constraints.maxHeight,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(1, 0, 1, 0),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(
-                    child: _PageStackBackdrop(monthAccent: monthAccent),
-                  ),
-                  Positioned(
-                    top: 8,
-                    bottom: 8,
-                    left: 4,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(
-                          _pageSpineCornerRadius,
-                        ),
-                        color: spineTint.withValues(alpha: 0.22),
-                        border: Border.all(
-                          color: spineTint.withValues(alpha: 0.36),
-                          width: 1.4,
-                        ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: _PageStackBackdrop(monthAccent: monthAccent),
+                ),
+                Positioned(
+                  top: 6,
+                  bottom: 6,
+                  left: 3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        _pageSpineCornerRadius,
                       ),
-                      child: const SizedBox(width: 12),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: GestureDetector(
-                      key: const ValueKey<String>('diary-book-page-view'),
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragStart: _handleHorizontalDragStart,
-                      onHorizontalDragUpdate: _handleHorizontalDragUpdate,
-                      onHorizontalDragEnd: _handleHorizontalDragEnd,
-                      onHorizontalDragCancel: _handleHorizontalDragCancel,
-                      child: AnimatedBuilder(
-                        animation: _turnController,
-                        builder: (context, child) {
-                          return _buildViewportContent(context);
-                        },
+                      color: spineTint.withValues(alpha: 0.22),
+                      border: Border.all(
+                        color: spineTint.withValues(alpha: 0.36),
+                        width: 1.4,
                       ),
                     ),
+                    child: const SizedBox(width: 12),
                   ),
-                ],
-              ),
+                ),
+                Positioned.fill(
+                  child: GestureDetector(
+                    key: const ValueKey<String>('diary-book-page-view'),
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragStart: _handleHorizontalDragStart,
+                    onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+                    onHorizontalDragEnd: _handleHorizontalDragEnd,
+                    onHorizontalDragCancel: _handleHorizontalDragCancel,
+                    child: AnimatedBuilder(
+                      animation: _turnController,
+                      builder: (context, child) {
+                        return _buildViewportContent(context);
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -800,10 +797,10 @@ class _PageStackBackdrop extends StatelessWidget {
     return Stack(
       children: [
         Positioned(
-          left: 8,
-          right: 4,
-          top: 8,
-          bottom: 1,
+          left: 6,
+          right: 3,
+          top: 6,
+          bottom: 0,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: frontFill.withValues(alpha: 0.58),
@@ -822,10 +819,10 @@ class _PageStackBackdrop extends StatelessWidget {
           ),
         ),
         Positioned(
-          left: 12,
-          right: 1,
-          top: 14,
-          bottom: -2,
+          left: 10,
+          right: 0,
+          top: 12,
+          bottom: -1,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: backFill.withValues(alpha: 0.38),

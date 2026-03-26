@@ -43,8 +43,8 @@ class _AppShellState extends State<AppShell> {
         children: [
           Positioned.fill(
             child: Padding(
-              padding: const EdgeInsets.only(
-                bottom: GlassBottomDock.reservedBottomSpacing,
+              padding: EdgeInsets.only(
+                bottom: GlassBottomDock.reservedBottomSpacingFor(context),
               ),
               child: IndexedStack(
                 index: tabs.indexOf(_selectedTab),

@@ -135,13 +135,13 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
           SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+              padding: EdgeInsets.zero,
               child: SizedBox.expand(
                 key: const ValueKey<String>('diary-screen'),
                 child: DiaryBookViewport(
                   book: book,
                   currentPageIndex: currentPage,
-                  dayPageBottomClearance: 20,
+                  dayPageBottomClearance: 8,
                   onOpenSelector: () => _openDaySelector(book),
                   onOpenEntryForDay: (dayNumber) =>
                       _openEntryForDay(book, dayNumber),

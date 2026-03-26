@@ -19,7 +19,9 @@ const _calendarWeekdayLabels = <String>[
 const _coverOuterCornerRadius = 10.0;
 const _coverInnerCornerRadius = 8.0;
 const _coverBaseWidth = 356.0;
-const _coverBaseHeight = 640.0;
+const _coverBaseHeight = 648.0;
+const _coverBottomBreathingRoom = 8.0;
+const _coverArtboardVerticalShift = 0.0;
 const _calendarCardHeight = 286.0;
 const _calendarCardTop = (_coverBaseHeight - _calendarCardHeight) / 2;
 
@@ -75,190 +77,207 @@ class DiaryCoverPage extends StatelessWidget {
             constraints.maxHeight / _coverBaseHeight,
           );
 
-          return Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              width: _coverBaseWidth * scale,
-              height: _coverBaseHeight * scale,
-              child: FittedBox(
-                alignment: Alignment.topCenter,
-                fit: BoxFit.fill,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: _coverBottomBreathingRoom),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Transform.translate(
+                offset: const Offset(0, _coverArtboardVerticalShift),
                 child: SizedBox(
-                  width: _coverBaseWidth,
-                  height: _coverBaseHeight,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(
-                            _coverInnerCornerRadius,
-                          ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              CustomPaint(
-                                painter: _CoverPixelTexturePainter(
-                                  lightColor: Colors.white.withValues(
-                                    alpha: 0.075,
-                                  ),
-                                  darkColor: coverFrame.withValues(alpha: 0.05),
-                                ),
+                  key: const ValueKey<String>('diary-cover-artboard'),
+                  width: _coverBaseWidth * scale,
+                  height: _coverBaseHeight * scale,
+                  child: FittedBox(
+                    alignment: Alignment.bottomCenter,
+                    fit: BoxFit.fill,
+                    child: SizedBox(
+                      width: _coverBaseWidth,
+                      height: _coverBaseHeight,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                _coverInnerCornerRadius,
                               ),
-                              CustomPaint(
-                                painter: _CoverPixelFramePainter(
-                                  frameColor: coverFrame.withValues(
-                                    alpha: 0.18,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  CustomPaint(
+                                    painter: _CoverPixelTexturePainter(
+                                      lightColor: Colors.white.withValues(
+                                        alpha: 0.075,
+                                      ),
+                                      darkColor: coverFrame.withValues(
+                                        alpha: 0.05,
+                                      ),
+                                    ),
                                   ),
-                                  accentColor: Colors.white.withValues(
-                                    alpha: 0.22,
+                                  CustomPaint(
+                                    painter: _CoverPixelFramePainter(
+                                      frameColor: coverFrame.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                      accentColor: Colors.white.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(
-                                    _coverOuterCornerRadius,
-                                  ),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Colors.white.withValues(alpha: 0.05),
-                                      Colors.white.withValues(alpha: 0.015),
-                                      Colors.transparent,
-                                    ],
-                                    stops: const [0.0, 0.18, 0.46],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 30,
-                        top: 0,
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 28,
-                              height: 162,
-                              decoration: BoxDecoration(
-                                color: palette.paperFill.withValues(
-                                  alpha: 0.92,
-                                ),
-                                border: Border.all(
-                                  color: coverPaperEdge.withValues(alpha: 0.86),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: coverSpine.withValues(alpha: 0.18),
-                                    offset: const Offset(0, 4),
+                                  DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(
+                                        _coverOuterCornerRadius,
+                                      ),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0.05),
+                                          Colors.white.withValues(alpha: 0.015),
+                                          Colors.transparent,
+                                        ],
+                                        stops: const [0.0, 0.18, 0.46],
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            Positioned(
-                              left: 6,
-                              right: 6,
-                              top: 12,
-                              bottom: 8,
+                          ),
+                          Positioned(
+                            right: 30,
+                            top: 0,
+                            child: Stack(
+                              children: [
+                                Container(
+                                  width: 28,
+                                  height: 162,
+                                  decoration: BoxDecoration(
+                                    color: palette.paperFill.withValues(
+                                      alpha: 0.92,
+                                    ),
+                                    border: Border.all(
+                                      color: coverPaperEdge.withValues(
+                                        alpha: 0.86,
+                                      ),
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: coverSpine.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Positioned(
+                                  left: 6,
+                                  right: 6,
+                                  top: 12,
+                                  bottom: 8,
+                                  child: CustomPaint(
+                                    painter: _BookmarkPixelPainter(
+                                      color: coverPaperEdge.withValues(
+                                        alpha: 0.36,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Positioned(
+                            left: 18,
+                            top: 22,
+                            bottom: 26,
+                            child: Container(
+                              width: 22,
+                              decoration: BoxDecoration(
+                                color: coverSpine.withValues(alpha: 0.18),
+                                border: Border.all(
+                                  color: coverSpine.withValues(alpha: 0.28),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: coverSpine.withValues(alpha: 0.12),
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
                               child: CustomPaint(
-                                painter: _BookmarkPixelPainter(
-                                  color: coverPaperEdge.withValues(alpha: 0.36),
+                                painter: _SpinePixelPainter(
+                                  color: coverSpine.withValues(alpha: 0.18),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        left: 18,
-                        top: 22,
-                        bottom: 26,
-                        child: Container(
-                          width: 22,
-                          decoration: BoxDecoration(
-                            color: coverSpine.withValues(alpha: 0.18),
-                            border: Border.all(
-                              color: coverSpine.withValues(alpha: 0.28),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: coverSpine.withValues(alpha: 0.12),
-                                offset: const Offset(0, 4),
+                          ),
+                          Positioned(
+                            left: 46,
+                            top: 42,
+                            child: NesPressable(
+                              key: const ValueKey<String>(
+                                'diary-cover-selector',
                               ),
-                            ],
-                          ),
-                          child: CustomPaint(
-                            painter: _SpinePixelPainter(
-                              color: coverSpine.withValues(alpha: 0.18),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 46,
-                        top: 42,
-                        child: NesPressable(
-                          key: const ValueKey<String>('diary-cover-selector'),
-                          onPress: onSelectorTap,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(2, 4, 14, 8),
-                            child: Text(
-                              book.monthLabel,
-                              style: TextStyle(
-                                fontFamily: 'NotoSansJP',
-                                color: coverTitle,
-                                fontSize: 44,
-                                fontWeight: FontWeight.w900,
-                                height: 1.0,
-                                decoration: TextDecoration.none,
-                                shadows: const [],
+                              onPress: onSelectorTap,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(2, 4, 14, 8),
+                                child: Text(
+                                  book.monthLabel,
+                                  style: TextStyle(
+                                    fontFamily: 'NotoSansJP',
+                                    color: coverTitle,
+                                    fontSize: 44,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.0,
+                                    decoration: TextDecoration.none,
+                                    shadows: const [],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 36,
-                        right: 72,
-                        child: Row(
-                          children: [
-                            _MonthArrowButton(
-                              widgetKey: const ValueKey<String>(
-                                'diary-cover-previous-month',
-                              ),
-                              icon: Icons.chevron_left_rounded,
-                              onTap: book.canShowPreviousMonth
-                                  ? onPreviousMonthTap
-                                  : null,
+                          Positioned(
+                            top: 36,
+                            right: 72,
+                            child: Row(
+                              children: [
+                                _MonthArrowButton(
+                                  widgetKey: const ValueKey<String>(
+                                    'diary-cover-previous-month',
+                                  ),
+                                  icon: Icons.chevron_left_rounded,
+                                  onTap: book.canShowPreviousMonth
+                                      ? onPreviousMonthTap
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                _MonthArrowButton(
+                                  widgetKey: const ValueKey<String>(
+                                    'diary-cover-next-month',
+                                  ),
+                                  icon: Icons.chevron_right_rounded,
+                                  onTap: book.canShowNextMonth
+                                      ? onNextMonthTap
+                                      : null,
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            _MonthArrowButton(
-                              widgetKey: const ValueKey<String>(
-                                'diary-cover-next-month',
-                              ),
-                              icon: Icons.chevron_right_rounded,
-                              onTap: book.canShowNextMonth
-                                  ? onNextMonthTap
-                                  : null,
+                          ),
+                          Positioned(
+                            left: 50,
+                            right: 44,
+                            top: _calendarCardTop,
+                            child: _CalendarCard(
+                              calendar: book.calendar,
+                              onDayTap: onDayTap,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      Positioned(
-                        left: 50,
-                        right: 44,
-                        top: _calendarCardTop,
-                        child: _CalendarCard(
-                          calendar: book.calendar,
-                          onDayTap: onDayTap,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
