@@ -26,6 +26,13 @@ void main() {
   final previousMonthLabel =
       '${DateTime(DateTime.now().year, DateTime.now().month - 1).month}月';
   final recordedDays = _currentMonthRecordedDays();
+  final firstRecordedDay = recordedDays.reduce((left, right) {
+    return left < right ? left : right;
+  });
+  final lastRecordedDay = recordedDays.reduce((left, right) {
+    return left > right ? left : right;
+  });
+  final lastRecordedPageIndex = recordedDays.length;
   final todayDayNumber = DateTime.now().day;
   final unrecordedDay = _pickUnrecordedDay(recordedDays);
 
@@ -77,16 +84,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('言葉を整えた日'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey<String>('diary-entry-page-$firstRecordedDay')),
+        findsOneWidget,
+      );
     });
   });
 
   testWidgets('opens the selector sheet from the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(child: const DiaryScreen()),
-    );
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -181,9 +189,7 @@ void main() {
   testWidgets('shows recorded day markers and a today ring on the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(child: const DiaryScreen()),
-    );
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
     await tester.pumpAndSettle();
 
     expect(
@@ -205,9 +211,7 @@ void main() {
   testWidgets('does not show a today ring on past months', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(child: const DiaryScreen()),
-    );
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
     await tester.pumpAndSettle();
 
     await tester.tap(
@@ -242,7 +246,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final recordedDayButton = find.byKey(
-        ValueKey<String>('diary-cover-day-button-$todayDayNumber'),
+        ValueKey<String>('diary-cover-day-button-$lastRecordedDay'),
       );
       expect(recordedDayButton, findsOneWidget);
 
@@ -250,18 +254,71 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.byKey(ValueKey<String>('diary-entry-page-$todayDayNumber')),
+        find.byKey(ValueKey<String>('diary-entry-page-$lastRecordedDay')),
         findsOneWidget,
       );
     });
   });
 
+  testWidgets('opens the selected page from the selector sheet', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('diary-cover-selector')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(
+        ValueKey<String>('diary-day-selector-page-$lastRecordedPageIndex'),
+      ),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey<String>('diary-entry-page-$lastRecordedDay')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('swipes back from the first entry to the cover', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey<String>('diary-entry-page-$firstRecordedDay')),
+      findsOneWidget,
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-page')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('keeps unrecorded days non interactive on the cover', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(child: const DiaryScreen()),
-    );
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
     await tester.pumpAndSettle();
 
     final unrecordedDayButton = find.byKey(
@@ -280,6 +337,67 @@ void main() {
       find.byKey(ValueKey<String>('diary-entry-page-$unrecordedDay')),
       findsNothing,
     );
+  });
+
+  testWidgets('keeps the cover in place when swiping right on the first page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(240, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-page')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('keeps the last page in place when swiping left at the end', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(ValueKey<String>('diary-cover-day-button-$lastRecordedDay')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(-420, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey<String>('diary-entry-page-$lastRecordedDay')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('snaps back when a drag does not cross the threshold', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(wrapWithTestApp(child: const DiaryScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey<String>('diary-book-page-view')),
+      const Offset(-90, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-page')),
+      findsOneWidget,
+    );
+    expect(_findKeysWithPrefix('diary-entry-page-'), findsNothing);
   });
 
   testWidgets(
@@ -317,7 +435,10 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('小さく前進した日'), findsWidgets);
+        expect(
+          find.byKey(ValueKey<String>('diary-entry-page-$firstRecordedDay')),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       });
     },

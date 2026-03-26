@@ -17,20 +17,7 @@ class DiaryScreen extends ConsumerStatefulWidget {
 }
 
 class _DiaryScreenState extends ConsumerState<DiaryScreen> {
-  late final PageController _pageController;
   int _currentPage = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(viewportFraction: 0.992);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
 
   Future<void> _openDaySelector(DiaryMonthBook book) async {
     final result = await showDiaryDaySelectorSheet(
@@ -57,16 +44,13 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
     if (selectedPage == null || selectedPage == _currentPage) {
       return;
     }
-    await _pageController.animateToPage(
-      selectedPage,
-      duration: const Duration(milliseconds: 440),
-      curve: Curves.easeOutCubic,
-    );
+    setState(() {
+      _currentPage = selectedPage;
+    });
   }
 
   void _setMonth(DateTime month) {
     ref.read(diaryMonthNavigationControllerProvider).setMonth(month);
-    _pageController.jumpToPage(0);
     if (_currentPage != 0) {
       setState(() {
         _currentPage = 0;
@@ -92,11 +76,9 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
     if (pageIndex == null || pageIndex == _currentPage) {
       return;
     }
-    await _pageController.animateToPage(
-      pageIndex,
-      duration: const Duration(milliseconds: 440),
-      curve: Curves.easeOutCubic,
-    );
+    setState(() {
+      _currentPage = pageIndex;
+    });
   }
 
   @override
@@ -121,6 +103,7 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       summaries: summaries,
       images: images,
     );
+    final currentPage = _currentPage.clamp(0, book.pageCount - 1).toInt();
 
     return DecoratedBox(
       key: const ValueKey<String>('diary-background'),
@@ -157,7 +140,7 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                 key: const ValueKey<String>('diary-screen'),
                 child: DiaryBookViewport(
                   book: book,
-                  controller: _pageController,
+                  currentPageIndex: currentPage,
                   dayPageBottomClearance: 20,
                   onOpenSelector: () => _openDaySelector(book),
                   onOpenEntryForDay: (dayNumber) =>
