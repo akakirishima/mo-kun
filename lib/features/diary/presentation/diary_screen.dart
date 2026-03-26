@@ -10,9 +10,7 @@ import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_d
 import 'package:nes_ui/nes_ui.dart';
 
 class DiaryScreen extends ConsumerStatefulWidget {
-  const DiaryScreen({super.key, required this.onSettingsTap});
-
-  final VoidCallback onSettingsTap;
+  const DiaryScreen({super.key});
 
   @override
   ConsumerState<DiaryScreen> createState() => _DiaryScreenState();
@@ -89,6 +87,18 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
     _setMonth(nextMonth(navigation.selectedMonth));
   }
 
+  Future<void> _openEntryForDay(DiaryMonthBook book, int dayNumber) async {
+    final pageIndex = book.pageIndexForDay(dayNumber);
+    if (pageIndex == null || pageIndex == _currentPage) {
+      return;
+    }
+    await _pageController.animateToPage(
+      pageIndex,
+      duration: const Duration(milliseconds: 440),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = AppearanceScope.paletteOf(context).diary;
@@ -124,11 +134,19 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       child: Stack(
         children: [
           Positioned(
-            top: -80,
-            left: -30,
+            top: -56,
+            left: -18,
             child: _BackdropGlow(
-              size: 220,
-              color: palette.coverAccent.withValues(alpha: 0.34),
+              size: 180,
+              color: palette.coverAccent.withValues(alpha: 0.2),
+            ),
+          ),
+          Positioned(
+            right: -24,
+            bottom: 96,
+            child: _BackdropGlow(
+              size: 160,
+              color: palette.paperEdge.withValues(alpha: 0.16),
             ),
           ),
           SafeArea(
@@ -142,9 +160,10 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                   controller: _pageController,
                   dayPageBottomClearance: 20,
                   onOpenSelector: () => _openDaySelector(book),
+                  onOpenEntryForDay: (dayNumber) =>
+                      _openEntryForDay(book, dayNumber),
                   onShowPreviousMonth: _showPreviousMonth,
                   onShowNextMonth: _showNextMonth,
-                  onSettingsTap: widget.onSettingsTap,
                   onPageChanged: (index) {
                     if (_currentPage == index) {
                       return;
@@ -185,40 +204,62 @@ DiaryMonthBook _buildDiaryBook({
   final normalizedMonth = appMonthStart(selectedMonth);
   final sortedSummaries = [...summaries]
     ..sort((left, right) => left.dateKey.compareTo(right.dateKey));
-  final latestSummary = sortedSummaries.isEmpty ? null : sortedSummaries.last;
   final sortedImages = [...images]
     ..sort((left, right) => left.generatedAt.compareTo(right.generatedAt));
 
-  final entries = sortedSummaries.map((summary) {
-    final date = parseDateKey(summary.dateKey) ??
-        DateTime(normalizedMonth.year, normalizedMonth.month, 1);
-    final isCurrentDay = _isSameDay(date, appDate);
-    final image = _resolveImageForDate(sortedImages, summary.dateKey);
-    return DiaryDayEntry(
-      dayNumber: date.day,
-      weekdayLabel: _weekdayLabel(date.weekday),
-      body: _buildDiaryEntryBody(summary),
-      illustrationPalette: _illustrationPaletteForEntry(
-        isCurrentDay: isCurrentDay,
-        hasSummary: true,
-        isFutureDay: false,
-      ),
-      highlightLabel: summary.title,
-      imageUrl: image?.imageUrl,
-    );
-  }).toList(growable: false);
+  final entries = sortedSummaries
+      .map((summary) {
+        final date =
+            parseDateKey(summary.dateKey) ??
+            DateTime(normalizedMonth.year, normalizedMonth.month, 1);
+        final isCurrentDay = _isSameDay(date, appDate);
+        final image = _resolveImageForDate(sortedImages, summary.dateKey);
+        return DiaryDayEntry(
+          dayNumber: date.day,
+          weekdayLabel: _weekdayLabel(date.weekday),
+          body: _buildDiaryEntryBody(summary),
+          illustrationPalette: _illustrationPaletteForEntry(
+            isCurrentDay: isCurrentDay,
+            hasSummary: true,
+            isFutureDay: false,
+          ),
+          highlightLabel: summary.title,
+          imageUrl: image?.imageUrl,
+        );
+      })
+      .toList(growable: false);
 
   return DiaryMonthBook(
     monthLabel: '${normalizedMonth.month}月',
     coverTitle: 'AI Diary',
-    coverSubtitle: _coverSubtitle(
-      appDate: normalizedMonth,
-      latestSummary: latestSummary,
+    coverSubtitle: _coverSubtitle(recordedDaysCount: entries.length),
+    calendar: _buildDiaryMonthCalendar(
+      appDate: appDate,
+      monthStart: normalizedMonth,
+      entries: entries,
     ),
-    recordedDaysCount: summaries.length,
     canShowPreviousMonth: true,
     canShowNextMonth: normalizedMonth.isBefore(appMonthStart(currentMonth)),
     entries: entries,
+  );
+}
+
+DiaryMonthCalendar _buildDiaryMonthCalendar({
+  required DateTime appDate,
+  required DateTime monthStart,
+  required List<DiaryDayEntry> entries,
+}) {
+  final dayCount = DateTime(monthStart.year, monthStart.month + 1, 0).day;
+  final leadingBlankCount = monthStart.weekday % 7;
+  final isCurrentMonth =
+      monthStart.year == appDate.year && monthStart.month == appDate.month;
+
+  return DiaryMonthCalendar(
+    monthStart: monthStart,
+    dayCount: dayCount,
+    leadingBlankCount: leadingBlankCount,
+    recordedDays: entries.map((entry) => entry.dayNumber).toSet(),
+    todayDayNumber: isCurrentMonth ? appDate.day : null,
   );
 }
 
@@ -297,18 +338,11 @@ List<Color> _illustrationPaletteForEntry({
   return const [Color(0xFFF4D8C5), Color(0xFFE7BFA5), Color(0xFFF8E8B2)];
 }
 
-String _coverSubtitle({
-  required DateTime appDate,
-  required DailySummary? latestSummary,
-}) {
-  if (latestSummary == null) {
-    return '会話から1日ごとの記録を少しずつためていきます';
+String _coverSubtitle({required int recordedDaysCount}) {
+  if (recordedDaysCount == 0) {
+    return 'まだこの月の記録はありません';
   }
-  final latestDate = parseDateKey(latestSummary.dateKey);
-  if (latestDate == null || latestDate.month == appDate.month) {
-    return latestSummary.title;
-  }
-  return '${latestDate.month}月${latestDate.day}日までの記録を見返せます';
+  return '記録のある日をタップして、その日のページをひらけます';
 }
 
 bool _isSameDay(DateTime left, DateTime right) {
@@ -393,21 +427,20 @@ class _DiaryBackButton extends StatelessWidget {
           height: 40,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.96),
-            border: Border.all(color: const Color(0xFF43323D), width: 3),
-            boxShadow: const [
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF8E687C), width: 2.2),
+            boxShadow: [
               BoxShadow(
-                color: Color(0x2243323D),
+                color: const Color(0x2243323D).withValues(alpha: 0.75),
                 offset: Offset(0, 4),
-                blurRadius: 8,
               ),
             ],
           ),
           alignment: Alignment.center,
-          child: NesIcon(
-            iconData: NesIcons.leftArrowIndicator,
-            size: Size.square(16),
-            primaryColor: Color(0xFF43323D),
-            secondaryColor: Colors.white,
+          child: const Icon(
+            Icons.arrow_back_rounded,
+            size: 19,
+            color: Color(0xFF6F5261),
           ),
         ),
       ),

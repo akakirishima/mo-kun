@@ -38,7 +38,7 @@ class _AppShellState extends State<AppShell> {
     final tabs = AppTab.navigationTabs;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           Positioned.fill(
@@ -55,7 +55,7 @@ class _AppShellState extends State<AppShell> {
                     onDiaryTap: () => _selectTab(AppTab.diary),
                   ),
                   const ChatScreen(),
-                  DiaryScreen(onSettingsTap: () => _selectTab(AppTab.settings)),
+                  const DiaryScreen(),
                   const SettingsScreen(),
                 ],
               ),

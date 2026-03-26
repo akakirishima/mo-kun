@@ -41,16 +41,16 @@ List<AppTabConfig> buildAppTabConfigs({
       screen: HomeScreen(
         onSettingsTap: openSettings,
         onDiaryTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute<void>(builder: (_) => DiaryScreen(onSettingsTap: openSettings)));
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const DiaryScreen()),
+          );
         },
         onOverlayModeChanged: onHomeOverlayModeChanged,
       ),
     ),
     AppTabConfig(
       tab: AppTab.diary,
-      screen: DiaryScreen(onSettingsTap: openSettings),
+      screen: const DiaryScreen(),
     ),
   ];
 }
