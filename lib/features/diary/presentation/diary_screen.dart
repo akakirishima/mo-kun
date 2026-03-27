@@ -7,6 +7,7 @@ import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/models/diary_book.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_book_viewport.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_day_selector.dart';
+import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_shelf_view.dart';
 import 'package:nes_ui/nes_ui.dart';
 
 class DiaryScreen extends ConsumerStatefulWidget {
@@ -25,6 +26,7 @@ class DiaryScreen extends ConsumerStatefulWidget {
 
 class _DiaryScreenState extends ConsumerState<DiaryScreen> {
   int _currentPage = 0;
+  bool _isShelfOpen = false;
 
   Future<void> _openDaySelector(DiaryMonthBook book) async {
     final result = await showDiaryDaySelectorSheet(
@@ -78,6 +80,34 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
     _setMonth(nextMonth(navigation.selectedMonth));
   }
 
+  void _openShelf(List<DiaryShelfBook> shelfBooks) {
+    if (_isShelfOpen || shelfBooks.isEmpty) {
+      return;
+    }
+    setState(() {
+      _isShelfOpen = true;
+    });
+  }
+
+  void _closeShelf() {
+    if (!_isShelfOpen) {
+      return;
+    }
+    setState(() {
+      _isShelfOpen = false;
+    });
+  }
+
+  void _selectShelfBook(DiaryShelfBook shelfBook) {
+    ref
+        .read(diaryMonthNavigationControllerProvider)
+        .setMonth(shelfBook.monthStart);
+    setState(() {
+      _currentPage = 0;
+      _isShelfOpen = false;
+    });
+  }
+
   Future<void> _openEntryForDay(DiaryMonthBook book, int dayNumber) async {
     final pageIndex = book.pageIndexForDay(dayNumber);
     if (pageIndex == null || pageIndex == _currentPage) {
@@ -98,6 +128,10 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
         ? const <DailySummary>[]
         : (ref.watch(monthlyDailySummariesProvider(session)).valueOrNull ??
               const <DailySummary>[]);
+    final shelfBooks = session == null
+        ? const <DiaryShelfBook>[]
+        : (ref.watch(diaryShelfBooksProvider(session)).valueOrNull ??
+              const <DiaryShelfBook>[]);
     final images = session == null
         ? const <CharacterImageVersion>[]
         : (ref.watch(diaryImageHistoryProvider(session)).valueOrNull ??
@@ -111,6 +145,31 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       images: images,
     );
     final currentPage = _currentPage.clamp(0, book.pageCount - 1).toInt();
+    final content = _isShelfOpen
+        ? DiaryShelfView(
+            books: shelfBooks,
+            onClose: _closeShelf,
+            onSelectBook: _selectShelfBook,
+          )
+        : DiaryBookViewport(
+            book: book,
+            currentPageIndex: currentPage,
+            enableCoverTurnTeaser: widget.enableCoverTurnTeaser,
+            isVisible: widget.isVisible,
+            dayPageBottomClearance: 8,
+            onOpenSelector: () => _openDaySelector(book),
+            onOpenShelf: () => _openShelf(shelfBooks),
+            canOpenShelf: shelfBooks.isNotEmpty,
+            onOpenEntryForDay: (dayNumber) => _openEntryForDay(book, dayNumber),
+            onPageChanged: (index) {
+              if (_currentPage == index) {
+                return;
+              }
+              setState(() {
+                _currentPage = index;
+              });
+            },
+          );
 
     return DecoratedBox(
       key: const ValueKey<String>('diary-background'),
@@ -145,30 +204,11 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
               padding: EdgeInsets.zero,
               child: SizedBox.expand(
                 key: const ValueKey<String>('diary-screen'),
-                child: DiaryBookViewport(
-                  book: book,
-                  currentPageIndex: currentPage,
-                  enableCoverTurnTeaser: widget.enableCoverTurnTeaser,
-                  isVisible: widget.isVisible,
-                  dayPageBottomClearance: 8,
-                  onOpenSelector: () => _openDaySelector(book),
-                  onOpenEntryForDay: (dayNumber) =>
-                      _openEntryForDay(book, dayNumber),
-                  onShowPreviousMonth: _showPreviousMonth,
-                  onShowNextMonth: _showNextMonth,
-                  onPageChanged: (index) {
-                    if (_currentPage == index) {
-                      return;
-                    }
-                    setState(() {
-                      _currentPage = index;
-                    });
-                  },
-                ),
+                child: content,
               ),
             ),
           ),
-          if (Navigator.canPop(context))
+          if (Navigator.canPop(context) && !_isShelfOpen)
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 18, 0),

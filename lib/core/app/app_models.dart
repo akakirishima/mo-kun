@@ -179,6 +179,18 @@ class DailySummary {
   final DateTime? generatedAt;
 }
 
+class DiaryShelfBook {
+  const DiaryShelfBook({
+    required this.monthStart,
+    required this.monthLabel,
+    required this.recordedDaysCount,
+  });
+
+  final DateTime monthStart;
+  final String monthLabel;
+  final int recordedDaysCount;
+}
+
 class DailyBubble {
   const DailyBubble({
     required this.dateKey,

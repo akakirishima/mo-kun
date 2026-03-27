@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
+import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/diary_screen.dart';
@@ -24,6 +26,9 @@ class _FakeImageUrlResolver extends ImageUrlResolver {
 
 void main() {
   const diaryScreen = DiaryScreen(enableCoverTurnTeaser: false);
+  final now = DateTime.now();
+  final currentMonthStart = DateTime(now.year, now.month);
+  final previousMonthStart = DateTime(now.year, now.month - 1);
   final currentMonthLabel = '${DateTime.now().month}月';
   final previousMonthLabel =
       '${DateTime(DateTime.now().year, DateTime.now().month - 1).month}月';
@@ -73,7 +78,19 @@ void main() {
         findsOneWidget,
       );
       expect(
+        find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const ValueKey<String>('diary-settings-button')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('diary-cover-previous-month')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('diary-cover-next-month')),
         findsNothing,
       );
       expect(find.text('${recordedDays.length}日ぶん'), findsNothing);
@@ -193,38 +210,47 @@ void main() {
     );
   });
 
-  testWidgets('moves to the previous month from the cover', (
+  testWidgets('opens the bookshelf and selects a recorded month', (
     WidgetTester tester,
   ) async {
-    await mockNetworkImages(() async {
-      await tester.pumpWidget(
-        wrapWithTestApp(
-          child: diaryScreen,
-          overrides: [
-            imageUrlResolverProvider.overrideWithValue(
-              _FakeImageUrlResolver(const {
-                'https://example.com/today.png':
-                    'https://example.com/today.png',
-                'https://example.com/last-month.png':
-                    'https://example.com/last-month.png',
-              }),
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(wrapWithTestApp(child: diaryScreen));
+    await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('diary-cover-previous-month')),
-      );
-      await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+    );
+    await tester.pumpAndSettle();
 
-      expect(find.text(previousMonthLabel), findsWidgets);
-      expect(
-        find.byKey(const ValueKey<String>('diary-cover-calendar')),
-        findsOneWidget,
-      );
-    });
+    expect(
+      find.byKey(const ValueKey<String>('diary-shelf-screen')),
+      findsOneWidget,
+    );
+
+    final currentShelfBook = find.byKey(
+      ValueKey<String>('diary-shelf-book-${_shelfBookKey(currentMonthStart)}'),
+    );
+    final previousShelfBook = find.byKey(
+      ValueKey<String>('diary-shelf-book-${_shelfBookKey(previousMonthStart)}'),
+    );
+    expect(currentShelfBook, findsOneWidget);
+    expect(previousShelfBook, findsOneWidget);
+    expect(
+      tester.getTopLeft(currentShelfBook).dx,
+      lessThan(tester.getTopLeft(previousShelfBook).dx),
+    );
+
+    await tester.tap(previousShelfBook, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-shelf-screen')),
+      findsNothing,
+    );
+    expect(find.text(previousMonthLabel), findsWidgets);
+    expect(
+      find.byKey(const ValueKey<String>('diary-cover-calendar')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('keeps the calendar frame rect fixed across months', (
@@ -238,7 +264,13 @@ void main() {
     );
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('diary-cover-previous-month')),
+      find.byKey(const ValueKey<String>('diary-cover-selector')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('diary-selector-previous-month')),
     );
     await tester.pumpAndSettle();
 
@@ -320,7 +352,16 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('diary-cover-previous-month')),
+      find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(
+        ValueKey<String>(
+          'diary-shelf-book-${_shelfBookKey(previousMonthStart)}',
+        ),
+      ),
+      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -548,6 +589,54 @@ void main() {
       });
     },
   );
+
+  testWidgets('keeps the bookshelf button disabled when no books exist', (
+    WidgetTester tester,
+  ) async {
+    final emptyRepository = FakeAppRepository(
+      initialSession: const AppSession(
+        userId: 'empty-user',
+        needsOnboarding: false,
+        characterId: 'empty-character',
+        threadId: 'empty-thread',
+      ),
+      initialCharacter: CharacterSnapshot(
+        id: 'empty-character',
+        name: 'Self',
+        personaPrompt: '静かに見守る内なる声。',
+        visualPromptBase: 'やわらかな自己投影キャラクター。',
+        imageStatus: CharacterImageStatus.ready,
+        videoStatus: CharacterVideoStatus.idle,
+        lastGeneratedAt: DateTime.now(),
+      ),
+      initialMessages: const <ChatMessage>[],
+      initialSummaries: const <DailySummary>[],
+      initialUserProfile: const UserProfileInput(
+        displayName: 'Empty',
+        goal: '続ける',
+        partnerStyle: '静かに寄り添う',
+        weakPoints: <String>['三日坊主'],
+      ),
+    );
+
+    await tester.pumpWidget(
+      wrapWithTestApp(child: diaryScreen, repository: emptyRepository),
+    );
+    await tester.pumpAndSettle();
+
+    final shelfButton = find.byKey(
+      const ValueKey<String>('diary-cover-bookshelf-button'),
+    );
+    expect(shelfButton, findsOneWidget);
+
+    await tester.tap(shelfButton, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('diary-shelf-screen')),
+      findsNothing,
+    );
+  });
 }
 
 Set<int> _currentMonthRecordedDays() {
@@ -574,4 +663,9 @@ Finder _findKeysWithPrefix(String prefix) {
     final key = widget.key;
     return key is ValueKey<String> && key.value.startsWith(prefix);
   });
+}
+
+String _shelfBookKey(DateTime monthStart) {
+  final month = monthStart.month.toString().padLeft(2, '0');
+  return '${monthStart.year}-$month';
 }

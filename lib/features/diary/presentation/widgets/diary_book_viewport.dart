@@ -43,9 +43,9 @@ class DiaryBookViewport extends StatefulWidget {
     required this.currentPageIndex,
     required this.onPageChanged,
     required this.onOpenSelector,
+    required this.onOpenShelf,
     required this.onOpenEntryForDay,
-    required this.onShowPreviousMonth,
-    required this.onShowNextMonth,
+    required this.canOpenShelf,
     required this.dayPageBottomClearance,
     this.enableCoverTurnTeaser = true,
     this.isVisible = true,
@@ -55,9 +55,9 @@ class DiaryBookViewport extends StatefulWidget {
   final int currentPageIndex;
   final ValueChanged<int> onPageChanged;
   final VoidCallback onOpenSelector;
+  final VoidCallback onOpenShelf;
   final ValueChanged<int> onOpenEntryForDay;
-  final VoidCallback onShowPreviousMonth;
-  final VoidCallback onShowNextMonth;
+  final bool canOpenShelf;
   final double dayPageBottomClearance;
   final bool enableCoverTurnTeaser;
   final bool isVisible;
@@ -226,14 +226,9 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
     widget.onOpenEntryForDay(dayNumber);
   }
 
-  void _handleShowPreviousMonth() {
+  void _handleOpenShelf() {
     _cancelCoverTeaser(invalidateImages: true);
-    widget.onShowPreviousMonth();
-  }
-
-  void _handleShowNextMonth() {
-    _cancelCoverTeaser(invalidateImages: true);
-    widget.onShowNextMonth();
+    widget.onOpenShelf();
   }
 
   Widget _buildPageChild(int index) {
@@ -243,8 +238,8 @@ class _DiaryBookViewportState extends State<DiaryBookViewport>
         book: widget.book,
         onSelectorTap: _handleOpenSelector,
         onDayTap: _handleOpenEntryForDay,
-        onPreviousMonthTap: _handleShowPreviousMonth,
-        onNextMonthTap: _handleShowNextMonth,
+        onBookshelfTap: _handleOpenShelf,
+        canOpenBookshelf: widget.canOpenShelf,
       );
     }
     return DiaryDayPage(
