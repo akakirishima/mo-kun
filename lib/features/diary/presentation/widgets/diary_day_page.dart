@@ -5,61 +5,102 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/models/diary_book.dart';
-import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_day_selector.dart';
-import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_vertical_text.dart';
+import 'package:gdgoc_2026_prototype/features/diary/presentation/widgets/diary_retro_components.dart';
 
 const _writingPaperPadding = EdgeInsets.fromLTRB(16, 14, 12, 14);
+const _debugShowWritingGrid = false;
+const _writingGuideTickInset = 22.0;
+const _writingGuideTickHalfHeight = 5.0;
 
 class DiaryDayPage extends ConsumerWidget {
-  static const double writingColumnPitch = 36.0;
-  static const double writingRowPitch = 25.0;
+  static const double writingLineHeight = 1.85;
+  static const double writingGuideTickSpacing = 32.0;
+  static const double headerFontSize = 19.0;
+  static const double bodyFontSize = 18.0;
+  static const double bodyScrollRightPadding = 4.0;
+  static const double bodyScrollBottomPadding = 8.0;
 
   const DiaryDayPage({
     super.key,
     required this.entry,
     required this.monthNumber,
-    required this.dateLabel,
-    required this.onDateTap,
     required this.bottomClearance,
   });
 
   final DiaryDayEntry entry;
   final String monthNumber;
-  final String dateLabel;
-  final VoidCallback onDateTap;
   final double bottomClearance;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = AppearanceScope.paletteOf(context).diary;
+    final monthAccent = diaryMonthAccentColor(int.tryParse(monthNumber) ?? 1);
+    final frameFill = Color.lerp(palette.coverFill, monthAccent, 0.34)!;
+    final frameAccent = Color.lerp(
+      palette.coverAccent,
+      Color.lerp(monthAccent, Colors.white, 0.5)!,
+      0.26,
+    )!;
+    final frameBorder = Color.lerp(palette.titleText, monthAccent, 0.18)!;
+    final frameInnerBorder = frameBorder.withValues(alpha: 0.45);
+    final frameShadow = Color.lerp(
+      palette.spineShadow,
+      monthAccent,
+      0.22,
+    )!.withValues(alpha: 0.18);
     final resolvedImageUrl = ref.watch(
       resolvedImageUrlProvider(entry.imageUrl),
     );
+    final bodyTextStyle = TextStyle(
+      color: palette.ink,
+      fontSize: bodyFontSize,
+      height: writingLineHeight,
+    );
+    final bodyStrutStyle = StrutStyle(
+      fontSize: bodyFontSize,
+      height: writingLineHeight,
+      forceStrutHeight: true,
+    );
+    final linePitch = _resolvedLinePitch(
+      bodyTextStyle,
+      strutStyle: bodyStrutStyle,
+    );
+    final headerLinePitch = linePitch;
+    final headerTextStyle = TextStyle(
+      color: palette.ink.withValues(alpha: 0.9),
+      fontSize: headerFontSize,
+      fontWeight: FontWeight.w700,
+      height: linePitch / headerFontSize,
+    );
+    final headerStrutStyle = StrutStyle(
+      fontSize: headerFontSize,
+      height: linePitch / headerFontSize,
+      fontWeight: FontWeight.w700,
+      forceStrutHeight: true,
+    );
+    final headerText = _entryDateHeaderText(entry, monthNumber: monthNumber);
 
-    return Container(
+    return DiaryOuterFramePanel(
       key: ValueKey<String>('diary-entry-page-${entry.dayNumber}'),
-      decoration: BoxDecoration(
-        color: palette.paperFill,
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: palette.paperEdge, width: 1.5),
-      ),
+      backgroundColor: Color.lerp(frameFill, frameAccent, 0.12)!,
+      innerBackgroundColor: palette.paperFill,
+      borderColor: frameBorder,
+      innerBorderColor: frameInnerBorder,
+      shadowColor: frameShadow,
+      padding: EdgeInsets.zero,
       child: LayoutBuilder(
         builder: (context, constraints) {
           const horizontalPadding = 16.0;
           const topPadding = 14.0;
           const bottomPadding = 8.0;
-          const selectorHeight = 34.0;
-          const selectorGap = 6.0;
           const sectionGap = 8.0;
 
-          final contentBottomGap = bottomClearance.clamp(72.0, 96.0);
+          final contentBottomGap = bottomClearance.clamp(16.0, 32.0);
           final verticalBudget =
               constraints.maxHeight -
               topPadding -
               bottomPadding -
               contentBottomGap -
-              selectorHeight -
-              selectorGap -
               sectionGap;
           final illustrationHeight = (verticalBudget * 0.42).clamp(
             186.0,
@@ -83,51 +124,27 @@ class DiaryDayPage extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    height: selectorHeight,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: DiaryInlineSelector(
-                        key: ValueKey<String>(
-                          'diary-entry-date-selector-${entry.dayNumber}',
-                        ),
-                        label: dateLabel,
-                        onTap: onDateTap,
-                        textColor: palette.ink.withValues(alpha: 0.74),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 6,
-                        ),
-                        textStyle: TextStyle(
-                          fontFamily: 'NotoSansJP',
-                          color: palette.ink.withValues(alpha: 0.72),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                          decoration: TextDecoration.none,
-                          shadows: const [],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: selectorGap),
-                  SizedBox(
                     key: ValueKey<String>(
                       'diary-entry-illustration-${entry.dayNumber}',
                     ),
                     height: illustrationHeight,
-                    child: CustomPaint(
-                      painter: _ScallopFramePainter(
-                        borderColor: palette.paperEdge,
-                        shadowColor: palette.pageShadow,
+                    child: DiaryRetroPanel(
+                      fillColor: palette.cardFill,
+                      borderColor: palette.paperEdge.withValues(alpha: 0.96),
+                      innerBorderColor: palette.ruleLine.withValues(
+                        alpha: 0.88,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: _DiaryEntryIllustration(
-                            entry: entry,
-                            resolvedImageUrl: resolvedImageUrl,
-                          ),
+                      shadowColor: palette.pageShadow.withValues(alpha: 0.14),
+                      accentColor: entry.illustrationPalette[2],
+                      radius: 20,
+                      innerRadius: 15,
+                      padding: const EdgeInsets.all(10),
+                      textureOpacity: 0.04,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _DiaryEntryIllustration(
+                          entry: entry,
+                          resolvedImageUrl: resolvedImageUrl,
                         ),
                       ),
                     ),
@@ -138,57 +155,67 @@ class DiaryDayPage extends ConsumerWidget {
                       'diary-entry-writing-paper-${entry.dayNumber}',
                     ),
                     height: writingHeight,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.42),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(color: palette.paperEdge),
+                    child: DiaryRetroPanel(
+                      fillColor: palette.cardFill.withValues(alpha: 0.95),
+                      borderColor: palette.paperEdge.withValues(alpha: 0.98),
+                      innerBorderColor: palette.ruleLine.withValues(
+                        alpha: 0.88,
                       ),
+                      shadowColor: palette.pageShadow.withValues(alpha: 0.1),
+                      accentColor: palette.coverAccent,
+                      radius: 20,
+                      innerRadius: 16,
+                      padding: _writingPaperPadding,
+                      textureOpacity: 0.035,
                       child: CustomPaint(
                         painter: _WritingPaperPainter(
                           ruleColor: palette.ruleLine,
-                          contentPadding: _writingPaperPadding,
+                          linePitch: linePitch,
+                          headerLinePitch: headerLinePitch,
+                          showDebugGrid: _debugShowWritingGrid,
+                          headerText: headerText,
+                          headerTextStyle: headerTextStyle,
+                          headerStrutStyle: headerStrutStyle,
+                          bodyText: entry.body,
+                          bodyTextStyle: bodyTextStyle,
+                          bodyStrutStyle: bodyStrutStyle,
+                          bodyRightPadding: bodyScrollRightPadding,
                         ),
-                        child: Padding(
-                          padding: _writingPaperPadding,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                child: DiaryVerticalText(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              height: headerLinePitch,
+                              child: Text(
+                                headerText,
+                                maxLines: 1,
+                                overflow: TextOverflow.fade,
+                                softWrap: false,
+                                strutStyle: headerStrutStyle,
+                                style: headerTextStyle,
+                              ),
+                            ),
+                            const SizedBox(height: 0),
+                            Expanded(
+                              child: ScrollConfiguration(
+                                behavior: const _NoGlowScrollBehavior(),
+                                child: SingleChildScrollView(
                                   key: ValueKey<String>(
                                     'diary-body-${entry.dayNumber}',
                                   ),
-                                  text: entry.body,
-                                  color: palette.ink,
-                                  fontSize: 24,
-                                  columnPitch: writingColumnPitch,
-                                  rowPitch: writingRowPitch,
+                                  padding: const EdgeInsets.only(
+                                    right: bodyScrollRightPadding,
+                                    bottom: bodyScrollBottomPadding,
+                                  ),
+                                  child: Text(
+                                    entry.body,
+                                    style: bodyTextStyle,
+                                    strutStyle: bodyStrutStyle,
+                                  ),
                                 ),
                               ),
-                              SizedBox(
-                                key: ValueKey<String>(
-                                  'diary-entry-meta-column-${entry.dayNumber}',
-                                ),
-                                width: writingColumnPitch,
-                                child: DiaryVerticalText(
-                                  key: ValueKey<String>(
-                                    'diary-entry-meta-text-${entry.dayNumber}',
-                                  ),
-                                  text: _entryDateMetaText(
-                                    entry,
-                                    monthNumber: monthNumber,
-                                  ),
-                                  color: palette.ink.withValues(alpha: 0.88),
-                                  fontSize: 26,
-                                  columnPitch: writingColumnPitch,
-                                  rowPitch: writingRowPitch,
-                                  columnKeyPrefix:
-                                      'diary-entry-meta-glyph-column-${entry.dayNumber}',
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -203,39 +230,214 @@ class DiaryDayPage extends ConsumerWidget {
   }
 }
 
-String _entryDateMetaText(DiaryDayEntry entry, {required String monthNumber}) {
-  return '$monthNumber月${entry.dayNumber}日${entry.weekdayLabel}曜日';
+String _entryDateHeaderText(DiaryDayEntry entry, {required String monthNumber}) {
+  return '$monthNumber月${entry.dayNumber}日 ${_weekdayKanji(entry.weekdayLabel)}曜日';
+}
+
+String _weekdayKanji(String weekdayLabel) {
+  switch (weekdayLabel) {
+    case 'げつ':
+      return '月';
+    case 'か':
+      return '火';
+    case 'すい':
+      return '水';
+    case 'もく':
+      return '木';
+    case 'きん':
+      return '金';
+    case 'ど':
+      return '土';
+    default:
+      return '日';
+  }
 }
 
 class _WritingPaperPainter extends CustomPainter {
   const _WritingPaperPainter({
     required this.ruleColor,
-    required this.contentPadding,
+    required this.linePitch,
+    required this.headerLinePitch,
+    required this.showDebugGrid,
+    required this.headerText,
+    required this.headerTextStyle,
+    required this.headerStrutStyle,
+    required this.bodyText,
+    required this.bodyTextStyle,
+    required this.bodyStrutStyle,
+    required this.bodyRightPadding,
   });
 
   final Color ruleColor;
-  final EdgeInsets contentPadding;
+  final double linePitch;
+  final double headerLinePitch;
+  final bool showDebugGrid;
+  final String headerText;
+  final TextStyle headerTextStyle;
+  final StrutStyle headerStrutStyle;
+  final String bodyText;
+  final TextStyle bodyTextStyle;
+  final StrutStyle bodyStrutStyle;
+  final double bodyRightPadding;
 
   @override
   void paint(Canvas canvas, Size size) {
     final guidePaint = Paint()
-      ..color = ruleColor.withValues(alpha: 0.68)
+      ..color = ruleColor.withValues(alpha: 0.62)
       ..strokeWidth = 1.4;
-    const spacing = DiaryDayPage.writingColumnPitch;
-    final startX = size.width - contentPadding.right - (spacing / 2);
+    final accentPaint = Paint()
+      ..color = ruleColor.withValues(alpha: 0.28)
+      ..strokeWidth = 1.0;
+    final debugPaint = Paint()
+      ..color = ruleColor.withValues(alpha: 0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final headerWidth = size.width;
+    final bodyWidth = math.max(0.0, size.width - bodyRightPadding);
+    final headerPainter = _buildTextPainter(
+      text: headerText,
+      style: headerTextStyle,
+      strutStyle: headerStrutStyle,
+      maxWidth: headerWidth,
+      maxLines: 1,
+    );
+    final bodyPainter = _buildTextPainter(
+      text: bodyText,
+      style: bodyTextStyle,
+      strutStyle: bodyStrutStyle,
+      maxWidth: bodyWidth,
+    );
+    final headerMetrics = headerPainter.computeLineMetrics();
+    final bodyMetrics = bodyPainter.computeLineMetrics();
+    final headerOriginY = 0.0;
+    final bodyOriginY = headerLinePitch;
 
-    for (var x = startX; x >= contentPadding.left; x -= spacing) {
-      for (var y = 8.0; y < size.height - 8; y += 11) {
-        final segmentEnd = math.min(y + 5, size.height - 8);
-        canvas.drawLine(Offset(x, y), Offset(x, segmentEnd), guidePaint);
+    if (showDebugGrid) {
+      canvas.drawRect(Offset.zero & size, debugPaint);
+    }
+
+    if (headerMetrics.isNotEmpty) {
+      _drawGuideLine(
+        canvas,
+        y: headerOriginY + _ruleYForMetrics(headerMetrics.first),
+        size: size,
+        guidePaint: guidePaint,
+        accentPaint: accentPaint,
+      );
+    }
+
+    for (final metrics in bodyMetrics) {
+      final y = bodyOriginY + _ruleYForMetrics(metrics);
+      if (y > size.height) {
+        break;
       }
+      _drawGuideLine(
+        canvas,
+        y: y,
+        size: size,
+        guidePaint: guidePaint,
+        accentPaint: accentPaint,
+      );
+    }
+
+    var fillY = bodyMetrics.isEmpty
+        ? bodyOriginY + linePitch
+        : bodyOriginY + _ruleYForMetrics(bodyMetrics.last) + linePitch;
+
+    while (fillY <= size.height) {
+      _drawGuideLine(
+        canvas,
+        y: fillY,
+        size: size,
+        guidePaint: guidePaint,
+        accentPaint: accentPaint,
+      );
+      fillY += linePitch;
+    }
+  }
+
+  void _drawGuideLine(
+    Canvas canvas, {
+    required double y,
+    required Size size,
+    required Paint guidePaint,
+    required Paint accentPaint,
+  }) {
+    canvas.drawLine(
+      Offset.zero.translate(0, y),
+      Offset(size.width, y),
+      guidePaint,
+    );
+    for (
+      var x = _writingGuideTickInset;
+      x < size.width;
+      x += DiaryDayPage.writingGuideTickSpacing
+    ) {
+      canvas.drawLine(
+        Offset(x, y - _writingGuideTickHalfHeight),
+        Offset(x, y + _writingGuideTickHalfHeight),
+        accentPaint,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _WritingPaperPainter oldDelegate) {
     return oldDelegate.ruleColor != ruleColor ||
-        oldDelegate.contentPadding != contentPadding;
+        oldDelegate.linePitch != linePitch ||
+        oldDelegate.headerLinePitch != headerLinePitch ||
+        oldDelegate.showDebugGrid != showDebugGrid ||
+        oldDelegate.headerText != headerText ||
+        oldDelegate.headerTextStyle != headerTextStyle ||
+        oldDelegate.headerStrutStyle != headerStrutStyle ||
+        oldDelegate.bodyText != bodyText ||
+        oldDelegate.bodyTextStyle != bodyTextStyle ||
+        oldDelegate.bodyStrutStyle != bodyStrutStyle ||
+        oldDelegate.bodyRightPadding != bodyRightPadding;
+  }
+}
+
+double _resolvedLinePitch(TextStyle style, {StrutStyle? strutStyle}) {
+  final painter = _buildTextPainter(
+    text: 'あ',
+    style: style,
+    strutStyle: strutStyle,
+    maxWidth: double.infinity,
+  );
+  final metrics = painter.computeLineMetrics();
+  return metrics.isNotEmpty ? metrics.first.height : painter.preferredLineHeight;
+}
+
+double _ruleYForMetrics(LineMetrics metrics) => metrics.baseline;
+
+TextPainter _buildTextPainter({
+  required String text,
+  required TextStyle style,
+  StrutStyle? strutStyle,
+  required double maxWidth,
+  int? maxLines,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+    strutStyle: strutStyle,
+    maxLines: maxLines,
+    ellipsis: maxLines == null ? null : '',
+  );
+  painter.layout(maxWidth: maxWidth);
+  return painter;
+}
+
+class _NoGlowScrollBehavior extends ScrollBehavior {
+  const _NoGlowScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
   }
 }
 
@@ -273,11 +475,13 @@ class _DiaryEntryIllustration extends StatelessWidget {
                 );
               }
               return ColoredBox(
-                color: Colors.white.withValues(alpha: 0.22),
+                color: Colors.white.withValues(alpha: 0.18),
                 child: Center(
                   child: Image.network(
                     url,
-                    key: ValueKey<String>('diary-entry-image-${entry.dayNumber}'),
+                    key: ValueKey<String>(
+                      'diary-entry-image-${entry.dayNumber}',
+                    ),
                     fit: BoxFit.contain,
                     alignment: Alignment.center,
                     errorBuilder: (context, error, stackTrace) {
@@ -298,32 +502,9 @@ class _DiaryEntryIllustration extends StatelessWidget {
                 strokeWidth: 2,
               ),
             ),
-            error: (_, __) => _DiarySketchPlaceholder(
+            error: (_, _) => _DiarySketchPlaceholder(
               dayNumber: entry.dayNumber,
               palette: entry.illustrationPalette,
-            ),
-          ),
-        ),
-        Positioned(
-          left: 14,
-          bottom: 14,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.78),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text(
-                entry.highlightLabel,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontFamily: 'NotoSansJP',
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w800,
-                  decoration: TextDecoration.none,
-                  shadows: const [],
-                ),
-              ),
             ),
           ),
         ),
@@ -421,7 +602,7 @@ class _DiarySketchPainter extends CustomPainter {
     );
 
     final framePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.4)
+      ..color = Colors.white.withValues(alpha: 0.36)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawRRect(
@@ -443,91 +624,5 @@ class _DiarySketchPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DiarySketchPainter oldDelegate) {
     return oldDelegate.palette != palette;
-  }
-}
-
-class _ScallopFramePainter extends CustomPainter {
-  const _ScallopFramePainter({
-    required this.borderColor,
-    required this.shadowColor,
-  });
-
-  final Color borderColor;
-  final Color shadowColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final frameRect = Rect.fromLTWH(4, 4, size.width - 8, size.height - 8);
-    final path = _scallopPath(frameRect, 16);
-    canvas.drawPath(
-      path.shift(const Offset(0, 6)),
-      Paint()
-        ..color = shadowColor.withValues(alpha: 0.35)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = borderColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3,
-    );
-  }
-
-  Path _scallopPath(Rect rect, double radius) {
-    final path = Path();
-    final diameter = radius * 2;
-
-    path.moveTo(rect.left + radius, rect.top);
-    for (var x = rect.left + radius; x < rect.right - radius; x += diameter) {
-      final nextX = math.min(x + diameter, rect.right - radius);
-      path.quadraticBezierTo(
-        x + radius,
-        rect.top - radius * 0.82,
-        nextX,
-        rect.top,
-      );
-    }
-
-    for (var y = rect.top + radius; y < rect.bottom - radius; y += diameter) {
-      final nextY = math.min(y + diameter, rect.bottom - radius);
-      path.quadraticBezierTo(
-        rect.right + radius * 0.82,
-        y + radius,
-        rect.right,
-        nextY,
-      );
-    }
-
-    for (var x = rect.right - radius; x > rect.left + radius; x -= diameter) {
-      final nextX = math.max(x - diameter, rect.left + radius);
-      path.quadraticBezierTo(
-        x - radius,
-        rect.bottom + radius * 0.82,
-        nextX,
-        rect.bottom,
-      );
-    }
-
-    for (var y = rect.bottom - radius; y > rect.top + radius; y -= diameter) {
-      final nextY = math.max(y - diameter, rect.top + radius);
-      path.quadraticBezierTo(
-        rect.left - radius * 0.82,
-        y - radius,
-        rect.left,
-        nextY,
-      );
-    }
-
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScallopFramePainter oldDelegate) {
-    return oldDelegate.borderColor != borderColor ||
-        oldDelegate.shadowColor != shadowColor;
   }
 }

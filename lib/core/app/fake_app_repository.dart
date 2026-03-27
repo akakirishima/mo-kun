@@ -42,7 +42,8 @@ class FakeAppRepository implements AppRepository {
       StreamController<List<CharacterImageVersion>>.broadcast();
   final _homeBackgroundPreferenceController =
       StreamController<HomeBackgroundPreference?>.broadcast();
-  final _userProfileController = StreamController<UserProfileInput?>.broadcast();
+  final _userProfileController =
+      StreamController<UserProfileInput?>.broadcast();
 
   AppSession _session;
   CharacterSnapshot? _character;
@@ -455,6 +456,14 @@ class FakeAppRepository implements AppRepository {
   }
 
   @override
+  Stream<List<DiaryShelfBook>> watchDiaryShelfBooks({
+    required String userId,
+  }) async* {
+    yield _buildDiaryShelfBooks(_summaries);
+    yield* _dailySummariesController.stream.map(_buildDiaryShelfBooks);
+  }
+
+  @override
   Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
     required String userId,
   }) async* {
@@ -548,6 +557,35 @@ class FakeAppRepository implements AppRepository {
             (left, right) => left.generatedAt.compareTo(right.generatedAt),
           );
     return List<CharacterImageVersion>.unmodifiable(filtered);
+  }
+
+  List<DiaryShelfBook> _buildDiaryShelfBooks(Iterable<DailySummary> summaries) {
+    final monthStarts = <String, DateTime>{};
+    final monthCounts = <String, int>{};
+
+    for (final summary in summaries) {
+      final date = parseDateKey(summary.dateKey);
+      if (date == null) {
+        continue;
+      }
+      final monthStart = appMonthStart(date);
+      final key = _monthKey(monthStart);
+      monthStarts[key] = monthStart;
+      monthCounts[key] = (monthCounts[key] ?? 0) + 1;
+    }
+
+    final books =
+        monthCounts.entries.map((entry) {
+            final monthStart = monthStarts[entry.key]!;
+            return DiaryShelfBook(
+              monthStart: monthStart,
+              monthLabel: '${monthStart.month}月',
+              recordedDaysCount: entry.value,
+            );
+          }).toList()
+          ..sort((left, right) => right.monthStart.compareTo(left.monthStart));
+
+    return List<DiaryShelfBook>.unmodifiable(books);
   }
 
   void _upsertSummary(DailySummary summary) {

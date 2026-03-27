@@ -5,7 +5,12 @@ import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/features/onboarding/presentation/onboarding_screen.dart';
 
 class AppBootstrapScreen extends ConsumerWidget {
-  const AppBootstrapScreen({super.key});
+  const AppBootstrapScreen({
+    super.key,
+    this.enableDiaryCoverTurnTeaser = true,
+  });
+
+  final bool enableDiaryCoverTurnTeaser;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -15,7 +20,9 @@ class AppBootstrapScreen extends ConsumerWidget {
         if (session.needsOnboarding) {
           return const OnboardingScreen();
         }
-        return const AppShell();
+        return AppShell(
+          enableDiaryCoverTurnTeaser: enableDiaryCoverTurnTeaser,
+        );
       },
       error: (error, stackTrace) {
         return Scaffold(

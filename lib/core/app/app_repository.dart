@@ -66,6 +66,10 @@ abstract class AppRepository {
     required DateTime month,
   });
 
+  Stream<List<DiaryShelfBook>> watchDiaryShelfBooks({
+    required String userId,
+  });
+
   Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
     required String userId,
   });

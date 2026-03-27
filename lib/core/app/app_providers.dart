@@ -140,6 +140,13 @@ final monthlyDailySummariesProvider =
           );
     });
 
+final diaryShelfBooksProvider =
+    StreamProvider.family<List<DiaryShelfBook>, AppSession>((ref, session) {
+      return ref
+          .watch(appRepositoryProvider)
+          .watchDiaryShelfBooks(userId: session.userId);
+    });
+
 final homeBackgroundPreferenceProvider =
     StreamProvider.family<HomeBackgroundPreference?, String>((ref, userId) {
       return ref

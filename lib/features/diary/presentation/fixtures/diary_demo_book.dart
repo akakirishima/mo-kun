@@ -4,8 +4,14 @@ import 'package:gdgoc_2026_prototype/features/diary/presentation/models/diary_bo
 final demoMarchDiaryBook = DiaryMonthBook(
   monthLabel: '2026年3月',
   coverTitle: 'March Memory Book',
-  coverSubtitle: '一日の手ざわりを、ゆっくりめくって思い出すための一冊。',
-  recordedDaysCount: _entryBodies.length,
+  coverSubtitle: '記録のある日をタップして、その日のページをひらけます',
+  calendar: DiaryMonthCalendar(
+    monthStart: DateTime(2026, 3, 1),
+    dayCount: 31,
+    leadingBlankCount: 0,
+    recordedDays: <int>{1, 7, 14, 21, 28, 31},
+    todayDayNumber: 7,
+  ),
   canShowPreviousMonth: true,
   canShowNextMonth: false,
   entries: List<DiaryDayEntry>.generate(

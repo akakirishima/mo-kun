@@ -552,6 +552,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.3.0"
+  page_turn_animation:
+    dependency: "direct main"
+    description:
+      name: page_turn_animation
+      sha256: b4d7cf50caa41e59b2a69e9dcb93ed836dc530dba96e4666ab968506a6aaef87
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.4"
   path:
     dependency: transitive
     description:
