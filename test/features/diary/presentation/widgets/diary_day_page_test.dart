@@ -92,4 +92,57 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('renders a horizontal date header with kanji weekday', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        child: DiaryDayPage(
+          entry: buildEntry(),
+          monthNumber: '3',
+          bottomClearance: 80,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('3月3日 月曜日'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('diary-body-3')), findsOneWidget);
+  });
+
+  testWidgets('keeps long body text within the ruled paper without overflow', (
+    WidgetTester tester,
+  ) async {
+    final longEntry = DiaryDayEntry(
+      dayNumber: 27,
+      weekdayLabel: 'きん',
+      body:
+          '今日はこんにちは これ俺がしゃべっているか しゃべってないか…。'
+          '明日はこの続きを少しでも進められたらいいな。'
+          '今日はこんにちは これ俺がしゃべっているか しゃべってないか…。'
+          '明日はこの続きを少しでも進められたらいいな。',
+      illustrationPalette: const [
+        Color(0xFFEFC7A9),
+        Color(0xFFDE8F73),
+        Color(0xFFF9E4A6),
+      ],
+      highlightLabel: '小さく前進した日',
+      imageUrl: null,
+    );
+
+    await tester.pumpWidget(
+      wrapWithTestApp(
+        child: DiaryDayPage(
+          entry: longEntry,
+          monthNumber: '3',
+          bottomClearance: 80,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('3月27日 金曜日'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
