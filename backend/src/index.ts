@@ -1,9 +1,16 @@
+import { createServer } from "node:http";
 import cors from "cors";
 import express from "express";
 import multer from "multer";
+import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
 import { getDb, getStorageClient } from "./lib/firebase.js";
-import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
+import {
+  extractBearerToken,
+  requireAuth,
+  type AuthedRequest,
+  verifyBearerToken,
+} from "./middleware/auth.js";
 import { AppRepository } from "./repositories/app-repository.js";
 import { AiService, AiServiceError } from "./services/ai-service.js";
 import {
@@ -16,9 +23,13 @@ import {
 import { buildAppDateKey } from "./services/app-date.js";
 import { DailyBubbleService } from "./services/daily-bubble-service.js";
 import { SpeechService, SpeechServiceError } from "./services/speech-service.js";
+import { LiveSessionManager } from "./live/live-session-manager.js";
+import { parseClientMessage } from "./live/live-protocol.js";
 
 const config = loadConfig();
 const app = express();
+const server = createServer(app);
+const wss = new WebSocketServer({ noServer: true });
 const repository = new AppRepository(getDb());
 const aiService = new AiService(config);
 const speechService = new SpeechService(config);
@@ -44,6 +55,66 @@ const photoUpload = multer({
 
 app.use(express.json());
 app.use(cors());
+
+server.on("upgrade", async (request, socket, head) => {
+  const requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+  if (requestUrl.pathname !== "/v1/live/voice") {
+    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  try {
+    const token = extractBearerToken(request.headers.authorization);
+    if (!token) {
+      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    const decoded = await verifyBearerToken(token);
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      const manager = new LiveSessionManager(
+        ws,
+        decoded.uid,
+        repository,
+        dailyBubbleService,
+        aiService,
+        config,
+      );
+
+      ws.on("message", (data, isBinary) => {
+        void (async () => {
+          try {
+            const parsed = parseClientMessage(
+              isBinary ? Buffer.from(data as Buffer) : data.toString(),
+            );
+            await manager.handleMessage(parsed);
+          } catch (error) {
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                code: "invalid_client_message",
+                detail: error instanceof Error ? error.message : "unknown_error",
+              }),
+            );
+          }
+        })();
+      });
+
+      ws.on("close", () => {
+        void manager.close({ reason: "socket_closed" });
+      });
+
+      ws.on("error", () => {
+        void manager.close({ reason: "socket_error" });
+      });
+    });
+  } catch (error) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+  }
+});
 
 app.get("/health", (_request, response) => {
   response.json({ ok: true });
@@ -428,7 +499,7 @@ app.post("/v1/jobs/daily-refresh", async (request, response) => {
   }
 });
 
-app.listen(config.port, () => {
+server.listen(config.port, () => {
   console.log(`mo-kun backend listening on ${config.port}`);
 });
 

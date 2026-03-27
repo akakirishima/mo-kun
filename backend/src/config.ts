@@ -1,9 +1,13 @@
 export type AppConfig = {
   projectId: string;
   vertexLocation: string;
+  liveVertexLocation: string;
   geminiModel: string;
   geminiImageModel: string;
   veoModel: string;
+  livePrimaryModel: string;
+  liveFallbackModel: string;
+  liveSessionHandleTtlSeconds: number;
   geminiTemperature: number;
   geminiMaxOutputTokens: number;
   geminiThinkingBudget: number;
@@ -22,10 +26,21 @@ export function loadConfig(): AppConfig {
   return {
     projectId: process.env.GOOGLE_CLOUD_PROJECT ?? 'local-project',
     vertexLocation: process.env.VERTEX_LOCATION ?? 'global',
+    liveVertexLocation:
+      process.env.LIVE_VERTEX_LOCATION ?? process.env.VERTEX_LOCATION ?? 'us-central1',
     geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.5-pro',
     geminiImageModel:
       process.env.GEMINI_IMAGE_MODEL ?? 'gemini-2.5-flash-image',
     veoModel: process.env.VEO_MODEL ?? 'veo-3.1-generate-001',
+    livePrimaryModel:
+      process.env.LIVE_MODEL_PRIMARY ?? 'gemini-live-2.5-flash-native-audio',
+    liveFallbackModel:
+      process.env.LIVE_MODEL_FALLBACK ??
+      process.env.LIVE_MODEL_PRIMARY ??
+      'gemini-live-2.5-flash-native-audio',
+    liveSessionHandleTtlSeconds: Number(
+      process.env.LIVE_SESSION_HANDLE_TTL_SECONDS ?? 1800,
+    ),
     geminiTemperature: Number(process.env.GEMINI_TEMPERATURE ?? 0.5),
     geminiMaxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? 2048),
     geminiThinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 128),
