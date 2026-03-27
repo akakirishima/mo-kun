@@ -219,6 +219,7 @@ void main() {
 
     await tester.tap(
       find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -354,6 +355,7 @@ void main() {
 
     await tester.tap(
       find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
