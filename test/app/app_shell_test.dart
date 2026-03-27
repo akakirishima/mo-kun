@@ -36,6 +36,19 @@ void main() {
     return decoration.color!;
   }
 
+  Future<void> waitForDiaryTeaser(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 900));
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 25));
+      if (find
+          .byKey(const ValueKey<String>('diary-cover-turn-teaser'))
+          .evaluate()
+          .isNotEmpty) {
+        break;
+      }
+    }
+  }
+
   testWidgets('starts on HOME with the bottom dock visible', (
     WidgetTester tester,
   ) async {
