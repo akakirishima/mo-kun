@@ -12,6 +12,9 @@ class GlassBottomDock extends StatelessWidget {
   });
 
   static const reservedBottomSpacing = 112.0;
+  static double reservedBottomSpacingFor(BuildContext context) {
+    return reservedBottomSpacing + MediaQuery.paddingOf(context).bottom;
+  }
 
   final List<AppTab> tabs;
   final AppTab selectedTab;
@@ -26,6 +29,7 @@ class GlassBottomDock extends StatelessWidget {
       child: Align(
         alignment: Alignment.bottomCenter,
         child: NesContainer(
+          key: const ValueKey<String>('app-navigation-dock'),
           backgroundColor: const Color(0xFFE0A56D).withValues(alpha: 0.92),
           painterBuilder: NesContainerSquareCornerPainter.new,
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
@@ -64,9 +68,15 @@ class _DockItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fill = selected ? tab.accentColor : const Color(0xFFB8703C);
-    final iconColor = selected ? const Color(0xFF4D2C1A) : const Color(0xFFFFF3D3);
-    final labelColor = selected ? const Color(0xFF4D2C1A) : const Color(0xFFFFF6DF);
-    final borderColor = selected ? const Color(0xFF2F1A0F) : const Color(0xFF6D3C1D);
+    final iconColor = selected
+        ? const Color(0xFF4D2C1A)
+        : const Color(0xFFFFF3D3);
+    final labelColor = selected
+        ? const Color(0xFF4D2C1A)
+        : const Color(0xFFFFF6DF);
+    final borderColor = selected
+        ? const Color(0xFF2F1A0F)
+        : const Color(0xFF6D3C1D);
     final shadowColor = selected
         ? const Color(0xFF8C5833)
         : const Color(0xFF7A451F);
@@ -87,10 +97,7 @@ class _DockItem extends StatelessWidget {
             color: fill,
             border: Border.all(color: borderColor, width: 3),
             boxShadow: [
-              BoxShadow(
-                color: shadowColor,
-                offset: const Offset(0, 4),
-              ),
+              BoxShadow(color: shadowColor, offset: const Offset(0, 4)),
             ],
           ),
           child: Column(

@@ -359,6 +359,19 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
+  Stream<List<DiaryShelfBook>> watchDiaryShelfBooks({required String userId}) {
+    return firestore
+        .collection('users')
+        .doc(userId)
+        .collection('dailySummaries')
+        .orderBy(FieldPath.documentId, descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return _buildDiaryShelfBooks(snapshot.docs.map(_mapDailySummary));
+        });
+  }
+
+  @override
   Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
     required String userId,
   }) {
@@ -591,7 +604,11 @@ class FirebaseAppRepository implements AppRepository {
   DocumentReference<Map<String, dynamic>> _homeBackgroundPreferencesDoc(
     String userId,
   ) {
-    return firestore.collection('users').doc(userId).collection('preferences').doc('ui');
+    return firestore
+        .collection('users')
+        .doc(userId)
+        .collection('preferences')
+        .doc('ui');
   }
 
   DocumentReference<Map<String, dynamic>> _userProfileDoc(String userId) {
@@ -620,5 +637,34 @@ class FirebaseAppRepository implements AppRepository {
       'image/webp' => '.webp',
       _ => '.jpg',
     };
+  }
+
+  List<DiaryShelfBook> _buildDiaryShelfBooks(Iterable<DailySummary> summaries) {
+    final monthStarts = <String, DateTime>{};
+    final monthCounts = <String, int>{};
+
+    for (final summary in summaries) {
+      final date = parseDateKey(summary.dateKey);
+      if (date == null) {
+        continue;
+      }
+      final monthStart = appMonthStart(date);
+      final key = monthKey(monthStart);
+      monthStarts[key] = monthStart;
+      monthCounts[key] = (monthCounts[key] ?? 0) + 1;
+    }
+
+    final books =
+        monthCounts.entries.map((entry) {
+            final monthStart = monthStarts[entry.key]!;
+            return DiaryShelfBook(
+              monthStart: monthStart,
+              monthLabel: '${monthStart.month}月',
+              recordedDaysCount: entry.value,
+            );
+          }).toList()
+          ..sort((left, right) => right.monthStart.compareTo(left.monthStart));
+
+    return books;
   }
 }

@@ -11,10 +11,16 @@ import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/core/theme/app_theme.dart';
 
 class App extends StatefulWidget {
-  const App({super.key, this.appearanceController, this.repository});
+  const App({
+    super.key,
+    this.appearanceController,
+    this.repository,
+    this.enableDiaryCoverTurnTeaser = true,
+  });
 
   final AppRepository? repository;
   final AppearanceController? appearanceController;
+  final bool enableDiaryCoverTurnTeaser;
 
   @override
   State<App> createState() => _AppState();
@@ -55,7 +61,9 @@ class _AppState extends State<App> {
               title: 'GDGoC 2026 Prototype',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.light(_appearanceController.palette),
-              home: const AppBootstrapScreen(),
+              home: AppBootstrapScreen(
+                enableDiaryCoverTurnTeaser: widget.enableDiaryCoverTurnTeaser,
+              ),
             ),
           ),
         );

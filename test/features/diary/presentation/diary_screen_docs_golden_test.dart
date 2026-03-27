@@ -14,7 +14,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      wrapWithTestApp(child: DiaryScreen(onSettingsTap: () {})),
+      wrapWithTestApp(
+        child: const DiaryScreen(enableCoverTurnTeaser: false),
+      ),
     );
     await tester.pumpAndSettle();
 

@@ -49,6 +49,7 @@ dependencies:
   flutter_pcm_sound: ^3.3.3
   path_provider: ^2.1.5
   nes_ui: ^0.30.0
+  page_turn_animation: ^0.1.4
   video_player: ^2.9.2
 
 dev_dependencies:
