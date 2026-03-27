@@ -25,6 +25,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Color selectedDockColor(WidgetTester tester, String tabName) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(ValueKey<String>('nav-$tabName')),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final decoration = container.decoration! as BoxDecoration;
+    return decoration.color!;
+  }
+
   testWidgets('starts on HOME with the bottom dock visible', (
     WidgetTester tester,
   ) async {
@@ -41,7 +52,34 @@ void main() {
       find.byKey(const ValueKey<String>('home-room-stage')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('home-talk-button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('all navigation tabs use the same NES dock highlight color', (
+    WidgetTester tester,
+  ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
+    await tester.pumpWidget(const App());
+    await tester.pumpAndSettle();
+
+    const expectedColor = Color(0xFFF0C48A);
+    expect(selectedDockColor(tester, 'home'), expectedColor);
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-chat')));
+    expect(selectedDockColor(tester, 'chat'), expectedColor);
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+    expect(selectedDockColor(tester, 'diary'), expectedColor);
+
+    await tapVisible(
+      tester,
+      find.byKey(const ValueKey<String>('nav-settings')),
+    );
+    expect(selectedDockColor(tester, 'settings'), expectedColor);
   });
 
   testWidgets('switches between Home, Chat, Diary, and Settings tabs', (
@@ -57,16 +95,25 @@ void main() {
 
     await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
     expect(find.byKey(const ValueKey<String>('diary-screen')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('diary-back-button')), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('diary-back-button')),
+      findsNothing,
+    );
 
-    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
+    await tapVisible(
+      tester,
+      find.byKey(const ValueKey<String>('nav-settings')),
+    );
     expect(
       find.byKey(const ValueKey<String>('settings-screen')),
       findsOneWidget,
     );
 
     await tapVisible(tester, find.byKey(const ValueKey<String>('nav-home')));
-    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('home-talk-button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('opens Image from Settings', (WidgetTester tester) async {
@@ -75,7 +122,10 @@ void main() {
     await tester.pumpWidget(const App());
     await tester.pumpAndSettle();
 
-    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-settings')));
+    await tapVisible(
+      tester,
+      find.byKey(const ValueKey<String>('nav-settings')),
+    );
     await tapVisible(
       tester,
       find.byKey(const ValueKey<String>('settings-item-image')),

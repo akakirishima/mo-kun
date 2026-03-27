@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
@@ -241,138 +242,131 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       pendingMessages: pendingMessages,
     );
 
-    return DecoratedBox(
+    return Stack(
       key: const ValueKey<String>('chat-screen-background'),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [palette.backgroundTop, palette.backgroundBottom],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child:
-                (customBackgroundUrl != null && customBackgroundUrl.isNotEmpty)
-                ? Image.network(
-                    customBackgroundUrl,
-                    key: const ValueKey<String>('chat-background-image'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    errorBuilder: (_, _, _) => Image.asset(
-                      backgroundTheme.backgroundAssetPath,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.center,
-                    ),
-                  )
-                : Image.asset(
-                    backgroundTheme.backgroundAssetPath,
-                    key: const ValueKey<String>('chat-background-image'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
-          ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.08),
-                    Colors.black.withValues(alpha: 0.06),
-                  ],
-                ),
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: -GlassBottomDock.reservedBottomSpacing,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [palette.backgroundTop, palette.backgroundBottom],
               ),
             ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Column(
+            child: Stack(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-                  child: NesContainer(
-                    backgroundColor: panelFillColor.withValues(alpha: 0.9),
-                    borderColor: panelBorderColor,
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-                    painterBuilder: NesContainerSquareCornerPainter.new,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Chat',
-                            key: const ValueKey<String>('chat-screen'),
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(
-                                  color: panelTextColor,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                Positioned.fill(
+                  child:
+                      (customBackgroundUrl != null && customBackgroundUrl.isNotEmpty)
+                      ? Image.network(
+                          customBackgroundUrl,
+                          key: const ValueKey<String>('chat-background-image'),
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          errorBuilder: (_, _, _) => Image.asset(
+                            backgroundTheme.backgroundAssetPath,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.center,
                           ),
+                        )
+                      : Image.asset(
+                          backgroundTheme.backgroundAssetPath,
+                          key: const ValueKey<String>('chat-background-image'),
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: panelFillColor,
-                            border: Border.all(color: panelBorderColor, width: 2),
-                          ),
-                          child: Text(
-                            '${timelineMessages.length}件',
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: panelTextColor,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
-                Expanded(
-                  child: ListView.builder(
-                    key: const ValueKey<String>('chat-message-list'),
-                    controller: _messageScrollController,
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                    itemCount: timelineMessages.length,
-                    itemBuilder: (context, index) {
-                      final entry = timelineMessages[index];
-                      return _TimelineBubble(entry: entry);
-                    },
-                  ),
-                ),
-                if (_pendingAttachment != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-                    child: _PendingAttachmentPreview(
-                      attachment: _pendingAttachment!,
-                      onRemove: _removePendingAttachment,
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.08),
+                          Colors.black.withValues(alpha: 0.06),
+                        ],
+                      ),
                     ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                  child: ChatInputBar(
-                    key: const ValueKey<String>('chat-input-bar'),
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    sendEnabled: _canSend,
-                    onChanged: (_) {},
-                    onSubmitted: (_) => _sendMessage(),
-                    onSendTap: _sendMessage,
-                    onCameraTap: () => _handleAttachmentTap(ImageSource.camera),
-                    onImageTap: () => _handleAttachmentTap(ImageSource.gallery),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+                child: NesContainer(
+                  backgroundColor: panelFillColor.withValues(alpha: 0.9),
+                  borderColor: panelBorderColor,
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                  painterBuilder: NesContainerSquareCornerPainter.new,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Chat',
+                          key: const ValueKey<String>('chat-screen'),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: panelTextColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  key: const ValueKey<String>('chat-message-list'),
+                  controller: _messageScrollController,
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  itemCount: timelineMessages.length,
+                  itemBuilder: (context, index) {
+                    final entry = timelineMessages[index];
+                    return _TimelineBubble(entry: entry);
+                  },
+                ),
+              ),
+              if (_pendingAttachment != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                  child: _PendingAttachmentPreview(
+                    attachment: _pendingAttachment!,
+                    onRemove: _removePendingAttachment,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                child: ChatInputBar(
+                  key: const ValueKey<String>('chat-input-bar'),
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  sendEnabled: _canSend,
+                  onChanged: (_) {},
+                  onSubmitted: (_) => _sendMessage(),
+                  onSendTap: _sendMessage,
+                  onCameraTap: () => _handleAttachmentTap(ImageSource.camera),
+                  onImageTap: () => _handleAttachmentTap(ImageSource.gallery),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

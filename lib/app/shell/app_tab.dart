@@ -1,40 +1,42 @@
 import 'package:flutter/material.dart';
 
+const _bottomDockSelectedColor = Color(0xFFF0C48A);
+
 enum AppTab {
   home(
     label: 'ホーム',
     semanticLabel: 'Home tab',
     icon: Icons.home_outlined,
     selectedIcon: Icons.home_rounded,
-    accentColor: Color(0xFFF3B4CB),
+    accentColor: _bottomDockSelectedColor,
   ),
   chat(
     label: 'チャット',
     semanticLabel: 'Chat tab',
     icon: Icons.chat_bubble_outline_rounded,
     selectedIcon: Icons.chat_bubble_rounded,
-    accentColor: Color(0xFFF3C2A0),
+    accentColor: _bottomDockSelectedColor,
   ),
   diary(
     label: '日記',
     semanticLabel: 'Diary tab',
     icon: Icons.menu_book_outlined,
     selectedIcon: Icons.menu_book_rounded,
-    accentColor: Color(0xFFF3D8B3),
+    accentColor: _bottomDockSelectedColor,
   ),
   settings(
     label: '設定',
     semanticLabel: 'Settings tab',
     icon: Icons.settings_outlined,
     selectedIcon: Icons.settings,
-    accentColor: Color(0xFFE8E4DE),
+    accentColor: _bottomDockSelectedColor,
   ),
   image(
     label: 'Image',
     semanticLabel: 'Image tab',
     icon: Icons.image_outlined,
     selectedIcon: Icons.image,
-    accentColor: Color(0xFFF1DACF),
+    accentColor: _bottomDockSelectedColor,
   );
 
   const AppTab({

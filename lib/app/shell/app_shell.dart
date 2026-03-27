@@ -47,6 +47,7 @@ class _AppShellState extends State<AppShell> {
                 bottom: GlassBottomDock.reservedBottomSpacing,
               ),
               child: IndexedStack(
+                clipBehavior: Clip.none,
                 index: tabs.indexOf(_selectedTab),
                 children: [
                   HomeScreen(

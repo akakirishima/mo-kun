@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
@@ -297,155 +298,174 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         widget.initialBubbleMessage;
     final backgroundPreference = session == null
         ? null
-        : ref.watch(homeBackgroundPreferenceProvider(session.userId)).valueOrNull;
+        : ref
+              .watch(homeBackgroundPreferenceProvider(session.userId))
+              .valueOrNull;
     final backgroundTheme = HomeBackgroundTheme.resolve(
       backgroundPreference?.themeId,
     );
     final customBackgroundUrl = backgroundPreference?.customImageUrl;
 
-    return DecoratedBox(
+    return Stack(
       key: const ValueKey<String>('home-background'),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [palette.pageTop, palette.pageBottom],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: (customBackgroundUrl != null && customBackgroundUrl.isNotEmpty)
-                ? Image.network(
-                    customBackgroundUrl,
-                    key: const ValueKey<String>('home-background-image'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    errorBuilder: (_, _, _) => Image.asset(
-                      backgroundTheme.backgroundAssetPath,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.center,
-                    ),
-                  )
-                : Image.asset(
-                    backgroundTheme.backgroundAssetPath,
-                    key: const ValueKey<String>('home-background-image'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
-            ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.08),
-                    Colors.black.withValues(alpha: 0.04),
-                  ],
-                ),
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: -GlassBottomDock.reservedBottomSpacing,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [palette.pageTop, palette.pageBottom],
               ),
             ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final maxStageWidth = math.max(constraints.maxWidth - 12, 0.0);
-                final stageHeightFactor = _overlayMode == HomeOverlayMode.voice
-                    ? 0.34
-                    : 0.52;
-                final minStageSize = _overlayMode == HomeOverlayMode.voice
-                    ? 168.0
-                    : 220.0;
-                final stageSize = math.min(
-                  maxStageWidth,
-                  math.max(constraints.maxHeight * stageHeightFactor, minStageSize),
-                );
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 18, 10, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _DailyBubbleCard(
-                        text: bubbleText,
-                        titleColor: palette.transcriptTitle,
-                        textColor: palette.transcriptText,
-                        outerBorder: palette.transcriptOuterBorder,
-                        innerBorder: palette.transcriptInnerBorder,
-                        fillColor: palette.transcriptFill.withValues(alpha: 0.9),
-                        shadowColor: palette.transcriptShadow,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child:
+                      (customBackgroundUrl != null && customBackgroundUrl.isNotEmpty)
+                      ? Image.network(
+                          customBackgroundUrl,
+                          key: const ValueKey<String>('home-background-image'),
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          errorBuilder: (_, _, _) => Image.asset(
+                            backgroundTheme.backgroundAssetPath,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.center,
+                          ),
+                        )
+                      : Image.asset(
+                          backgroundTheme.backgroundAssetPath,
+                          key: const ValueKey<String>('home-background-image'),
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.08),
+                          Colors.black.withValues(alpha: 0.04),
+                        ],
                       ),
-                      const SizedBox(height: 20),
-                      Expanded(
-                        child: Center(
-                          child: _StageFrame(
-                            size: stageSize,
-                            child: HomeRoomStage(
-                              videoUrl: resolvedCharacterVideoUrl.valueOrNull,
-                              imageUrl: resolvedCharacterImageUrl.valueOrNull,
-                              state: stageState,
-                              message: stageMessage,
-                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxStageWidth = math.max(constraints.maxWidth - 12, 0.0);
+              final stageHeightFactor = _overlayMode == HomeOverlayMode.voice
+                  ? 0.34
+                  : 0.52;
+              final minStageSize = _overlayMode == HomeOverlayMode.voice
+                  ? 168.0
+                  : 220.0;
+              final stageSize = math.min(
+                maxStageWidth,
+                math.max(
+                  constraints.maxHeight * stageHeightFactor,
+                  minStageSize,
+                ),
+              );
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(10, 18, 10, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _DailyBubbleCard(
+                      text: bubbleText,
+                      titleColor: palette.transcriptTitle,
+                      textColor: palette.transcriptText,
+                      outerBorder: palette.transcriptOuterBorder,
+                      innerBorder: palette.transcriptInnerBorder,
+                      fillColor: palette.transcriptFill.withValues(
+                        alpha: 0.9,
+                      ),
+                      shadowColor: palette.transcriptShadow,
+                    ),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: Center(
+                        child: _StageFrame(
+                          size: stageSize,
+                          child: HomeRoomStage(
+                            videoUrl: resolvedCharacterVideoUrl.valueOrNull,
+                            imageUrl: resolvedCharacterImageUrl.valueOrNull,
+                            state: stageState,
+                            message: stageMessage,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      _HomePrimaryButton(
-                        buttonKey: const ValueKey<String>('home-talk-button'),
-                        label: _overlayMode == HomeOverlayMode.voice
-                            ? '音声パネルを閉じる'
-                            : '話しかける',
-                        fillColor: palette.talkButtonFill,
-                        borderColor: palette.talkButtonOutline,
-                        textColor: palette.talkButtonText,
-                        onPressed: () {
-                          final nextMode = _overlayMode == HomeOverlayMode.voice
-                              ? HomeOverlayMode.none
-                              : HomeOverlayMode.voice;
-                          unawaited(_setOverlayMode(nextMode));
-                        },
-                      ),
-                      const SizedBox(height: _bottomSafeSpacing),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 140, 18, 150),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _overlayMode == HomeOverlayMode.voice
-                      ? SingleChildScrollView(
-                          key: const ValueKey<String>('home-voice-panel'),
-                          child: _VoicePanel(
-                            voiceState: _voiceState,
-                            recordingDuration: _recordingDuration,
-                            transcriptText: _latestTranscriptText,
-                            assistantText: _latestAssistantText,
-                            errorText: _voiceErrorMessage,
-                            onClose: () {
-                              unawaited(_setOverlayMode(HomeOverlayMode.none));
-                            },
-                            onPrimaryTap: _handleVoicePrimaryTap,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                    ),
+                    const SizedBox(height: 18),
+                    _HomePrimaryButton(
+                      buttonKey: const ValueKey<String>('home-talk-button'),
+                      label: _overlayMode == HomeOverlayMode.voice
+                          ? '音声パネルを閉じる'
+                          : '話しかける',
+                      fillColor: palette.talkButtonFill,
+                      borderColor: palette.talkButtonOutline,
+                      textColor: palette.talkButtonText,
+                      onPressed: () {
+                        final nextMode = _overlayMode == HomeOverlayMode.voice
+                            ? HomeOverlayMode.none
+                            : HomeOverlayMode.voice;
+                        unawaited(_setOverlayMode(nextMode));
+                      },
+                    ),
+                    const SizedBox(height: _bottomSafeSpacing),
+                  ],
                 ),
+              );
+            },
+          ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 140, 18, 150),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _overlayMode == HomeOverlayMode.voice
+                    ? SingleChildScrollView(
+                        key: const ValueKey<String>('home-voice-panel'),
+                        child: _VoicePanel(
+                          voiceState: _voiceState,
+                          recordingDuration: _recordingDuration,
+                          transcriptText: _latestTranscriptText,
+                          assistantText: _latestAssistantText,
+                          errorText: _voiceErrorMessage,
+                          onClose: () {
+                            unawaited(_setOverlayMode(HomeOverlayMode.none));
+                          },
+                          onPrimaryTap: _handleVoicePrimaryTap,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -471,32 +491,72 @@ class _DailyBubbleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _RoundedNesPanel(
+    return Container(
       key: const ValueKey<String>('home-daily-bubble'),
-      backgroundColor: fillColor.withValues(alpha: 0.93),
-      borderColor: outerBorder.withValues(alpha: 0.92),
-      innerBorderColor: innerBorder.withValues(alpha: 0.72),
-      shadowColor: shadowColor.withValues(alpha: 0.5),
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _PixelTag(
-            label: '今日の一言',
-            fillColor: const Color(0xFFF3B4CB),
-            borderColor: outerBorder,
-            textColor: titleColor,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            text,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: textColor,
-              fontWeight: FontWeight.w700,
-              height: 1.45,
-            ),
+      decoration: BoxDecoration(
+        color: outerBorder.withValues(alpha: 0.96),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor.withValues(alpha: 0.46),
+            offset: const Offset(0, 6),
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4, top: 4, right: 4, bottom: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: fillColor.withValues(alpha: 0.96),
+            border: Border.all(
+              color: innerBorder.withValues(alpha: 0.76),
+              width: 3,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _PixelBadge(
+                      label: '今日の一言',
+                      fillColor: const Color(0xFFE7A64C),
+                      borderColor: const Color(0xFF4B2D1E),
+                      textColor: const Color(0xFF2C170C),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: outerBorder.withValues(alpha: 0.92),
+                        border: Border.all(
+                          color: const Color(0xFF4B2D1E),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  height: 4,
+                  color: outerBorder.withValues(alpha: 0.82),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  text,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w700,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -512,10 +572,7 @@ class _StageFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox.square(
       dimension: size,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: child,
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(18), child: child),
     );
   }
 }
@@ -740,9 +797,7 @@ class _RoundedNesPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         color: backgroundColor,
         border: Border.all(color: borderColor, width: 3),
-        boxShadow: [
-          BoxShadow(color: shadowColor, offset: const Offset(0, 6)),
-        ],
+        boxShadow: [BoxShadow(color: shadowColor, offset: const Offset(0, 6))],
       ),
       child: Container(
         margin: const EdgeInsets.all(4),
@@ -857,6 +912,42 @@ class _PixelTag extends StatelessWidget {
           color: textColor,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+class _PixelBadge extends StatelessWidget {
+  const _PixelBadge({
+    required this.label,
+    required this.fillColor,
+    required this.borderColor,
+    required this.textColor,
+  });
+
+  final String label;
+  final Color fillColor;
+  final Color borderColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: fillColor,
+        border: Border.all(color: borderColor, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66331A0F), offset: Offset(2, 2)),
+        ],
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.8,
         ),
       ),
     );

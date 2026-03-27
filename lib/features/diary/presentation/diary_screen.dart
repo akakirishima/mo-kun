@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
@@ -112,65 +113,72 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       images: images,
     );
 
-    return DecoratedBox(
+    return Stack(
       key: const ValueKey<String>('diary-background'),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [palette.backgroundTop, palette.backgroundBottom],
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: -GlassBottomDock.reservedBottomSpacing,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [palette.backgroundTop, palette.backgroundBottom],
+              ),
+            ),
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -80,
-            left: -30,
-            child: _BackdropGlow(
-              size: 220,
-              color: palette.coverAccent.withValues(alpha: 0.34),
+        Positioned(
+          top: -80,
+          left: -30,
+          child: _BackdropGlow(
+            size: 220,
+            color: palette.coverAccent.withValues(alpha: 0.34),
+          ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+            child: SizedBox.expand(
+              key: const ValueKey<String>('diary-screen'),
+              child: DiaryBookViewport(
+                book: book,
+                controller: _pageController,
+                dayPageBottomClearance: 20,
+                onOpenSelector: () => _openDaySelector(book),
+                onShowPreviousMonth: _showPreviousMonth,
+                onShowNextMonth: _showNextMonth,
+                onSettingsTap: widget.onSettingsTap,
+                onPageChanged: (index) {
+                  if (_currentPage == index) {
+                    return;
+                  }
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+              ),
             ),
           ),
+        ),
+        if (Navigator.canPop(context))
           SafeArea(
-            bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-              child: SizedBox.expand(
-                key: const ValueKey<String>('diary-screen'),
-                child: DiaryBookViewport(
-                  book: book,
-                  controller: _pageController,
-                  dayPageBottomClearance: 20,
-                  onOpenSelector: () => _openDaySelector(book),
-                  onShowPreviousMonth: _showPreviousMonth,
-                  onShowNextMonth: _showNextMonth,
-                  onSettingsTap: widget.onSettingsTap,
-                  onPageChanged: (index) {
-                    if (_currentPage == index) {
-                      return;
-                    }
-                    setState(() {
-                      _currentPage = index;
-                    });
-                  },
+              padding: const EdgeInsets.fromLTRB(14, 12, 18, 0),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: _DiaryBackButton(
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
             ),
           ),
-          if (Navigator.canPop(context))
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 18, 0),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: _DiaryBackButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 }

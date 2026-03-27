@@ -77,6 +77,8 @@ class ChatInputBar extends StatelessWidget {
                     controller: controller,
                     focusNode: focusNode,
                     readOnly: readOnly,
+                    onTapOutside:
+                        (_) => FocusManager.instance.primaryFocus?.unfocus(),
                     onChanged: onChanged,
                     onSubmitted: onSubmitted,
                     textInputAction: TextInputAction.send,
