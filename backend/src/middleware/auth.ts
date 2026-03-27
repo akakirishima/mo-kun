@@ -12,14 +12,13 @@ export async function requireAuth(
   next: NextFunction,
 ) {
   try {
-    const header = request.header("authorization");
-    const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+    const token = extractBearerToken(request.header("authorization"));
     if (!token) {
       response.status(401).json({ error: "missing_bearer_token" });
       return;
     }
 
-    const decoded = await getAuthClient().verifyIdToken(token);
+    const decoded = await verifyBearerToken(token);
     (request as AuthedRequest).user = decoded;
     next();
   } catch (error) {
@@ -28,4 +27,12 @@ export async function requireAuth(
       detail: error instanceof Error ? error.message : "unknown_error",
     });
   }
+}
+
+export function extractBearerToken(header?: string | null): string | null {
+  return header?.startsWith("Bearer ") ? header.slice(7) : null;
+}
+
+export async function verifyBearerToken(token: string) {
+  return getAuthClient().verifyIdToken(token);
 }

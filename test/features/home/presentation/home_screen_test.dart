@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
@@ -27,52 +26,58 @@ class _FakeImageUrlResolver extends ImageUrlResolver {
   }
 }
 
-class _FakeVoiceRecorder implements VoiceRecorderController {
-  bool _isRecording = false;
+class _FakeLiveVoiceController implements LiveVoiceSessionController {
+  final ValueNotifier<LiveVoiceUiState> _notifier = ValueNotifier(
+    LiveVoiceUiState.disconnected,
+  );
+  int connectCount = 0;
+  int replyCount = 0;
 
   @override
-  Future<void> cancel() async {
-    _isRecording = false;
-  }
+  ValueListenable<LiveVoiceUiState> get listenable => _notifier;
 
   @override
-  Future<void> dispose() async {}
+  LiveVoiceUiState get state => _notifier.value;
 
   @override
-  Future<bool> ensurePermission() async => true;
-
-  @override
-  Future<void> start() async {
-    _isRecording = true;
-  }
-
-  @override
-  Future<RecordedVoiceClip?> stop() async {
-    if (!_isRecording) {
-      return null;
-    }
-    _isRecording = false;
-    return RecordedVoiceClip(
-      audioBytes: Uint8List.fromList(const <int>[1, 2, 3, 4]),
-      mimeType: 'audio/wav',
-      durationMs: 1200,
+  Future<void> connect({required String threadId}) async {
+    connectCount += 1;
+    _notifier.value = const LiveVoiceUiState(
+      phase: LiveVoicePhase.listening,
+      microphoneEnabled: false,
+      model: 'gemini-3.1-flash-live-preview',
     );
   }
-}
-
-class _FakeVoicePlayer implements VoicePlayerController {
-  int playCount = 0;
 
   @override
-  Future<void> dispose() async {}
-
-  @override
-  Future<void> play(Uint8List audioBytes, {required String mimeType}) async {
-    playCount += 1;
+  Future<void> disconnect() async {
+    _notifier.value = LiveVoiceUiState.disconnected;
   }
 
   @override
-  Future<void> stop() async {}
+  Future<void> dispose() async {
+    _notifier.dispose();
+  }
+
+  @override
+  Future<void> toggleMicrophone() async {
+    if (!_notifier.value.microphoneEnabled) {
+      _notifier.value = _notifier.value.copyWith(
+        phase: LiveVoicePhase.listening,
+        microphoneEnabled: true,
+      );
+      return;
+    }
+
+    replyCount += 1;
+    _notifier.value = _notifier.value.copyWith(
+      phase: LiveVoicePhase.listening,
+      microphoneEnabled: false,
+      transcriptText: '今日は音声で話した内容を残した',
+      assistantText: '今日はひとつだけ進めてみよう',
+      clearErrorText: true,
+    );
+  }
 }
 
 FakeAppRepository _buildRepository({
@@ -149,33 +154,46 @@ Future<HomeRoomStage> _pumpUntilStage(
 }
 
 void main() {
-  testWidgets('renders the background image, daily bubble, room stage, and talk button', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithTestApp(
-        child: HomeScreen(onSettingsTap: nullHandler, onDiaryTap: nullHandler),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'renders the background image, daily bubble, room stage, and talk button',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        wrapWithTestApp(
+          child: HomeScreen(
+            onSettingsTap: nullHandler,
+            onDiaryTap: nullHandler,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey<String>('home-background-image')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('home-daily-bubble')),
-      findsOneWidget,
-    );
-    expect(find.textContaining('今日はひとつだけ進めよう'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('home-room-stage')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey<String>('home-talk-button')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('home-action-photo')), findsNothing);
-    expect(find.byKey(const ValueKey<String>('home-diary-entry')), findsNothing);
-  });
+      expect(
+        find.byKey(const ValueKey<String>('home-background-image')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('home-daily-bubble')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('今日はひとつだけ進めよう'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('home-room-stage')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('home-talk-button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('home-action-photo')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('home-diary-entry')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('renders the generated character image when available', (
     WidgetTester tester,
@@ -259,21 +277,22 @@ void main() {
   testWidgets('opens voice mode and shows transcript plus reply text', (
     WidgetTester tester,
   ) async {
-    final fakePlayer = _FakeVoicePlayer();
+    final fakeController = _FakeLiveVoiceController();
 
     await tester.pumpWidget(
       wrapWithTestApp(
         child: HomeScreen(
           onSettingsTap: nullHandler,
           onDiaryTap: nullHandler,
-          voiceRecorder: _FakeVoiceRecorder(),
-          voicePlayer: fakePlayer,
+          liveVoiceController: fakeController,
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const ValueKey<String>('home-talk-button')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('home-talk-button')),
+    );
     await tester.tap(
       find.byKey(const ValueKey<String>('home-talk-button')),
       warnIfMissed: false,
@@ -285,20 +304,28 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(
+    await tester.ensureVisible(
       find.byKey(const ValueKey<String>('home-voice-primary-button')),
     );
-    await tester.pump();
-    expect(find.text('送信する'), findsOneWidget);
-
     await tester.tap(
       find.byKey(const ValueKey<String>('home-voice-primary-button')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(find.text('マイクをオフ'), findsOneWidget);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('home-voice-primary-button')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-voice-primary-button')),
+      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
     expect(find.text('今日は音声で話した内容を残した'), findsOneWidget);
     expect(find.textContaining('今日はひとつだけ進めてみよう'), findsWidgets);
-    expect(fakePlayer.playCount, 1);
+    expect(fakeController.replyCount, 1);
   });
 }
 

@@ -5,9 +5,13 @@ import type { AppConfig } from "../config.js";
 const config: AppConfig = {
   projectId: "test-project",
   vertexLocation: "global",
+  liveVertexLocation: "us-central1",
   geminiModel: "gemini-2.5-pro",
   geminiImageModel: "gemini-2.5-flash-image",
   veoModel: "veo-3.1-generate-001",
+  livePrimaryModel: "gemini-live-2.5-flash-native-audio",
+  liveFallbackModel: "gemini-live-2.5-flash-native-audio",
+  liveSessionHandleTtlSeconds: 1800,
   geminiTemperature: 0.5,
   geminiMaxOutputTokens: 480,
   geminiThinkingBudget: 128,

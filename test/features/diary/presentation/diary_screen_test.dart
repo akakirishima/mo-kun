@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
@@ -26,12 +27,12 @@ class _FakeImageUrlResolver extends ImageUrlResolver {
 
 void main() {
   const diaryScreen = DiaryScreen(enableCoverTurnTeaser: false);
-  final now = DateTime.now();
-  final currentMonthStart = DateTime(now.year, now.month);
-  final previousMonthStart = DateTime(now.year, now.month - 1);
-  final currentMonthLabel = '${DateTime.now().month}月';
+  final appNow = resolveAppDate(DateTime.now());
+  final currentMonthStart = DateTime(appNow.year, appNow.month);
+  final previousMonthStart = DateTime(appNow.year, appNow.month - 1);
+  final currentMonthLabel = '${appNow.month}月';
   final previousMonthLabel =
-      '${DateTime(DateTime.now().year, DateTime.now().month - 1).month}月';
+      '${DateTime(appNow.year, appNow.month - 1).month}月';
   final recordedDays = _currentMonthRecordedDays();
   final firstRecordedDay = recordedDays.reduce((left, right) {
     return left < right ? left : right;
@@ -40,7 +41,7 @@ void main() {
     return left > right ? left : right;
   });
   final lastRecordedPageIndex = recordedDays.length;
-  final todayDayNumber = DateTime.now().day;
+  final todayDayNumber = appNow.day;
   final unrecordedDay = _pickUnrecordedDay(recordedDays);
 
   testWidgets('renders the pink calendar cover and only recorded-day entries', (
@@ -218,6 +219,7 @@ void main() {
 
     await tester.tap(
       find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
 
@@ -353,6 +355,7 @@ void main() {
 
     await tester.tap(
       find.byKey(const ValueKey<String>('diary-cover-bookshelf-button')),
+      warnIfMissed: false,
     );
     await tester.pumpAndSettle();
     await tester.tap(
@@ -640,8 +643,10 @@ void main() {
 }
 
 Set<int> _currentMonthRecordedDays() {
-  final now = DateTime.now();
-  final previousDay = now.subtract(const Duration(days: 1));
+  final now = resolveAppDate(DateTime.now());
+  final previousDay = resolveAppDate(
+    DateTime.now().subtract(const Duration(days: 1)),
+  );
   return <int>{
     now.day,
     if (previousDay.year == now.year && previousDay.month == now.month)

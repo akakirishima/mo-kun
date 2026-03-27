@@ -464,7 +464,7 @@ class _DiaryBackButton extends StatelessWidget {
             boxShadow: [
               BoxShadow(
                 color: const Color(0x2243323D).withValues(alpha: 0.75),
-                offset: Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),

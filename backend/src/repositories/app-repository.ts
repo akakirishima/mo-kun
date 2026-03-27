@@ -19,10 +19,22 @@ export type StoredMessage = {
   role?: string;
   text?: string;
   inputType?: string;
+  transport?: string;
+  voiceSessionId?: string;
+  turnId?: string;
   imageUrl?: string;
   imageStoragePath?: string;
   imageAnalysis?: PhotoAnalysisDraft;
   [key: string]: unknown;
+};
+
+export type StoredLiveSessionHandle = {
+  sessionId: string;
+  handle: string;
+  resumable: boolean;
+  lastConsumedClientMessageIndex?: string | null;
+  updatedAt?: unknown;
+  expiresAt?: unknown;
 };
 
 export class AppRepository {
@@ -176,6 +188,9 @@ export class AppRepository {
     clientMessageId: string;
     assistantText: string;
     userInputType?: "text" | "voice" | "photo";
+    transport?: "http" | "live";
+    voiceSessionId?: string;
+    turnId?: string;
     userImage?: {
       imageUrl: string;
       imageStoragePath: string;
@@ -193,6 +208,9 @@ export class AppRepository {
         role: "user",
         text: params.userText,
         inputType: params.userInputType ?? "text",
+        transport: params.transport ?? "http",
+        voiceSessionId: params.voiceSessionId ?? null,
+        turnId: params.turnId ?? null,
         clientMessageId: params.clientMessageId,
         imageUrl: params.userImage?.imageUrl ?? null,
         imageStoragePath: params.userImage?.imageStoragePath ?? null,
@@ -203,6 +221,9 @@ export class AppRepository {
         role: "assistant",
         text: params.assistantText,
         inputType: "text",
+        transport: params.transport ?? "http",
+        voiceSessionId: params.voiceSessionId ?? null,
+        turnId: params.turnId ?? null,
         createdAt: assistantCreatedAt,
       });
       transaction.set(
@@ -410,5 +431,100 @@ export class AppRepository {
   async listUsersForRefresh() {
     const snapshot = await this.db.collection("users").get();
     return snapshot.docs.map((doc) => doc.id);
+  }
+
+  async saveLiveSessionHandle(params: {
+    threadId: string;
+    userId: string;
+    sessionId: string;
+    handle: string;
+    resumable: boolean;
+    ttlSeconds: number;
+    lastConsumedClientMessageIndex?: string | null;
+  }) {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + params.ttlSeconds * 1000);
+    await this.db
+      .collection("chatThreads")
+      .doc(params.threadId)
+      .collection("liveSessions")
+      .doc(params.sessionId)
+      .set({
+        userId: params.userId,
+        threadId: params.threadId,
+        sessionId: params.sessionId,
+        handle: params.handle,
+        resumable: params.resumable,
+        lastConsumedClientMessageIndex: params.lastConsumedClientMessageIndex ?? null,
+        updatedAt: Timestamp.now(),
+        expiresAt: Timestamp.fromDate(expiresAt),
+      }, { merge: true });
+  }
+
+  async getLiveSessionHandle(params: {
+    threadId: string;
+    sessionId?: string | null;
+  }): Promise<StoredLiveSessionHandle | null> {
+    const liveSessionsRef = this.db
+      .collection("chatThreads")
+      .doc(params.threadId)
+      .collection("liveSessions");
+
+    if (params.sessionId) {
+      const exact = await liveSessionsRef.doc(params.sessionId).get();
+      if (exact.exists) {
+        const data = exact.data() ?? {};
+        return {
+          sessionId: exact.id,
+          handle: String(data.handle ?? ""),
+          resumable: data.resumable === true,
+          lastConsumedClientMessageIndex:
+            typeof data.lastConsumedClientMessageIndex === "string"
+              ? data.lastConsumedClientMessageIndex
+              : null,
+          updatedAt: data.updatedAt,
+          expiresAt: data.expiresAt,
+        };
+      }
+    }
+
+    const snapshot = await liveSessionsRef
+      .where("expiresAt", ">", Timestamp.now())
+      .orderBy("expiresAt", "desc")
+      .limit(1)
+      .get();
+    const doc = snapshot.docs[0];
+    if (!doc?.exists) {
+      return null;
+    }
+    const data = doc.data();
+    return {
+      sessionId: doc.id,
+      handle: String(data.handle ?? ""),
+      resumable: data.resumable === true,
+      lastConsumedClientMessageIndex:
+        typeof data.lastConsumedClientMessageIndex === "string"
+          ? data.lastConsumedClientMessageIndex
+          : null,
+      updatedAt: data.updatedAt,
+      expiresAt: data.expiresAt,
+    };
+  }
+
+  async clearLiveSessionHandle(threadId: string, sessionId: string) {
+    await this.db
+      .collection("chatThreads")
+      .doc(threadId)
+      .collection("liveSessions")
+      .doc(sessionId)
+      .set(
+        {
+          resumable: false,
+          handle: null,
+          lastConsumedClientMessageIndex: null,
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      );
   }
 }

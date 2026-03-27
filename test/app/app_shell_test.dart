@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gdgoc_2026_prototype/app/app.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  final appNow = resolveAppDate(DateTime.now());
+
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
@@ -25,6 +28,17 @@ void main() {
     await tester.pump();
     await tester.tap(finder, warnIfMissed: false);
     await tester.pumpAndSettle();
+  }
+
+  Color selectedDockColor(WidgetTester tester, String tabName) {
+    final container = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(ValueKey<String>('nav-$tabName')),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final decoration = container.decoration! as BoxDecoration;
+    return decoration.color!;
   }
 
   Future<void> waitForDiaryTeaser(WidgetTester tester) async {
@@ -64,6 +78,30 @@ void main() {
       find.byKey(const ValueKey<String>('home-talk-button')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('all navigation tabs use the same NES dock highlight color', (
+    WidgetTester tester,
+  ) async {
+    configureViewport(tester);
+    registerViewportTearDown(tester);
+    await tester.pumpWidget(const App(enableDiaryCoverTurnTeaser: false));
+    await tester.pumpAndSettle();
+
+    const expectedColor = Color(0xFFF0C48A);
+    expect(selectedDockColor(tester, 'home'), expectedColor);
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-chat')));
+    expect(selectedDockColor(tester, 'chat'), expectedColor);
+
+    await tapVisible(tester, find.byKey(const ValueKey<String>('nav-diary')));
+    expect(selectedDockColor(tester, 'diary'), expectedColor);
+
+    await tapVisible(
+      tester,
+      find.byKey(const ValueKey<String>('nav-settings')),
+    );
+    expect(selectedDockColor(tester, 'settings'), expectedColor);
   });
 
   testWidgets('switches between Home, Chat, Diary, and Settings tabs', (
@@ -250,9 +288,7 @@ void main() {
       find.byKey(const ValueKey<String>('app-navigation-dock')),
     );
     final writingPaperRect = tester.getRect(
-      find.byKey(
-        ValueKey<String>('diary-entry-writing-paper-${DateTime.now().day}'),
-      ),
+      find.byKey(ValueKey<String>('diary-entry-writing-paper-${appNow.day}')),
     );
     final gap = dockRect.top - writingPaperRect.bottom;
 

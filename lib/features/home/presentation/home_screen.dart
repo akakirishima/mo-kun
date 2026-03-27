@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/app/shell/widgets/glass_bottom_dock.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
@@ -12,8 +13,6 @@ import 'package:gdgoc_2026_prototype/features/home/presentation/widgets/home_roo
 import 'package:nes_ui/nes_ui.dart';
 
 enum HomeOverlayMode { none, voice, photo, chat }
-
-enum HomeVoiceState { idle, recording, uploading, playing, error }
 
 class _StageMedia {
   const _StageMedia({this.videoUrl, this.imageUrl});
@@ -29,16 +28,14 @@ class HomeScreen extends ConsumerStatefulWidget {
     required this.onDiaryTap,
     this.onOverlayModeChanged,
     this.initialBubbleMessage = '昨日の流れは残っている。今日は一つだけ進めよう、自分。',
-    this.voiceRecorder,
-    this.voicePlayer,
+    this.liveVoiceController,
   });
 
   final VoidCallback onSettingsTap;
   final VoidCallback onDiaryTap;
   final ValueChanged<HomeOverlayMode>? onOverlayModeChanged;
   final String initialBubbleMessage;
-  final VoiceRecorderController? voiceRecorder;
-  final VoicePlayerController? voicePlayer;
+  final LiveVoiceSessionController? liveVoiceController;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -47,31 +44,61 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _bottomSafeSpacing = 36.0;
 
-  late final VoiceRecorderController _voiceRecorder;
-  late final VoicePlayerController _voicePlayer;
+  LiveVoiceSessionController? _liveVoiceController;
   HomeOverlayMode _overlayMode = HomeOverlayMode.none;
-  HomeVoiceState _voiceState = HomeVoiceState.idle;
-  Timer? _recordingTicker;
-  Duration _recordingDuration = Duration.zero;
   String? _voiceBubbleText;
-  String? _voiceErrorMessage;
-  String? _latestTranscriptText;
-  String? _latestAssistantText;
-  String? _lastPlayedAssistantMessageId;
+  LiveVoiceUiState _liveVoiceState = LiveVoiceUiState.disconnected;
 
   @override
   void initState() {
     super.initState();
-    _voiceRecorder = widget.voiceRecorder ?? DeviceVoiceRecorderController();
-    _voicePlayer = widget.voicePlayer ?? DeviceVoicePlayerController();
+    if (widget.liveVoiceController != null) {
+      _liveVoiceController = widget.liveVoiceController;
+      _liveVoiceState = widget.liveVoiceController!.state;
+      widget.liveVoiceController!.listenable.addListener(
+        _handleLiveVoiceChanged,
+      );
+    }
   }
 
   @override
   void dispose() {
-    _recordingTicker?.cancel();
-    unawaited(_voiceRecorder.dispose());
-    unawaited(_voicePlayer.dispose());
+    final controller = _liveVoiceController;
+    if (controller != null) {
+      controller.listenable.removeListener(_handleLiveVoiceChanged);
+      unawaited(controller.dispose());
+    }
     super.dispose();
+  }
+
+  LiveVoiceSessionController _ensureLiveVoiceController() {
+    final existing = _liveVoiceController;
+    if (existing != null) {
+      return existing;
+    }
+    final created =
+        widget.liveVoiceController ?? DeviceLiveVoiceSessionController();
+    _liveVoiceController = created;
+    _liveVoiceState = created.state;
+    created.listenable.addListener(_handleLiveVoiceChanged);
+    return created;
+  }
+
+  void _handleLiveVoiceChanged() {
+    if (!mounted) {
+      return;
+    }
+    final controller = _liveVoiceController;
+    if (controller == null) {
+      return;
+    }
+    setState(() {
+      _liveVoiceState = controller.state;
+      _voiceBubbleText =
+          _liveVoiceState.assistantText ??
+          _liveVoiceState.partialAssistantText ??
+          _voiceBubbleText;
+    });
   }
 
   Future<void> _setOverlayMode(HomeOverlayMode mode) async {
@@ -81,6 +108,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_overlayMode == HomeOverlayMode.voice &&
         mode != HomeOverlayMode.voice) {
       await _resetVoiceMode();
+    }
+    if (_overlayMode != HomeOverlayMode.voice &&
+        mode == HomeOverlayMode.voice) {
+      final session = await ref.read(sessionProvider.future);
+      final threadId = session.threadId;
+      if (threadId == null) {
+        return;
+      }
+      await _ensureLiveVoiceController().connect(threadId: threadId);
     }
     if (!mounted) {
       return;
@@ -92,156 +128,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _handleVoicePrimaryTap() async {
-    switch (_voiceState) {
-      case HomeVoiceState.recording:
-        await _finishVoiceRecording();
+    switch (_liveVoiceState.phase) {
+      case LiveVoicePhase.connecting:
+      case LiveVoicePhase.reconnecting:
         return;
-      case HomeVoiceState.playing:
-        await _voicePlayer.stop();
-        if (!mounted) {
+      case LiveVoicePhase.disconnected:
+        final session = await ref.read(sessionProvider.future);
+        final threadId = session.threadId;
+        if (threadId == null) {
           return;
         }
-        setState(() {
-          _voiceState = HomeVoiceState.idle;
-        });
+        await _ensureLiveVoiceController().connect(threadId: threadId);
         return;
-      case HomeVoiceState.uploading:
+      case LiveVoicePhase.listening:
+      case LiveVoicePhase.speaking:
+      case LiveVoicePhase.error:
+        await _ensureLiveVoiceController().toggleMicrophone();
         return;
-      case HomeVoiceState.idle:
-      case HomeVoiceState.error:
-        await _startVoiceRecording();
-        return;
-    }
-  }
-
-  Future<void> _startVoiceRecording() async {
-    try {
-      await _voicePlayer.stop();
-      await _voiceRecorder.start();
-      if (!mounted) {
-        return;
-      }
-      _recordingTicker?.cancel();
-      _recordingTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _recordingDuration += const Duration(seconds: 1);
-        });
-      });
-      setState(() {
-        _voiceState = HomeVoiceState.recording;
-        _recordingDuration = Duration.zero;
-        _voiceErrorMessage = null;
-        _voiceBubbleText = '声を聞いている。終わったらもう一度押して送って。';
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _voiceState = HomeVoiceState.error;
-        _voiceErrorMessage = error.toString();
-        _voiceBubbleText = 'マイクを使えなかった。権限を確認してもう一度。';
-      });
-    }
-  }
-
-  Future<void> _finishVoiceRecording() async {
-    _recordingTicker?.cancel();
-    setState(() {
-      _voiceState = HomeVoiceState.uploading;
-      _recordingDuration = Duration.zero;
-      _voiceErrorMessage = null;
-      _voiceBubbleText = '今の声を受け取っている。少し待って。';
-    });
-
-    try {
-      final clip = await _voiceRecorder.stop();
-      if (clip == null || clip.audioBytes.isEmpty) {
-        throw const VoiceControllerException('録音データを取得できませんでした。');
-      }
-
-      final session = await ref.read(sessionProvider.future);
-      final result = await ref
-          .read(sendVoiceMessageControllerProvider)
-          .send(
-            session: session,
-            audioBytes: clip.audioBytes,
-            mimeType: clip.mimeType,
-            durationMs: clip.durationMs,
-          );
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _latestTranscriptText = result.transcriptText;
-        _latestAssistantText = result.assistantText;
-        _voiceBubbleText = result.assistantText;
-        _voiceErrorMessage = result.audioStatus == VoiceChatAudioStatus.failed
-            ? '音声の再生はできなかったけれど、返答テキストは受け取れた。'
-            : null;
-      });
-
-      final audioBytes = result.assistantAudioBytes;
-      final mimeType = result.assistantAudioMimeType;
-      if (result.audioStatus == VoiceChatAudioStatus.ready &&
-          audioBytes != null &&
-          audioBytes.isNotEmpty &&
-          mimeType != null &&
-          mimeType.isNotEmpty &&
-          _shouldPlayAssistantVoice(result.assistantMessageId)) {
-        setState(() {
-          _voiceState = HomeVoiceState.playing;
-        });
-        _lastPlayedAssistantMessageId = result.assistantMessageId;
-        await _voicePlayer.play(audioBytes, mimeType: mimeType);
-      }
-
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _voiceState = HomeVoiceState.idle;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _voiceState = HomeVoiceState.error;
-        _voiceErrorMessage = error.toString();
-        _voiceBubbleText = 'うまく聞き取れなかった。短く区切ってもう一度話してみよう。';
-      });
     }
   }
 
   Future<void> _resetVoiceMode() async {
-    _recordingTicker?.cancel();
-    if (_voiceState == HomeVoiceState.recording) {
-      await _voiceRecorder.cancel();
-    }
-    await _voicePlayer.stop();
+    await _liveVoiceController?.disconnect();
     if (!mounted) {
       return;
     }
     setState(() {
-      _voiceState = HomeVoiceState.idle;
-      _voiceErrorMessage = null;
+      _liveVoiceState = LiveVoiceUiState.disconnected;
       _voiceBubbleText = null;
-      _recordingDuration = Duration.zero;
-      _latestTranscriptText = null;
-      _latestAssistantText = null;
     });
-  }
-
-  bool _shouldPlayAssistantVoice(String? assistantMessageId) {
-    if (assistantMessageId == null || assistantMessageId.isEmpty) {
-      return true;
-    }
-    return _lastPlayedAssistantMessageId != assistantMessageId;
   }
 
   @override
@@ -297,155 +212,169 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         widget.initialBubbleMessage;
     final backgroundPreference = session == null
         ? null
-        : ref.watch(homeBackgroundPreferenceProvider(session.userId)).valueOrNull;
+        : ref
+              .watch(homeBackgroundPreferenceProvider(session.userId))
+              .valueOrNull;
     final backgroundTheme = HomeBackgroundTheme.resolve(
       backgroundPreference?.themeId,
     );
     final customBackgroundUrl = backgroundPreference?.customImageUrl;
 
-    return DecoratedBox(
+    return Stack(
       key: const ValueKey<String>('home-background'),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [palette.pageTop, palette.pageBottom],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: (customBackgroundUrl != null && customBackgroundUrl.isNotEmpty)
-                ? Image.network(
-                    customBackgroundUrl,
-                    key: const ValueKey<String>('home-background-image'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    errorBuilder: (_, _, _) => Image.asset(
-                      backgroundTheme.backgroundAssetPath,
-                      fit: BoxFit.cover,
-                      alignment: Alignment.center,
-                    ),
-                  )
-                : Image.asset(
-                    backgroundTheme.backgroundAssetPath,
-                    key: const ValueKey<String>('home-background-image'),
-                    fit: BoxFit.cover,
-                    alignment: Alignment.center,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
-            ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.08),
-                    Colors.black.withValues(alpha: 0.04),
-                  ],
-                ),
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: -GlassBottomDock.reservedBottomSpacing,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [palette.pageTop, palette.pageBottom],
               ),
             ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final maxStageWidth = math.max(constraints.maxWidth - 12, 0.0);
-                final stageHeightFactor = _overlayMode == HomeOverlayMode.voice
-                    ? 0.34
-                    : 0.52;
-                final minStageSize = _overlayMode == HomeOverlayMode.voice
-                    ? 168.0
-                    : 220.0;
-                final stageSize = math.min(
-                  maxStageWidth,
-                  math.max(constraints.maxHeight * stageHeightFactor, minStageSize),
-                );
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 18, 10, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _DailyBubbleCard(
-                        text: bubbleText,
-                        titleColor: palette.transcriptTitle,
-                        textColor: palette.transcriptText,
-                        outerBorder: palette.transcriptOuterBorder,
-                        innerBorder: palette.transcriptInnerBorder,
-                        fillColor: palette.transcriptFill.withValues(alpha: 0.9),
-                        shadowColor: palette.transcriptShadow,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child:
+                      (customBackgroundUrl != null &&
+                          customBackgroundUrl.isNotEmpty)
+                      ? Image.network(
+                          customBackgroundUrl,
+                          key: const ValueKey<String>('home-background-image'),
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          errorBuilder: (_, _, _) => Image.asset(
+                            backgroundTheme.backgroundAssetPath,
+                            fit: BoxFit.cover,
+                            alignment: Alignment.center,
+                          ),
+                        )
+                      : Image.asset(
+                          backgroundTheme.backgroundAssetPath,
+                          key: const ValueKey<String>('home-background-image'),
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.08),
+                          Colors.black.withValues(alpha: 0.04),
+                        ],
                       ),
-                      const SizedBox(height: 20),
-                      Expanded(
-                        child: Center(
-                          child: _StageFrame(
-                            size: stageSize,
-                            child: HomeRoomStage(
-                              videoUrl: resolvedCharacterVideoUrl.valueOrNull,
-                              imageUrl: resolvedCharacterImageUrl.valueOrNull,
-                              state: stageState,
-                              message: stageMessage,
-                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxStageWidth = math.max(constraints.maxWidth - 12, 0.0);
+              final stageHeightFactor = _overlayMode == HomeOverlayMode.voice
+                  ? 0.34
+                  : 0.52;
+              final minStageSize = _overlayMode == HomeOverlayMode.voice
+                  ? 168.0
+                  : 220.0;
+              final stageSize = math.min(
+                maxStageWidth,
+                math.max(
+                  constraints.maxHeight * stageHeightFactor,
+                  minStageSize,
+                ),
+              );
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(10, 18, 10, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _DailyBubbleCard(
+                      text: bubbleText,
+                      titleColor: palette.transcriptTitle,
+                      textColor: palette.transcriptText,
+                      outerBorder: palette.transcriptOuterBorder,
+                      innerBorder: palette.transcriptInnerBorder,
+                      fillColor: palette.transcriptFill.withValues(alpha: 0.9),
+                      shadowColor: palette.transcriptShadow,
+                    ),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: Center(
+                        child: _StageFrame(
+                          size: stageSize,
+                          child: HomeRoomStage(
+                            videoUrl: resolvedCharacterVideoUrl.valueOrNull,
+                            imageUrl: resolvedCharacterImageUrl.valueOrNull,
+                            state: stageState,
+                            message: stageMessage,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      _HomePrimaryButton(
-                        buttonKey: const ValueKey<String>('home-talk-button'),
-                        label: _overlayMode == HomeOverlayMode.voice
-                            ? '音声パネルを閉じる'
-                            : '話しかける',
-                        fillColor: palette.talkButtonFill,
-                        borderColor: palette.talkButtonOutline,
-                        textColor: palette.talkButtonText,
-                        onPressed: () {
-                          final nextMode = _overlayMode == HomeOverlayMode.voice
-                              ? HomeOverlayMode.none
-                              : HomeOverlayMode.voice;
-                          unawaited(_setOverlayMode(nextMode));
-                        },
-                      ),
-                      const SizedBox(height: _bottomSafeSpacing),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 140, 18, 150),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _overlayMode == HomeOverlayMode.voice
-                      ? SingleChildScrollView(
-                          key: const ValueKey<String>('home-voice-panel'),
-                          child: _VoicePanel(
-                            voiceState: _voiceState,
-                            recordingDuration: _recordingDuration,
-                            transcriptText: _latestTranscriptText,
-                            assistantText: _latestAssistantText,
-                            errorText: _voiceErrorMessage,
-                            onClose: () {
-                              unawaited(_setOverlayMode(HomeOverlayMode.none));
-                            },
-                            onPrimaryTap: _handleVoicePrimaryTap,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                    ),
+                    const SizedBox(height: 18),
+                    _HomePrimaryButton(
+                      buttonKey: const ValueKey<String>('home-talk-button'),
+                      label: _overlayMode == HomeOverlayMode.voice
+                          ? '音声パネルを閉じる'
+                          : '話しかける',
+                      fillColor: palette.talkButtonFill,
+                      borderColor: palette.talkButtonOutline,
+                      textColor: palette.talkButtonText,
+                      onPressed: () {
+                        final nextMode = _overlayMode == HomeOverlayMode.voice
+                            ? HomeOverlayMode.none
+                            : HomeOverlayMode.voice;
+                        unawaited(_setOverlayMode(nextMode));
+                      },
+                    ),
+                    const SizedBox(height: _bottomSafeSpacing),
+                  ],
                 ),
+              );
+            },
+          ),
+        ),
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 140, 18, 150),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _overlayMode == HomeOverlayMode.voice
+                    ? SingleChildScrollView(
+                        key: const ValueKey<String>('home-voice-panel'),
+                        child: _VoicePanel(
+                          liveState: _liveVoiceState,
+                          onClose: () {
+                            unawaited(_setOverlayMode(HomeOverlayMode.none));
+                          },
+                          onPrimaryTap: _handleVoicePrimaryTap,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -471,32 +400,72 @@ class _DailyBubbleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _RoundedNesPanel(
+    return Container(
       key: const ValueKey<String>('home-daily-bubble'),
-      backgroundColor: fillColor.withValues(alpha: 0.93),
-      borderColor: outerBorder.withValues(alpha: 0.92),
-      innerBorderColor: innerBorder.withValues(alpha: 0.72),
-      shadowColor: shadowColor.withValues(alpha: 0.5),
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _PixelTag(
-            label: '今日の一言',
-            fillColor: const Color(0xFFF3B4CB),
-            borderColor: outerBorder,
-            textColor: titleColor,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            text,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: textColor,
-              fontWeight: FontWeight.w700,
-              height: 1.45,
-            ),
+      decoration: BoxDecoration(
+        color: outerBorder.withValues(alpha: 0.96),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor.withValues(alpha: 0.46),
+            offset: const Offset(0, 6),
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4, top: 4, right: 4, bottom: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: fillColor.withValues(alpha: 0.96),
+            border: Border.all(
+              color: innerBorder.withValues(alpha: 0.76),
+              width: 3,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _PixelBadge(
+                      label: '今日の一言',
+                      fillColor: const Color(0xFFE7A64C),
+                      borderColor: const Color(0xFF4B2D1E),
+                      textColor: const Color(0xFF2C170C),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: outerBorder.withValues(alpha: 0.92),
+                        border: Border.all(
+                          color: const Color(0xFF4B2D1E),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  height: 4,
+                  color: outerBorder.withValues(alpha: 0.82),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  text,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w700,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -512,10 +481,7 @@ class _StageFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox.square(
       dimension: size,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: child,
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(18), child: child),
     );
   }
 }
@@ -561,39 +527,37 @@ class _HomePrimaryButton extends StatelessWidget {
 
 class _VoicePanel extends StatelessWidget {
   const _VoicePanel({
-    required this.voiceState,
-    required this.recordingDuration,
-    required this.transcriptText,
-    required this.assistantText,
-    required this.errorText,
+    required this.liveState,
     required this.onClose,
     required this.onPrimaryTap,
   });
 
-  final HomeVoiceState voiceState;
-  final Duration recordingDuration;
-  final String? transcriptText;
-  final String? assistantText;
-  final String? errorText;
+  final LiveVoiceUiState liveState;
   final VoidCallback onClose;
   final VoidCallback onPrimaryTap;
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (voiceState) {
-      HomeVoiceState.recording => '送信する',
-      HomeVoiceState.uploading => '処理中',
-      HomeVoiceState.playing => '再生中',
-      HomeVoiceState.error => 'もう一度',
-      HomeVoiceState.idle => '押して話す',
+    final label = switch (liveState.phase) {
+      LiveVoicePhase.connecting => '接続中',
+      LiveVoicePhase.reconnecting => '再接続中',
+      LiveVoicePhase.speaking =>
+        liveState.microphoneEnabled ? 'マイクをオフ' : '割り込んで話す',
+      LiveVoicePhase.error =>
+        liveState.microphoneEnabled ? 'マイクをオフ' : 'もう一度つなぐ',
+      LiveVoicePhase.disconnected =>
+        liveState.microphoneEnabled ? 'マイクをオフ' : '接続する',
+      LiveVoicePhase.listening =>
+        liveState.microphoneEnabled ? 'マイクをオフ' : 'マイクをオン',
     };
-    final helper = switch (voiceState) {
-      HomeVoiceState.recording =>
-        '録音中 ${_formatRecordingDuration(recordingDuration)}',
-      HomeVoiceState.uploading => '文字起こしと返答を生成しています',
-      HomeVoiceState.playing => '返答音声を再生しています',
-      HomeVoiceState.error => '短く区切ってもう一度試してください',
-      HomeVoiceState.idle => '押して話し、もう一度押すと送信します',
+    final helper = switch (liveState.phase) {
+      LiveVoicePhase.connecting => 'Gemini Live に接続しています',
+      LiveVoicePhase.reconnecting => '接続が切れたため再接続しています',
+      LiveVoicePhase.speaking => '相手の音声を逐次再生しています',
+      LiveVoicePhase.error => liveState.errorText ?? 'Live セッションでエラーが発生しました',
+      LiveVoicePhase.disconnected => '接続後にマイクをオンにして会話します',
+      LiveVoicePhase.listening =>
+        liveState.microphoneEnabled ? 'マイク入力を逐次送信しています' : 'マイクをオンにすると会話を始めます',
     };
 
     return _RoundedNesPanel(
@@ -632,16 +596,28 @@ class _VoicePanel extends StatelessWidget {
           const SizedBox(height: 14),
           _RoundedNesButton(
             buttonKey: const ValueKey<String>('home-voice-primary-button'),
-            onPressed: voiceState == HomeVoiceState.uploading
+            onPressed:
+                (liveState.phase == LiveVoicePhase.connecting ||
+                    liveState.phase == LiveVoicePhase.reconnecting)
                 ? null
                 : onPrimaryTap,
             label: label,
-            icon: switch (voiceState) {
-              HomeVoiceState.recording => Icons.stop_circle_outlined,
-              HomeVoiceState.uploading => Icons.hourglass_top_rounded,
-              HomeVoiceState.playing => Icons.volume_up_rounded,
-              HomeVoiceState.error => Icons.refresh_rounded,
-              HomeVoiceState.idle => Icons.mic_rounded,
+            icon: switch (liveState.phase) {
+              LiveVoicePhase.connecting => Icons.hourglass_top_rounded,
+              LiveVoicePhase.reconnecting => Icons.refresh_rounded,
+              LiveVoicePhase.speaking =>
+                liveState.microphoneEnabled
+                    ? Icons.mic_off_rounded
+                    : Icons.record_voice_over_rounded,
+              LiveVoicePhase.error => Icons.refresh_rounded,
+              LiveVoicePhase.disconnected =>
+                liveState.microphoneEnabled
+                    ? Icons.mic_off_rounded
+                    : Icons.link_rounded,
+              LiveVoicePhase.listening =>
+                liveState.microphoneEnabled
+                    ? Icons.mic_off_rounded
+                    : Icons.mic_rounded,
             },
             fillColor: const Color(0xFFE59B74),
             borderColor: const Color(0xFF7A4A35),
@@ -653,18 +629,46 @@ class _VoicePanel extends StatelessWidget {
               context,
             ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
-          if (transcriptText != null && transcriptText!.isNotEmpty) ...[
+          if (liveState.partialTranscriptText != null &&
+              liveState.partialTranscriptText!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            _InfoCard(title: 'あなたの声', body: transcriptText!),
+            _InfoCard(
+              title: 'あなたの声(途中)',
+              body: liveState.partialTranscriptText!,
+            ),
           ],
-          if (assistantText != null && assistantText!.isNotEmpty) ...[
+          if (liveState.transcriptText != null &&
+              liveState.transcriptText!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _InfoCard(title: 'あなたの声', body: liveState.transcriptText!),
+          ],
+          if (liveState.partialAssistantText != null &&
+              liveState.partialAssistantText!.isNotEmpty) ...[
             const SizedBox(height: 10),
-            _InfoCard(title: '返答', body: assistantText!),
+            _InfoCard(title: '返答(途中)', body: liveState.partialAssistantText!),
           ],
-          if (errorText != null && errorText!.isNotEmpty) ...[
+          if (liveState.assistantText != null &&
+              liveState.assistantText!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _InfoCard(title: '返答', body: liveState.assistantText!),
+          ],
+          if (liveState.model != null && liveState.model!.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              errorText!,
+              liveState.fallbackUsed
+                  ? 'model: ${liveState.model} (fallback)'
+                  : 'model: ${liveState.model}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF7A5A49),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (liveState.errorText != null &&
+              liveState.errorText!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              liveState.errorText!,
               key: const ValueKey<String>('home-voice-error-text'),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: const Color(0xFF8A425E),
@@ -740,9 +744,7 @@ class _RoundedNesPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         color: backgroundColor,
         border: Border.all(color: borderColor, width: 3),
-        boxShadow: [
-          BoxShadow(color: shadowColor, offset: const Offset(0, 6)),
-        ],
+        boxShadow: [BoxShadow(color: shadowColor, offset: const Offset(0, 6))],
       ),
       child: Container(
         margin: const EdgeInsets.all(4),
@@ -863,6 +865,42 @@ class _PixelTag extends StatelessWidget {
   }
 }
 
+class _PixelBadge extends StatelessWidget {
+  const _PixelBadge({
+    required this.label,
+    required this.fillColor,
+    required this.borderColor,
+    required this.textColor,
+  });
+
+  final String label;
+  final Color fillColor;
+  final Color borderColor;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: fillColor,
+        border: Border.all(color: borderColor, width: 2),
+        boxShadow: const [
+          BoxShadow(color: Color(0x66331A0F), offset: Offset(2, 2)),
+        ],
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
 class _PixelIconButton extends StatelessWidget {
   const _PixelIconButton({
     required this.buttonKey,
@@ -894,11 +932,4 @@ class _PixelIconButton extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatRecordingDuration(Duration duration) {
-  final totalSeconds = duration.inSeconds;
-  final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-  return '$minutes:$seconds';
 }
