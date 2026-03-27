@@ -1,6 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:nes_ui/nes_ui.dart';
 
+class DiaryOuterFramePanel extends StatelessWidget {
+  const DiaryOuterFramePanel({
+    super.key,
+    required this.child,
+    required this.backgroundColor,
+    required this.innerBackgroundColor,
+    required this.borderColor,
+    required this.innerBorderColor,
+    required this.shadowColor,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  final Widget child;
+  final Color backgroundColor;
+  final Color innerBackgroundColor;
+  final Color borderColor;
+  final Color innerBorderColor;
+  final Color shadowColor;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        color: backgroundColor,
+        border: Border.all(color: borderColor, width: 3),
+        boxShadow: [
+          BoxShadow(color: shadowColor, offset: const Offset(0, 6)),
+        ],
+      ),
+      child: Container(
+        margin: const EdgeInsets.all(4),
+        padding: padding,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: innerBorderColor, width: 2),
+          color: innerBackgroundColor,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
 class DiaryRetroPanel extends StatelessWidget {
   const DiaryRetroPanel({
     super.key,

@@ -34,6 +34,20 @@ class DiaryDayPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = AppearanceScope.paletteOf(context).diary;
+    final monthAccent = diaryMonthAccentColor(int.tryParse(monthNumber) ?? 1);
+    final frameFill = Color.lerp(palette.coverFill, monthAccent, 0.34)!;
+    final frameAccent = Color.lerp(
+      palette.coverAccent,
+      Color.lerp(monthAccent, Colors.white, 0.5)!,
+      0.26,
+    )!;
+    final frameBorder = Color.lerp(palette.titleText, monthAccent, 0.18)!;
+    final frameInnerBorder = frameBorder.withValues(alpha: 0.45);
+    final frameShadow = Color.lerp(
+      palette.spineShadow,
+      monthAccent,
+      0.22,
+    )!.withValues(alpha: 0.18);
     final resolvedImageUrl = ref.watch(
       resolvedImageUrlProvider(entry.imageUrl),
     );
@@ -66,14 +80,14 @@ class DiaryDayPage extends ConsumerWidget {
     );
     final headerText = _entryDateHeaderText(entry, monthNumber: monthNumber);
 
-    return DiaryRetroPanel(
+    return DiaryOuterFramePanel(
       key: ValueKey<String>('diary-entry-page-${entry.dayNumber}'),
-      fillColor: palette.paperFill,
-      borderColor: palette.paperEdge.withValues(alpha: 0.96),
-      innerBorderColor: palette.ruleLine.withValues(alpha: 0.78),
-      shadowColor: palette.pageShadow.withValues(alpha: 0.16),
+      backgroundColor: Color.lerp(frameFill, frameAccent, 0.12)!,
+      innerBackgroundColor: palette.paperFill,
+      borderColor: frameBorder,
+      innerBorderColor: frameInnerBorder,
+      shadowColor: frameShadow,
       padding: EdgeInsets.zero,
-      textureOpacity: 0.02,
       child: LayoutBuilder(
         builder: (context, constraints) {
           const horizontalPadding = 16.0;
