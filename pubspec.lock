@@ -18,7 +18,7 @@ packages:
     source: hosted
     version: "2.13.0"
   audio_session:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: audio_session
       sha256: "8f96a7fecbb718cb093070f868b4cdcb8a9b1053dce342ff8ab2fde10eb9afb7"
@@ -289,10 +289,9 @@ packages:
   flutter_pcm_sound:
     dependency: "direct main"
     description:
-      name: flutter_pcm_sound
-      sha256: "15c6894da8195122001375084d51449bd77849579c93fca2800c00b615699dc0"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter_pcm_sound"
+      relative: true
+    source: path
     version: "3.3.3"
   flutter_plugin_android_lifecycle:
     dependency: transitive
@@ -665,12 +664,11 @@ packages:
     source: hosted
     version: "6.2.0"
   record_android:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: record_android
-      sha256: "94783f08403aed33ffb68797bf0715b0812eb852f3c7985644c945faea462ba1"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/record_android"
+      relative: true
+    source: path
     version: "1.5.1"
   record_ios:
     dependency: transitive

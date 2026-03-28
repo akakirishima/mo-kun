@@ -65,16 +65,31 @@ class _FakeLiveVoiceController implements LiveVoiceSessionController {
       _notifier.value = _notifier.value.copyWith(
         phase: LiveVoicePhase.listening,
         microphoneEnabled: true,
+        inputLevelHistory: const [0.08, 0.12, 0.24, 0.41, 0.63],
       );
       return;
     }
 
     replyCount += 1;
     _notifier.value = _notifier.value.copyWith(
-      phase: LiveVoicePhase.listening,
-      microphoneEnabled: false,
+      phase: LiveVoicePhase.speaking,
       transcriptText: '今日は音声で話した内容を残した',
       assistantText: '今日はひとつだけ進めてみよう',
+      transcriptEntries: const [
+        LiveVoiceTranscriptEntry(
+          turnId: 'turn-1',
+          speaker: LiveVoiceSpeaker.user,
+          text: '今日は音声で話した内容を残した',
+          isPartial: false,
+        ),
+        LiveVoiceTranscriptEntry(
+          turnId: 'turn-1',
+          speaker: LiveVoiceSpeaker.assistant,
+          text: '今日はひとつだけ進めてみよう',
+          isPartial: false,
+        ),
+      ],
+      inputLevelHistory: const [0.14, 0.28, 0.52, 0.76, 0.43, 0.18],
       clearErrorText: true,
     );
   }
@@ -274,7 +289,7 @@ void main() {
     expect(stage.imageUrl, resolvedImageUrl);
   });
 
-  testWidgets('opens voice mode and shows transcript plus reply text', (
+  testWidgets('opens voice mode as overlay and keeps microphone on', (
     WidgetTester tester,
   ) async {
     final fakeController = _FakeLiveVoiceController();
@@ -300,19 +315,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey<String>('home-voice-panel')),
+      find.byKey(const ValueKey<String>('home-voice-overlay')),
       findsOneWidget,
     );
-
-    await tester.ensureVisible(
-      find.byKey(const ValueKey<String>('home-voice-primary-button')),
+    expect(find.text('マイクON'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('home-voice-waveform')),
+      findsOneWidget,
     );
-    await tester.tap(
-      find.byKey(const ValueKey<String>('home-voice-primary-button')),
-      warnIfMissed: false,
+    expect(
+      find.byKey(const ValueKey<String>('home-voice-helper')),
+      findsNothing,
     );
-    await tester.pump();
-    expect(find.text('マイクをオフ'), findsOneWidget);
 
     await tester.ensureVisible(
       find.byKey(const ValueKey<String>('home-voice-primary-button')),
@@ -325,7 +339,22 @@ void main() {
 
     expect(find.text('今日は音声で話した内容を残した'), findsOneWidget);
     expect(find.textContaining('今日はひとつだけ進めてみよう'), findsWidgets);
+    expect(fakeController.state.microphoneEnabled, isTrue);
     expect(fakeController.replyCount, 1);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('home-voice-close-button')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('home-voice-close-button')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('home-voice-overlay')),
+      findsNothing,
+    );
   });
 }
 

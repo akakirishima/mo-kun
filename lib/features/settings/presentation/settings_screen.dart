@@ -6,6 +6,7 @@ import 'package:gdgoc_2026_prototype/features/settings/presentation/appearance_s
 import 'package:gdgoc_2026_prototype/features/settings/presentation/character_settings_screen.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/home_background_settings_screen.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/profile_settings_screen.dart';
+import 'package:gdgoc_2026_prototype/features/settings/presentation/voice_settings_screen.dart';
 import 'package:nes_ui/nes_ui.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -28,9 +29,8 @@ class SettingsScreen extends StatelessWidget {
     void openImageSettings() {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => ImageScreen(
-            onSettingsTap: () => Navigator.of(context).pop(),
-          ),
+          builder: (_) =>
+              ImageScreen(onSettingsTap: () => Navigator.of(context).pop()),
         ),
       );
     }
@@ -45,9 +45,7 @@ class SettingsScreen extends StatelessWidget {
 
     void openProfileSettings() {
       Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const ProfileSettingsScreen(),
-        ),
+        MaterialPageRoute<void>(builder: (_) => const ProfileSettingsScreen()),
       );
     }
 
@@ -56,6 +54,12 @@ class SettingsScreen extends StatelessWidget {
         MaterialPageRoute<void>(
           builder: (_) => const CharacterSettingsScreen(),
         ),
+      );
+    }
+
+    void openVoiceSettings() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const VoiceSettingsScreen()),
       );
     }
 
@@ -125,7 +129,9 @@ class SettingsScreen extends StatelessWidget {
                         title: 'General',
                         items: [
                           _SettingsItemData(
-                            tileKey: const ValueKey<String>('settings-item-profile'),
+                            tileKey: const ValueKey<String>(
+                              'settings-item-profile',
+                            ),
                             icon: NesIcons.user,
                             title: 'プロフィール',
                             subtitle: '表示名やアバターの設定',
@@ -164,11 +170,22 @@ class SettingsScreen extends StatelessWidget {
                             onTap: openHomeBackgroundSettings,
                           ),
                           _SettingsItemData(
-                            tileKey: const ValueKey<String>('settings-item-image'),
+                            tileKey: const ValueKey<String>(
+                              'settings-item-image',
+                            ),
                             icon: NesIcons.gallery,
                             title: 'Image',
                             subtitle: '生成画像と履歴の確認',
                             onTap: openImageSettings,
+                          ),
+                          _SettingsItemData(
+                            tileKey: const ValueKey<String>(
+                              'settings-item-voice',
+                            ),
+                            icon: NesIcons.musicNote,
+                            title: 'AI音声',
+                            subtitle: '会話で使う声を選ぶ',
+                            onTap: openVoiceSettings,
                           ),
                           _SettingsItemData(
                             tileKey: const ValueKey<String>('settings-item-ai'),
@@ -178,7 +195,9 @@ class SettingsScreen extends StatelessWidget {
                             onTap: openCharacterSettings,
                           ),
                           _SettingsItemData(
-                            tileKey: const ValueKey<String>('settings-item-help'),
+                            tileKey: const ValueKey<String>(
+                              'settings-item-help',
+                            ),
                             icon: NesIcons.questionMark,
                             title: 'ヘルプ',
                             subtitle: '使い方とサポート情報',
@@ -226,9 +245,7 @@ class _SettingsSection extends StatelessWidget {
         padding: const EdgeInsets.only(top: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final item in items) _SettingsTile(data: item),
-          ],
+          children: [for (final item in items) _SettingsTile(data: item)],
         ),
       ),
     );

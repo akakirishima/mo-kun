@@ -390,10 +390,14 @@ app.post(
         userId: authedRequest.user.uid,
         summary,
       });
+      const userVoiceName = await repository.getUserVoiceName(
+        authedRequest.user.uid,
+      );
 
       try {
         const synthesized = await speechService.synthesizeAssistantSpeech({
           text: assistantText,
+          voiceName: userVoiceName ?? undefined,
         });
         response.json({
           threadId,

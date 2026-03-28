@@ -16,6 +16,15 @@ abstract class AppRepository {
     required UserProfileInput profile,
   });
 
+  Stream<AssistantVoicePreference?> watchAssistantVoicePreference(
+    String userId,
+  );
+
+  Future<void> updateAssistantVoicePreference({
+    required String userId,
+    required String voiceName,
+  });
+
   Stream<List<ChatMessage>> watchChatMessages(String threadId);
 
   Future<void> sendChatMessage({
@@ -66,9 +75,7 @@ abstract class AppRepository {
     required DateTime month,
   });
 
-  Stream<List<DiaryShelfBook>> watchDiaryShelfBooks({
-    required String userId,
-  });
+  Stream<List<DiaryShelfBook>> watchDiaryShelfBooks({required String userId});
 
   Stream<HomeBackgroundPreference?> watchHomeBackgroundPreference({
     required String userId,

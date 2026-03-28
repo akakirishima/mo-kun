@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 enum ChatRole { user, assistant }
 
+enum ChatTransport { http, live }
+
 enum CharacterImageStatus { idle, generating, ready, failed }
 
 enum CharacterVideoStatus { idle, generating, ready, failed }
@@ -9,6 +11,60 @@ enum CharacterVideoStatus { idle, generating, ready, failed }
 enum ChatInputType { text, voice, photo }
 
 enum VoiceChatAudioStatus { ready, failed }
+
+const defaultAssistantVoiceName = 'Kore';
+
+class AssistantVoiceOption {
+  const AssistantVoiceOption({
+    required this.voiceName,
+    required this.label,
+    required this.description,
+  });
+
+  final String voiceName;
+  final String label;
+  final String description;
+}
+
+class AssistantVoicePreference {
+  const AssistantVoicePreference({required this.voiceName, this.updatedAt});
+
+  final String voiceName;
+  final DateTime? updatedAt;
+}
+
+const assistantVoiceOptions = <AssistantVoiceOption>[
+  AssistantVoiceOption(
+    voiceName: 'Kore',
+    label: 'Kore',
+    description: '落ち着いていて芯のある声',
+  ),
+  AssistantVoiceOption(
+    voiceName: 'Aoede',
+    label: 'Aoede',
+    description: '軽やかでやわらかい声',
+  ),
+  AssistantVoiceOption(
+    voiceName: 'Puck',
+    label: 'Puck',
+    description: '明るく元気な声',
+  ),
+  AssistantVoiceOption(
+    voiceName: 'Charon',
+    label: 'Charon',
+    description: '低めで情報が聞き取りやすい声',
+  ),
+  AssistantVoiceOption(
+    voiceName: 'Achird',
+    label: 'Achird',
+    description: '親しみやすくフレンドリーな声',
+  ),
+  AssistantVoiceOption(
+    voiceName: 'Sulafat',
+    label: 'Sulafat',
+    description: '温かく包むような声',
+  ),
+];
 
 class PhotoAnalysis {
   const PhotoAnalysis({
@@ -114,6 +170,7 @@ class ChatMessage {
     required this.createdAt,
     this.clientMessageId,
     this.inputType = ChatInputType.text,
+    this.transport = ChatTransport.http,
     this.imageUrl,
     this.imageAnalysis,
   });
@@ -124,6 +181,7 @@ class ChatMessage {
   final DateTime createdAt;
   final String? clientMessageId;
   final ChatInputType inputType;
+  final ChatTransport transport;
   final String? imageUrl;
   final PhotoAnalysis? imageAnalysis;
 }
