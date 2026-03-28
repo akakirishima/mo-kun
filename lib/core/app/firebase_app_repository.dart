@@ -117,6 +117,33 @@ class FirebaseAppRepository implements AppRepository {
   }
 
   @override
+  Stream<AssistantVoicePreference?> watchAssistantVoicePreference(
+    String userId,
+  ) {
+    return firestore.collection('users').doc(userId).snapshots().map((
+      snapshot,
+    ) {
+      final data = snapshot.data() ?? const <String, dynamic>{};
+      return AssistantVoicePreference(
+        voiceName: data['ttsVoiceName'] as String? ?? defaultAssistantVoiceName,
+        updatedAt: _parseTimestamp(data['ttsVoiceUpdatedAt']),
+      );
+    });
+  }
+
+  @override
+  Future<void> updateAssistantVoicePreference({
+    required String userId,
+    required String voiceName,
+  }) async {
+    await firestore.collection('users').doc(userId).set({
+      'ttsVoiceName': voiceName,
+      'ttsVoiceUpdatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
   Stream<List<ChatMessage>> watchChatMessages(String threadId) {
     return firestore
         .collection('chatThreads')
@@ -487,6 +514,10 @@ class FirebaseAppRepository implements AppRepository {
         'voice' => ChatInputType.voice,
         'photo' => ChatInputType.photo,
         _ => ChatInputType.text,
+      },
+      transport: switch (data['transport'] as String?) {
+        'live' => ChatTransport.live,
+        _ => ChatTransport.http,
       },
       imageUrl: data['imageUrl'] as String?,
       imageAnalysis: _parsePhotoAnalysis(data['imageAnalysis']),

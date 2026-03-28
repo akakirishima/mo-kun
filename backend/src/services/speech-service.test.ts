@@ -42,6 +42,7 @@ let capturedRequest: unknown;
 
 const synthesized = await service.synthesizeAssistantSpeech({
   text: "  今日は\nよく頑張ったね  ",
+  voiceName: "Aoede",
 });
 
 assert.equal(synthesized.mimeType, "audio/mpeg");
@@ -52,7 +53,7 @@ assert.deepEqual(capturedRequest, {
   },
   voice: {
     languageCode: "ja-JP",
-    name: "Kore",
+    name: "Aoede",
     modelName: "gemini-2.5-flash-tts",
   },
   audioConfig: {

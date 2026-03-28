@@ -38,6 +38,7 @@ export class GeminiLiveSession {
     personaInstruction: string;
     historySeed?: string;
     resumeHandle?: string | null;
+    voiceName?: string | null;
     onMessage: (message: LiveServerMessage) => void;
     onClose: (event: { code?: number; reason?: string }) => void;
     onError: (error: unknown) => void;
@@ -51,11 +52,17 @@ export class GeminiLiveSession {
     for (let index = 0; index < candidates.length; index += 1) {
       const model = candidates[index]!;
       try {
+        const speechConfig = buildLiveSpeechConfig({
+          model,
+          defaultLanguageCode: this.config.ttsLanguageCode,
+          voiceName: params.voiceName ?? this.config.ttsVoiceName,
+        });
         const session = await this.client.live.connect({
           model,
           config: {
             responseModalities: [Modality.AUDIO],
             systemInstruction: params.personaInstruction,
+            speechConfig,
             inputAudioTranscription: {
               languageCodes: ["ja-JP"],
             },
@@ -133,4 +140,22 @@ export class GeminiLiveSession {
     this.activeSession?.close();
     this.activeSession = null;
   }
+}
+
+function buildLiveSpeechConfig(params: {
+  model: string;
+  defaultLanguageCode: string;
+  voiceName: string;
+}) {
+  const isNativeAudioModel = params.model.includes("native-audio");
+  return {
+    ...(!isNativeAudioModel
+        ? { languageCode: params.defaultLanguageCode }
+        : {}),
+    voiceConfig: {
+      prebuiltVoiceConfig: {
+        voiceName: params.voiceName,
+      },
+    },
+  };
 }

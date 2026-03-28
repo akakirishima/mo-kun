@@ -15,6 +15,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.senderName,
     this.timestamp,
     this.statusLabel,
+    this.messageTypeLabel,
     this.alignmentKey,
     this.avatarKey,
   });
@@ -28,6 +29,7 @@ class ChatMessageBubble extends StatelessWidget {
   final String? senderName;
   final String? timestamp;
   final String? statusLabel;
+  final String? messageTypeLabel;
   final Key? alignmentKey;
   final Key? avatarKey;
 
@@ -106,12 +108,22 @@ class ChatMessageBubble extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: bubble,
             ),
-            if (statusLabel != null || timestamp != null)
+            if (statusLabel != null ||
+                timestamp != null ||
+                messageTypeLabel != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8, right: 2),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (messageTypeLabel != null)
+                      _MetaChip(
+                        label: messageTypeLabel!,
+                        textColor: metaTextColor,
+                      ),
+                    if (messageTypeLabel != null &&
+                        (statusLabel != null || timestamp != null))
+                      const SizedBox(width: 4),
                     if (statusLabel != null)
                       _MetaChip(
                         label: statusLabel!,
@@ -122,10 +134,7 @@ class ChatMessageBubble extends StatelessWidget {
                     if (statusLabel != null && timestamp != null)
                       const SizedBox(width: 4),
                     if (timestamp != null)
-                      _MetaChip(
-                        label: timestamp!,
-                        textColor: metaTextColor,
-                      ),
+                      _MetaChip(label: timestamp!, textColor: metaTextColor),
                   ],
                 ),
               ),
@@ -164,12 +173,25 @@ class ChatMessageBubble extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: bubble,
                 ),
-                if (timestamp != null)
+                if (timestamp != null || messageTypeLabel != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, left: 6),
-                    child: _MetaChip(
-                      label: timestamp!,
-                      textColor: metaTextColor,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (messageTypeLabel != null)
+                          _MetaChip(
+                            label: messageTypeLabel!,
+                            textColor: metaTextColor,
+                          ),
+                        if (messageTypeLabel != null && timestamp != null)
+                          const SizedBox(width: 4),
+                        if (timestamp != null)
+                          _MetaChip(
+                            label: timestamp!,
+                            textColor: metaTextColor,
+                          ),
+                      ],
                     ),
                   ),
               ],
@@ -182,10 +204,7 @@ class ChatMessageBubble extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.label,
-    required this.textColor,
-  });
+  const _MetaChip({required this.label, required this.textColor});
 
   final String label;
   final Color textColor;

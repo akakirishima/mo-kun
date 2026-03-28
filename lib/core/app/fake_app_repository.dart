@@ -17,6 +17,7 @@ class FakeAppRepository implements AppRepository {
     List<CharacterImageVersion>? initialImageHistory,
     HomeBackgroundPreference? initialHomeBackgroundPreference,
     UserProfileInput? initialUserProfile,
+    AssistantVoicePreference? initialAssistantVoicePreference,
   }) : _session =
            initialSession ??
            const AppSession(userId: 'demo-user', needsOnboarding: true) {
@@ -30,6 +31,9 @@ class FakeAppRepository implements AppRepository {
     _imageHistory = initialImageHistory ?? <CharacterImageVersion>[];
     _homeBackgroundPreference = initialHomeBackgroundPreference;
     _userProfile = initialUserProfile;
+    _assistantVoicePreference =
+        initialAssistantVoicePreference ??
+        const AssistantVoicePreference(voiceName: defaultAssistantVoiceName);
     _emitAll();
   }
 
@@ -44,6 +48,8 @@ class FakeAppRepository implements AppRepository {
       StreamController<HomeBackgroundPreference?>.broadcast();
   final _userProfileController =
       StreamController<UserProfileInput?>.broadcast();
+  final _assistantVoicePreferenceController =
+      StreamController<AssistantVoicePreference?>.broadcast();
 
   AppSession _session;
   CharacterSnapshot? _character;
@@ -53,6 +59,7 @@ class FakeAppRepository implements AppRepository {
   List<CharacterImageVersion> _imageHistory = <CharacterImageVersion>[];
   HomeBackgroundPreference? _homeBackgroundPreference;
   UserProfileInput? _userProfile;
+  AssistantVoicePreference? _assistantVoicePreference;
 
   @override
   Future<AppSession> initializeSession() async => _session;
@@ -163,6 +170,26 @@ class FakeAppRepository implements AppRepository {
   }
 
   @override
+  Stream<AssistantVoicePreference?> watchAssistantVoicePreference(
+    String userId,
+  ) async* {
+    yield _assistantVoicePreference;
+    yield* _assistantVoicePreferenceController.stream;
+  }
+
+  @override
+  Future<void> updateAssistantVoicePreference({
+    required String userId,
+    required String voiceName,
+  }) async {
+    _assistantVoicePreference = AssistantVoicePreference(
+      voiceName: voiceName,
+      updatedAt: DateTime.now(),
+    );
+    _assistantVoicePreferenceController.add(_assistantVoicePreference);
+  }
+
+  @override
   Future<void> sendChatMessage({
     required String threadId,
     required String text,
@@ -195,6 +222,7 @@ class FakeAppRepository implements AppRepository {
         createdAt: now,
         clientMessageId: clientMessageId,
         inputType: hasPhoto ? ChatInputType.photo : ChatInputType.text,
+        transport: ChatTransport.http,
         imageUrl: hasPhoto
             ? 'https://example.com/chat/${now.microsecondsSinceEpoch}.png'
             : null,
@@ -263,6 +291,7 @@ class FakeAppRepository implements AppRepository {
         role: ChatRole.assistant,
         text: '受け取った。今日はひとつだけ進めば十分。',
         createdAt: now.add(const Duration(seconds: 1)),
+        transport: ChatTransport.http,
       ),
     ];
     _emitAll();
@@ -289,12 +318,14 @@ class FakeAppRepository implements AppRepository {
         createdAt: now,
         clientMessageId: clientMessageId,
         inputType: ChatInputType.voice,
+        transport: ChatTransport.live,
       ),
       ChatMessage(
         id: 'assistant-voice-${now.microsecondsSinceEpoch}',
         role: ChatRole.assistant,
         text: assistantText,
         createdAt: now.add(const Duration(seconds: 1)),
+        transport: ChatTransport.live,
       ),
     ];
     _upsertSummary(
@@ -507,6 +538,7 @@ class FakeAppRepository implements AppRepository {
     await _imageHistoryController.close();
     await _homeBackgroundPreferenceController.close();
     await _userProfileController.close();
+    await _assistantVoicePreferenceController.close();
   }
 
   void _emitAll() {
@@ -518,6 +550,7 @@ class FakeAppRepository implements AppRepository {
     _imageHistoryController.add(
       List<CharacterImageVersion>.unmodifiable(_imageHistory),
     );
+    _assistantVoicePreferenceController.add(_assistantVoicePreference);
     _emitHomeBackgroundPreference();
   }
 

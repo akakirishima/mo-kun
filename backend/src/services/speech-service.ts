@@ -58,6 +58,7 @@ export class SpeechService {
 
   async synthesizeAssistantSpeech(params: {
     text: string;
+    voiceName?: string;
   }): Promise<SynthesizedSpeech> {
     try {
       const [response] = await this.textToSpeechClient.synthesizeSpeech({
@@ -66,7 +67,7 @@ export class SpeechService {
         },
         voice: {
           languageCode: this.config.ttsLanguageCode,
-          name: this.config.ttsVoiceName,
+          name: params.voiceName ?? this.config.ttsVoiceName,
           modelName: this.config.ttsModelName,
         },
         audioConfig: {

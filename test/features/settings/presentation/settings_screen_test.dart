@@ -7,6 +7,7 @@ import 'package:gdgoc_2026_prototype/core/theme/app_theme.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_controller.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/settings/presentation/settings_screen.dart';
+import 'package:nes_ui/nes_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../test_support/fake_app.dart';
@@ -44,7 +45,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('settings-back-button')), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('settings-back-button')),
+      findsNothing,
+    );
     expect(
       find.byKey(const ValueKey<String>('settings-item-profile')),
       findsOneWidget,
@@ -60,6 +64,10 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey<String>('settings-item-image')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('settings-item-voice')),
       findsOneWidget,
     );
   });
@@ -118,12 +126,12 @@ void main() {
     );
   });
 
-  testWidgets('opens the image screen from Image', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('opens the image screen from Image', (WidgetTester tester) async {
     await tester.pumpWidget(buildScopedSettingsApp());
 
-    await tester.ensureVisible(find.byKey(const ValueKey<String>('settings-item-image')));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('settings-item-image')),
+    );
     await tester.tap(
       find.byKey(const ValueKey<String>('settings-item-image')),
       warnIfMissed: false,
@@ -169,7 +177,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(buildScopedSettingsApp(repository: buildFakeRepository()));
+    await tester.pumpWidget(
+      buildScopedSettingsApp(repository: buildFakeRepository()),
+    );
 
     await tester.ensureVisible(
       find.byKey(const ValueKey<String>('settings-item-home-background')),
@@ -188,8 +198,11 @@ void main() {
       findsOneWidget,
     );
 
-    final nightPreset = find.byKey(const ValueKey<String>('home-background-preset-yoru'));
-    await tester.tap(nightPreset);
+    final nightPreset = find.byKey(
+      const ValueKey<String>('home-background-preset-yoru'),
+    );
+    await tester.ensureVisible(nightPreset);
+    await tester.tap(nightPreset, warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(
@@ -203,11 +216,14 @@ void main() {
   ) async {
     await tester.pumpWidget(buildScopedSettingsApp());
 
-    await tester.ensureVisible(find.byKey(const ValueKey<String>('settings-item-ai')));
-    await tester.tap(
+    await tester.scrollUntilVisible(
       find.byKey(const ValueKey<String>('settings-item-ai')),
-      warnIfMissed: false,
+      120,
     );
+    final aiTile = tester.widget<NesPressable>(
+      find.byKey(const ValueKey<String>('settings-item-ai')),
+    );
+    aiTile.onPress?.call();
     await tester.pumpAndSettle();
 
     expect(
@@ -216,6 +232,34 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey<String>('character-settings-name')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('opens the voice settings screen from AI音声', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(buildScopedSettingsApp());
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey<String>('settings-item-voice')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('settings-item-voice')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('voice-settings-screen')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-option-Kore')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-settings-save-button')),
       findsOneWidget,
     );
   });

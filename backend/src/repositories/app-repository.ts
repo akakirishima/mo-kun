@@ -130,6 +130,17 @@ export class AppRepository {
     return characterDoc.data() ?? null;
   }
 
+  async getUserVoiceName(userId: string): Promise<string | null> {
+    const userDoc = await this.db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      return null;
+    }
+    const voiceName = userDoc.get("ttsVoiceName");
+    return typeof voiceName === "string" && voiceName.trim().length > 0
+      ? voiceName.trim()
+      : null;
+  }
+
   async updateVisualEvolutionMemo(params: {
     userId: string;
     visualEvolutionMemo: string;

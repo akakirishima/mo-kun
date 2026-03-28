@@ -17,11 +17,7 @@ typedef ChatImagePicker = Future<XFile?> Function(ImageSource source);
 typedef ChatLostDataRetriever = Future<LostDataResponse> Function();
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({
-    super.key,
-    this.pickImage,
-    this.retrieveLostData,
-  });
+  const ChatScreen({super.key, this.pickImage, this.retrieveLostData});
 
   final ChatImagePicker? pickImage;
   final ChatLostDataRetriever? retrieveLostData;
@@ -205,7 +201,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final session = ref.watch(sessionProvider).valueOrNull;
     final backgroundPreference = session == null
         ? null
-        : ref.watch(homeBackgroundPreferenceProvider(session.userId)).valueOrNull;
+        : ref
+              .watch(homeBackgroundPreferenceProvider(session.userId))
+              .valueOrNull;
     final backgroundTheme = HomeBackgroundTheme.resolve(
       backgroundPreference?.themeId,
     );
@@ -263,7 +261,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               children: [
                 Positioned.fill(
                   child:
-                      (customBackgroundUrl != null && customBackgroundUrl.isNotEmpty)
+                      (customBackgroundUrl != null &&
+                          customBackgroundUrl.isNotEmpty)
                       ? Image.network(
                           customBackgroundUrl,
                           key: const ValueKey<String>('chat-background-image'),
@@ -378,7 +377,9 @@ class _TimelineBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final resolvedImageUrl = ref.watch(resolvedImageUrlProvider(entry.imageUrl));
+    final resolvedImageUrl = ref.watch(
+      resolvedImageUrlProvider(entry.imageUrl),
+    );
     return ChatMessageBubble(
       text: entry.text,
       imagePath: entry.localImagePath,
@@ -388,6 +389,7 @@ class _TimelineBubble extends ConsumerWidget {
       senderName: entry.isCurrentUser ? null : 'Mori',
       timestamp: _formatTime(entry.createdAt),
       statusLabel: entry.statusLabel,
+      messageTypeLabel: entry.messageTypeLabel,
     );
   }
 }
@@ -466,6 +468,7 @@ class _ChatTimelineEntry {
     required this.createdAt,
     required this.isCurrentUser,
     this.statusLabel,
+    this.messageTypeLabel,
   });
 
   final String? text;
@@ -474,6 +477,7 @@ class _ChatTimelineEntry {
   final DateTime createdAt;
   final bool isCurrentUser;
   final String? statusLabel;
+  final String? messageTypeLabel;
 }
 
 List<_ChatTimelineEntry> _buildTimelineMessages({
@@ -487,6 +491,11 @@ List<_ChatTimelineEntry> _buildTimelineMessages({
         imageUrl: message.imageUrl,
         createdAt: message.createdAt,
         isCurrentUser: message.role == ChatRole.user,
+        messageTypeLabel:
+            message.transport == ChatTransport.live ||
+                message.inputType == ChatInputType.voice
+            ? 'VOICE'
+            : null,
       ),
     for (final message in pendingMessages)
       _ChatTimelineEntry(

@@ -36,6 +36,8 @@ export class LiveSessionManager {
   private currentModel: string | null = null;
   private fallbackUsed = false;
   private lastPersistedTurnId: string | null = null;
+  private turnAwaitingAdvance = false;
+  private pendingCompletedTurnId: string | null = null;
   private closed = false;
 
   constructor(
@@ -62,6 +64,9 @@ export class LiveSessionManager {
       return;
     }
     this.closed = true;
+    await this.persistCurrentTurnSnapshot({
+      preferResolvedTexts: true,
+    });
     this.geminiSession.close();
     this.send({
       type: "session.closed",
@@ -127,6 +132,7 @@ export class LiveSessionManager {
     });
     const resumeHandle = message.resumeHandle?.trim() || storedResume?.handle || null;
     const recentMessages = await this.repository.getRecentMessages(message.threadId, 12);
+    const userVoiceName = await this.repository.getUserVoiceName(this.userId);
     const personaInstruction = buildAssistantSystemInstruction(
       String(character.name ?? "Self"),
       typeof character.personaPrompt === "string" ? character.personaPrompt : undefined,
@@ -137,12 +143,14 @@ export class LiveSessionManager {
       userId: this.userId,
       threadId: message.threadId,
       hasResumeHandle: resumeHandle != null,
+      voiceName: userVoiceName ?? this.config.ttsVoiceName,
     });
 
     const liveConnection = await this.geminiSession.connect({
       personaInstruction,
       historySeed,
       resumeHandle,
+      voiceName: userVoiceName,
       onMessage: (serverMessage) => {
         void this.handleServerMessage(serverMessage);
       },
@@ -188,6 +196,7 @@ export class LiveSessionManager {
       model: liveConnection.model,
       fallbackUsed: liveConnection.fallbackUsed,
       resumed: resumeHandle != null,
+      voiceName: userVoiceName ?? this.config.ttsVoiceName,
     });
 
     this.send({
@@ -246,19 +255,32 @@ export class LiveSessionManager {
       return;
     }
 
+    const inputTranscription = serverContent.inputTranscription;
+    const outputTranscription = serverContent.outputTranscription;
+
     if (serverContent.interrupted) {
+      this.forwardTranscriptEvents(
+        this.transcriptAssembler.nextOutput(outputTranscription),
+      );
+      const interruptedTurn = this.transcriptAssembler.currentResolvedTexts();
+      await this.persistTurnSnapshot(interruptedTurn);
+      this.turnAwaitingAdvance = true;
       this.send({
         type: "assistant.interrupted",
-        turnId: this.transcriptAssembler.currentFinalTexts().turnId,
+        turnId: interruptedTurn.turnId,
       });
+      this.beginNextTurnIfNeeded(inputTranscription);
+      this.forwardTranscriptEvents(
+        this.transcriptAssembler.nextInput(inputTranscription),
+      );
+    } else {
+      this.forwardTranscriptEvents(
+        this.transcriptAssembler.nextInput(inputTranscription),
+      );
+      this.forwardTranscriptEvents(
+        this.transcriptAssembler.nextOutput(outputTranscription),
+      );
     }
-
-    this.forwardTranscriptEvents(
-      this.transcriptAssembler.nextInput(serverContent.inputTranscription),
-    );
-    this.forwardTranscriptEvents(
-      this.transcriptAssembler.nextOutput(serverContent.outputTranscription),
-    );
 
     for (const part of extractParts(serverContent.modelTurn)) {
       const inlineData = part.inlineData;
@@ -269,21 +291,65 @@ export class LiveSessionManager {
     }
 
     if (serverContent.waitingForInput) {
+      const waitingTurn = this.transcriptAssembler.currentResolvedTexts();
       this.send({
         type: "session.waiting_for_input",
-        turnId: this.transcriptAssembler.currentFinalTexts().turnId,
+        turnId: waitingTurn.turnId,
       });
+      await this.persistTurnSnapshot(waitingTurn);
+      this.turnAwaitingAdvance = true;
     }
 
     if (serverContent.turnComplete) {
-      const finalized = this.transcriptAssembler.currentFinalTexts();
+      const completedTurnId =
+        this.pendingCompletedTurnId ??
+        this.transcriptAssembler.currentResolvedTexts().turnId;
       this.send({
         type: "assistant.turn_complete",
-        turnId: finalized.turnId,
+        turnId: completedTurnId,
       });
-      await this.persistCompletedTurn(finalized.turnId, finalized.inputText, finalized.outputText);
+      if (this.pendingCompletedTurnId != null) {
+        this.pendingCompletedTurnId = null;
+        return;
+      }
+      await this.persistCurrentTurnSnapshot();
       this.transcriptAssembler.beginNextTurn();
+      this.turnAwaitingAdvance = false;
     }
+  }
+
+  private beginNextTurnIfNeeded(transcription?: { text?: string | null }) {
+    const hasInputText = typeof transcription?.text === "string" && transcription.text.trim().length > 0;
+    if (!hasInputText || !this.turnAwaitingAdvance) {
+      return;
+    }
+
+    this.pendingCompletedTurnId = this.transcriptAssembler.currentResolvedTexts().turnId;
+    this.transcriptAssembler.beginNextTurn();
+    this.turnAwaitingAdvance = false;
+  }
+
+  private async persistCurrentTurnSnapshot(params?: { preferResolvedTexts?: boolean }) {
+    const snapshot = params?.preferResolvedTexts
+      ? this.transcriptAssembler.currentResolvedTexts()
+      : this.bestEffortCurrentTurnTexts();
+    await this.persistTurnSnapshot(snapshot);
+  }
+
+  private bestEffortCurrentTurnTexts() {
+    const finalized = this.transcriptAssembler.currentFinalTexts();
+    if (finalized.inputText && finalized.outputText) {
+      return finalized;
+    }
+    return this.transcriptAssembler.currentResolvedTexts();
+  }
+
+  private async persistTurnSnapshot(snapshot: {
+    turnId: string;
+    inputText: string;
+    outputText: string;
+  }) {
+    await this.persistCompletedTurn(snapshot.turnId, snapshot.inputText, snapshot.outputText);
   }
 
   private async persistCompletedTurn(turnId: string, inputText: string, outputText: string) {

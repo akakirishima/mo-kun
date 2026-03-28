@@ -42,6 +42,13 @@ final userProfileProvider = StreamProvider.family<UserProfileInput?, String>((
   return ref.watch(appRepositoryProvider).watchUserProfile(userId);
 });
 
+final assistantVoicePreferenceProvider =
+    StreamProvider.family<AssistantVoicePreference?, String>((ref, userId) {
+      return ref
+          .watch(appRepositoryProvider)
+          .watchAssistantVoicePreference(userId);
+    });
+
 final diaryMonthNavigationControllerProvider =
     Provider<DiaryMonthNavigationController>(
       (ref) => DiaryMonthNavigationController(ref),
@@ -240,6 +247,27 @@ class UserProfileController {
   }
 }
 
+final assistantVoiceSettingsControllerProvider =
+    Provider<AssistantVoiceSettingsController>(
+      (ref) => AssistantVoiceSettingsController(ref),
+    );
+
+class AssistantVoiceSettingsController {
+  AssistantVoiceSettingsController(this._ref);
+
+  final Ref _ref;
+
+  Future<void> save(String voiceName) async {
+    final session = await _ref.read(sessionProvider.future);
+    await _ref
+        .read(appRepositoryProvider)
+        .updateAssistantVoicePreference(
+          userId: session.userId,
+          voiceName: voiceName,
+        );
+  }
+}
+
 final sendChatMessageControllerProvider = Provider<SendChatMessageController>(
   (ref) => SendChatMessageController(ref),
 );
@@ -329,10 +357,7 @@ class CharacterSettingsController {
 
     await _ref
         .read(appRepositoryProvider)
-        .updateCharacterSettings(
-          characterId: characterId,
-          settings: settings,
-        );
+        .updateCharacterSettings(characterId: characterId, settings: settings);
   }
 }
 
