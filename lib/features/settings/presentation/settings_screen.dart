@@ -123,7 +123,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+                    padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
                     children: [
                       _SettingsSection(
                         title: 'General',

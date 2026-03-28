@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_tab.dart';
+import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:nes_ui/nes_ui.dart';
 
 class GlassBottomDock extends StatelessWidget {
@@ -67,7 +68,10 @@ class _DockItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = selected ? tab.accentColor : const Color(0xFFB8703C);
+    final palette = AppearanceScope.paletteOf(context);
+    final themeColor = palette.home.transcriptInnerBorder;
+    
+    final fill = selected ? themeColor : const Color(0xFFB8703C);
     final iconColor = selected
         ? const Color(0xFF4D2C1A)
         : const Color(0xFFFFF3D3);
@@ -78,7 +82,7 @@ class _DockItem extends StatelessWidget {
         ? const Color(0xFF2F1A0F)
         : const Color(0xFF6D3C1D);
     final shadowColor = selected
-        ? const Color(0xFF8C5833)
+        ? themeColor.withValues(alpha: 0.5)
         : const Color(0xFF7A451F);
 
     return Semantics(

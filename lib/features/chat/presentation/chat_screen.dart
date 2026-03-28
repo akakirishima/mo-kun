@@ -386,7 +386,7 @@ class _TimelineBubble extends ConsumerWidget {
       imageUrl: resolvedImageUrl.valueOrNull,
       isCurrentUser: entry.isCurrentUser,
       showAvatar: !entry.isCurrentUser,
-      senderName: entry.isCurrentUser ? null : 'Mori',
+      senderName: entry.isCurrentUser ? null : '未来の自分',
       timestamp: _formatTime(entry.createdAt),
       statusLabel: entry.statusLabel,
       messageTypeLabel: entry.messageTypeLabel,

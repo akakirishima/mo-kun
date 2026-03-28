@@ -397,69 +397,50 @@ class _DailyBubbleCard extends StatelessWidget {
     return Container(
       key: const ValueKey<String>('home-daily-bubble'),
       decoration: BoxDecoration(
-        color: outerBorder.withValues(alpha: 0.96),
+        color: fillColor.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: innerBorder.withValues(alpha: 0.8),
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: shadowColor.withValues(alpha: 0.46),
-            offset: const Offset(0, 6),
+            color: shadowColor.withValues(alpha: 0.12),
+            offset: const Offset(0, 2),
+            blurRadius: 8,
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: shadowColor.withValues(alpha: 0.08),
+            offset: const Offset(0, 4),
+            blurRadius: 16,
+            spreadRadius: 0,
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 4, top: 4, right: 4, bottom: 8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: fillColor.withValues(alpha: 0.96),
-            border: Border.all(
-              color: innerBorder.withValues(alpha: 0.76),
-              width: 3,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '今日のメッセージ',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: textColor.withValues(alpha: 0.6),
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _PixelBadge(
-                      label: '今日の一言',
-                      fillColor: const Color(0xFFE7A64C),
-                      borderColor: const Color(0xFF4B2D1E),
-                      textColor: const Color(0xFF2C170C),
-                    ),
-                    const Spacer(),
-                    Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: outerBorder.withValues(alpha: 0.92),
-                        border: Border.all(
-                          color: const Color(0xFF4B2D1E),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  height: 4,
-                  color: outerBorder.withValues(alpha: 0.82),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  text,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: textColor,
-                    fontWeight: FontWeight.w700,
-                    height: 1.45,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 12),
+          Text(
+            text,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w500,
+              height: 1.6,
+              letterSpacing: 0.2,
             ),
           ),
-        ),
+        ],
       ),
     );
   }
