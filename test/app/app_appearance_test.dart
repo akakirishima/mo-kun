@@ -11,9 +11,17 @@ void main() {
   }
 
   LinearGradient backgroundGradient(WidgetTester tester, String keyName) {
-    final box = tester.widget<DecoratedBox>(
-      find.byKey(ValueKey<String>(keyName)),
-    );
+    final keyedFinder = find.byKey(ValueKey<String>(keyName));
+    final widget = tester.widget(keyedFinder);
+    final box =
+        widget is DecoratedBox
+            ? widget
+            : tester.widget<DecoratedBox>(
+              find.descendant(
+                of: keyedFinder,
+                matching: find.byType(DecoratedBox),
+              ).first,
+            );
     final decoration = box.decoration as BoxDecoration;
     return decoration.gradient! as LinearGradient;
   }

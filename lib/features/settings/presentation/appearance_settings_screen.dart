@@ -1,16 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:nes_ui/nes_ui.dart';
 
-class AppearanceSettingsScreen extends StatelessWidget {
+class AppearanceSettingsScreen extends ConsumerWidget {
   const AppearanceSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final controller = AppearanceScope.controllerOf(context);
     final palette = controller.palette;
     final settingsColors = palette.settings;
+    final session = ref.watch(sessionProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -99,7 +104,17 @@ class AppearanceSettingsScreen extends StatelessWidget {
                                 preset: preset,
                                 isSelected: controller.preset == preset,
                                 onTap: () {
-                                  controller.selectPreset(preset);
+                                  unawaited(controller.selectPreset(preset));
+                                  if (session != null) {
+                                    unawaited(
+                                      ref
+                                          .read(appRepositoryProvider)
+                                          .updateAppearancePreference(
+                                            userId: session.userId,
+                                            preset: preset,
+                                          ),
+                                    );
+                                  }
                                 },
                               ),
                           ],

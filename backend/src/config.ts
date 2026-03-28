@@ -11,6 +11,12 @@ export type AppConfig = {
   geminiTemperature: number;
   geminiMaxOutputTokens: number;
   geminiThinkingBudget: number;
+  dailySummaryTemperature: number;
+  dailySummaryMaxOutputTokens: number;
+  dailySummaryThinkingBudget: number;
+  dailyBubbleTemperature: number;
+  dailyBubbleMaxOutputTokens: number;
+  dailyBubbleThinkingBudget: number;
   imageBucket: string;
   speechLanguageCode: string;
   ttsLanguageCode: string;
@@ -44,6 +50,24 @@ export function loadConfig(): AppConfig {
     geminiTemperature: Number(process.env.GEMINI_TEMPERATURE ?? 0.5),
     geminiMaxOutputTokens: Number(process.env.GEMINI_MAX_OUTPUT_TOKENS ?? 2048),
     geminiThinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET ?? 128),
+    dailySummaryTemperature: Number(
+      process.env.DAILY_SUMMARY_TEMPERATURE ?? 0.35,
+    ),
+    dailySummaryMaxOutputTokens: Number(
+      process.env.DAILY_SUMMARY_MAX_OUTPUT_TOKENS ?? 320,
+    ),
+    dailySummaryThinkingBudget: Number(
+      process.env.DAILY_SUMMARY_THINKING_BUDGET ?? 128,
+    ),
+    dailyBubbleTemperature: Number(
+      process.env.DAILY_BUBBLE_TEMPERATURE ?? 0.45,
+    ),
+    dailyBubbleMaxOutputTokens: Number(
+      process.env.DAILY_BUBBLE_MAX_OUTPUT_TOKENS ?? 120,
+    ),
+    dailyBubbleThinkingBudget: Number(
+      process.env.DAILY_BUBBLE_THINKING_BUDGET ?? 32,
+    ),
     imageBucket: process.env.IMAGE_BUCKET ?? 'local-bucket',
     speechLanguageCode: process.env.SPEECH_LANGUAGE_CODE ?? 'ja-JP',
     ttsLanguageCode: process.env.TTS_LANGUAGE_CODE ?? 'ja-JP',

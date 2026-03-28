@@ -18,6 +18,11 @@ class FakeRepository {
     lastGeneratedSquareVideoUrl:
       "gs://demo-bucket/characters/test-user/videoHistory/previous-square.mp4",
   };
+  userProfile = {
+    age: 28,
+    characterGender: "non_binary",
+    appearancePreset: "sky",
+  };
 
   recentSummaries: StoredDailySummary[] = [
     {
@@ -39,6 +44,10 @@ class FakeRepository {
 
   async getCharacterContext() {
     return this.character;
+  }
+
+  async getUserProfileContext() {
+    return this.userProfile;
   }
 
   async listRecentDailySummaries() {
@@ -68,15 +77,18 @@ class FakeRepository {
 
 class FakeAiService {
   imagePromptCalls = 0;
+  lastImagePromptParams: Record<string, unknown> | null = null;
   motionVideoCalls = 0;
   motionVideoInputs: Array<{ imageBytes: Buffer; mimeType: string }> = [];
+  lastMotionPromptParams: Record<string, unknown> | null = null;
 
   async generateVisualEvolutionMemo() {
     return "表情に少し自信がにじみ、姿勢もわずかに伸びてきた。";
   }
 
-  buildCharacterImagePrompt() {
+  buildCharacterImagePrompt(params: Record<string, unknown>) {
     this.imagePromptCalls += 1;
+    this.lastImagePromptParams = params;
     return `image-prompt-${this.imagePromptCalls}`;
   }
 
@@ -94,7 +106,8 @@ class FakeAiService {
     };
   }
 
-  buildCharacterMotionPrompt() {
+  buildCharacterMotionPrompt(params: Record<string, unknown>) {
+    this.lastMotionPromptParams = params;
     return "base-motion";
   }
 
@@ -252,6 +265,12 @@ assert.equal(created.videoStatus, "ready");
 assert.equal(aiService.motionVideoCalls, 1);
 assert.equal(aiService.motionVideoInputs[0]?.mimeType, "image/png");
 assert.equal(aiService.motionVideoInputs[0]?.imageBytes.toString(), "image-bytes");
+assert.equal(aiService.lastImagePromptParams?.age, 28);
+assert.equal(aiService.lastImagePromptParams?.characterGender, "non_binary");
+assert.equal(aiService.lastImagePromptParams?.appearancePreset, "sky");
+assert.equal(aiService.lastMotionPromptParams?.age, 28);
+assert.equal(aiService.lastMotionPromptParams?.characterGender, "non_binary");
+assert.equal(aiService.lastMotionPromptParams?.appearancePreset, "sky");
 assert.equal(videoStore.loadCalls, 1);
 assert.equal(videoProcessor.calls, 1);
 assert.equal(videoProcessor.inputs[0]?.mimeType, "video/mp4");

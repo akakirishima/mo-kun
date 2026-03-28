@@ -5,6 +5,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/character_profile_derivation.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 
 class FakeAppRepository implements AppRepository {
   FakeAppRepository({
@@ -31,6 +32,7 @@ class FakeAppRepository implements AppRepository {
     _imageHistory = initialImageHistory ?? <CharacterImageVersion>[];
     _homeBackgroundPreference = initialHomeBackgroundPreference;
     _userProfile = initialUserProfile;
+    _appearancePreset = initialUserProfile?.appearancePreset;
     _assistantVoicePreference =
         initialAssistantVoicePreference ??
         const AssistantVoicePreference(voiceName: defaultAssistantVoiceName);
@@ -48,6 +50,8 @@ class FakeAppRepository implements AppRepository {
       StreamController<HomeBackgroundPreference?>.broadcast();
   final _userProfileController =
       StreamController<UserProfileInput?>.broadcast();
+  final _appearancePreferenceController =
+      StreamController<AppAppearancePreset?>.broadcast();
   final _assistantVoicePreferenceController =
       StreamController<AssistantVoicePreference?>.broadcast();
 
@@ -59,6 +63,7 @@ class FakeAppRepository implements AppRepository {
   List<CharacterImageVersion> _imageHistory = <CharacterImageVersion>[];
   HomeBackgroundPreference? _homeBackgroundPreference;
   UserProfileInput? _userProfile;
+  AppAppearancePreset? _appearancePreset;
   AssistantVoicePreference? _assistantVoicePreference;
 
   @override
@@ -67,12 +72,12 @@ class FakeAppRepository implements AppRepository {
   @override
   Future<AppSession> completeOnboarding(UserProfileInput input) async {
     final now = DateTime.now();
+    final derived = deriveCharacterProfileFields(input);
     _character = CharacterSnapshot(
       id: 'character-${_session.userId}',
       name: input.displayName.isEmpty ? 'Self' : input.displayName,
-      personaPrompt: 'You are the user\'s reflective inner voice.',
-      visualPromptBase:
-          'Soft illustrated self-projection character, reflects recent self-improvement.',
+      personaPrompt: derived.personaPrompt,
+      visualPromptBase: derived.visualPromptBase,
       imageStatus: CharacterImageStatus.ready,
       videoStatus: CharacterVideoStatus.idle,
       latestImageUrl: null,
@@ -120,6 +125,7 @@ class FakeAppRepository implements AppRepository {
       generatedAt: now,
     );
     _userProfile = input;
+    _appearancePreset = input.appearancePreset;
     _session = _session.copyWith(
       needsOnboarding: false,
       characterId: _character!.id,
@@ -142,11 +148,18 @@ class FakeAppRepository implements AppRepository {
   }
 
   @override
+  Stream<AppAppearancePreset?> watchAppearancePreference(String userId) async* {
+    yield _appearancePreset;
+    yield* _appearancePreferenceController.stream;
+  }
+
+  @override
   Future<void> updateUserProfile({
     required String userId,
     required UserProfileInput profile,
   }) async {
     _userProfile = profile;
+    _appearancePreset = profile.appearancePreset;
     final character = _character;
     if (character != null) {
       final derived = deriveCharacterProfileFields(profile);
@@ -167,6 +180,49 @@ class FakeAppRepository implements AppRepository {
       _characterController.add(_character);
     }
     _userProfileController.add(_userProfile);
+    _appearancePreferenceController.add(_appearancePreset);
+  }
+
+  @override
+  Future<void> updateAppearancePreference({
+    required String userId,
+    required AppAppearancePreset preset,
+  }) async {
+    _appearancePreset = preset;
+    final profile = _userProfile;
+    if (profile != null) {
+      final updatedProfile = UserProfileInput(
+        displayName: profile.displayName,
+        goal: profile.goal,
+        partnerStyle: profile.partnerStyle,
+        weakPoints: profile.weakPoints,
+        age: profile.age,
+        characterGender: profile.characterGender,
+        appearancePreset: preset,
+      );
+      _userProfile = updatedProfile;
+      final character = _character;
+      if (character != null) {
+        final derived = deriveCharacterProfileFields(updatedProfile);
+        _character = CharacterSnapshot(
+          id: character.id,
+          name: character.name,
+          personaPrompt: character.personaPrompt,
+          visualPromptBase: derived.visualPromptBase,
+          imageStatus: character.imageStatus,
+          videoStatus: character.videoStatus,
+          latestImageUrl: character.latestImageUrl,
+          latestVideoUrl: character.latestVideoUrl,
+          latestSquareVideoUrl: character.latestSquareVideoUrl,
+          posterImageUrl: character.posterImageUrl,
+          lastGeneratedAt: character.lastGeneratedAt,
+          starterGreeting: character.starterGreeting,
+        );
+        _characterController.add(_character);
+      }
+      _userProfileController.add(_userProfile);
+    }
+    _appearancePreferenceController.add(_appearancePreset);
   }
 
   @override
@@ -538,6 +594,7 @@ class FakeAppRepository implements AppRepository {
     await _imageHistoryController.close();
     await _homeBackgroundPreferenceController.close();
     await _userProfileController.close();
+    await _appearancePreferenceController.close();
     await _assistantVoicePreferenceController.close();
   }
 
@@ -545,6 +602,7 @@ class FakeAppRepository implements AppRepository {
     _chatController.add(List<ChatMessage>.unmodifiable(_messages));
     _characterController.add(_character);
     _userProfileController.add(_userProfile);
+    _appearancePreferenceController.add(_appearancePreset);
     _dailySummariesController.add(List<DailySummary>.unmodifiable(_summaries));
     _dailyBubbleController.add(_dailyBubble);
     _imageHistoryController.add(

@@ -14,6 +14,7 @@
 - `POST /v1/chat/voice` uses Speech-to-Text, Gemini, and Text-to-Speech for a voice round-trip.
 - `POST /v1/characters/image` uses Gemini image generation plus Cloud Storage persistence.
 - `daily bubble` generation is persisted in Firestore and is based on the previous day summary.
+- onboarding stores `age / characterGender / appearancePreset` and uses them for initial visual generation.
 
 ## Product concept
 - The current concept is not an AI partner.
@@ -37,6 +38,13 @@
   - `GEMINI_IMAGE_MODEL`
   - `GEMINI_TEMPERATURE`
   - `GEMINI_MAX_OUTPUT_TOKENS`
+  - `GEMINI_THINKING_BUDGET`
+  - `DAILY_SUMMARY_TEMPERATURE`
+  - `DAILY_SUMMARY_MAX_OUTPUT_TOKENS`
+  - `DAILY_SUMMARY_THINKING_BUDGET`
+  - `DAILY_BUBBLE_TEMPERATURE`
+  - `DAILY_BUBBLE_MAX_OUTPUT_TOKENS`
+  - `DAILY_BUBBLE_THINKING_BUDGET`
   - `IMAGE_BUCKET`
   - `SPEECH_LANGUAGE_CODE`
   - `TTS_LANGUAGE_CODE`
@@ -48,6 +56,13 @@
   - `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`
   - `GEMINI_TEMPERATURE=0.7`
   - `GEMINI_MAX_OUTPUT_TOKENS=220`
+  - `GEMINI_THINKING_BUDGET=128`
+  - `DAILY_SUMMARY_TEMPERATURE=0.35`
+  - `DAILY_SUMMARY_MAX_OUTPUT_TOKENS=320`
+  - `DAILY_SUMMARY_THINKING_BUDGET=128`
+  - `DAILY_BUBBLE_TEMPERATURE=0.45`
+  - `DAILY_BUBBLE_MAX_OUTPUT_TOKENS=120`
+  - `DAILY_BUBBLE_THINKING_BUDGET=32`
   - `SPEECH_LANGUAGE_CODE=ja-JP`
   - `TTS_LANGUAGE_CODE=ja-JP`
   - `TTS_MODEL_NAME=gemini-2.5-flash-tts`
@@ -104,6 +119,8 @@
 
 The final image prompt is composed from:
 - `visualPromptBase`
+- the current `appearancePreset`
+- age / character gender visual hints
 - `visualEvolutionMemo`
 - the current daily summary
 - an optional one-off note from manual regenerate
@@ -113,6 +130,9 @@ The final image prompt is composed from:
 ### `users/{uid}`
 - `createdAt`
 - `updatedAt`
+- `age`
+- `characterGender`
+- `appearancePreset`
 
 ### `users/{uid}/dailySummaries/{dateKey}`
 - `title`

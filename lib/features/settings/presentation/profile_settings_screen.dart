@@ -15,9 +15,11 @@ class ProfileSettingsScreen extends ConsumerStatefulWidget {
 
 class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   late final TextEditingController _displayNameController;
+  late final TextEditingController _ageController;
   late final TextEditingController _goalController;
   late final TextEditingController _partnerStyleController;
   late final TextEditingController _weakPointsController;
+  CharacterGender _selectedGender = CharacterGender.nonBinary;
   bool _didSeed = false;
   bool _isSaving = false;
 
@@ -25,6 +27,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   void initState() {
     super.initState();
     _displayNameController = TextEditingController();
+    _ageController = TextEditingController();
     _goalController = TextEditingController();
     _partnerStyleController = TextEditingController();
     _weakPointsController = TextEditingController();
@@ -33,6 +36,7 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
   @override
   void dispose() {
     _displayNameController.dispose();
+    _ageController.dispose();
     _goalController.dispose();
     _partnerStyleController.dispose();
     _weakPointsController.dispose();
@@ -43,10 +47,15 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     if (_isSaving) {
       return;
     }
+    final age = int.tryParse(_ageController.text.trim());
+    if (age == null || age <= 0) {
+      return;
+    }
     setState(() {
       _isSaving = true;
     });
     try {
+      final preset = AppearanceScope.controllerOf(context).preset;
       await ref.read(userProfileControllerProvider).save(
         UserProfileInput(
           displayName: _displayNameController.text.trim(),
@@ -57,6 +66,9 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
               .map((item) => item.trim())
               .where((item) => item.isNotEmpty)
               .toList(growable: false),
+          age: age,
+          characterGender: _selectedGender,
+          appearancePreset: preset,
         ),
       );
       if (mounted) {
@@ -77,9 +89,11 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
     }
     _didSeed = true;
     _displayNameController.text = profile?.displayName ?? '';
+    _ageController.text = profile?.age.toString() ?? '';
     _goalController.text = profile?.goal ?? '';
     _partnerStyleController.text = profile?.partnerStyle ?? '';
     _weakPointsController.text = profile?.weakPoints.join('\n') ?? '';
+    _selectedGender = profile?.characterGender ?? CharacterGender.nonBinary;
   }
 
   @override
@@ -157,6 +171,24 @@ class _ProfileSettingsScreenState extends ConsumerState<ProfileSettingsScreen> {
                             const SizedBox(height: 12),
                             _SettingsField(
                               fieldKey: const ValueKey<String>(
+                                'profile-settings-age',
+                              ),
+                              controller: _ageController,
+                              label: '年齢',
+                              keyboardType: TextInputType.number,
+                            ),
+                            const SizedBox(height: 12),
+                            _GenderField(
+                              value: _selectedGender,
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedGender = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            _SettingsField(
+                              fieldKey: const ValueKey<String>(
                                 'profile-settings-goal',
                               ),
                               controller: _goalController,
@@ -217,6 +249,7 @@ class _SettingsField extends StatelessWidget {
     this.hintText,
     this.minLines = 1,
     this.maxLines = 1,
+    this.keyboardType,
   });
 
   final Key fieldKey;
@@ -225,6 +258,7 @@ class _SettingsField extends StatelessWidget {
   final String? hintText;
   final int minLines;
   final int maxLines;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +279,51 @@ class _SettingsField extends StatelessWidget {
           controller: controller,
           minLines: minLines,
           maxLines: maxLines,
+          keyboardType: keyboardType,
           decoration: InputDecoration(hintText: hintText),
+        ),
+      ],
+    );
+  }
+}
+
+class _GenderField extends StatelessWidget {
+  const _GenderField({required this.value, required this.onChanged});
+
+  final CharacterGender value;
+  final ValueChanged<CharacterGender> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AppearanceScope.paletteOf(context).settings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '見た目の性別',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: palette.tileTitle,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<CharacterGender>(
+          value: value,
+          items:
+              CharacterGender.values
+                  .map(
+                    (gender) => DropdownMenuItem(
+                      value: gender,
+                      child: Text(gender.label),
+                    ),
+                  )
+                  .toList(growable: false),
+          onChanged: (next) {
+            if (next != null) {
+              onChanged(next);
+            }
+          },
+          decoration: const InputDecoration(),
         ),
       ],
     );

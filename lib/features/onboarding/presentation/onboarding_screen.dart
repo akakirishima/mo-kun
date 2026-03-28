@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
+import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -15,6 +17,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _goalController = TextEditingController();
   final _partnerStyleController = TextEditingController();
   final _weakPointsController = TextEditingController();
+  final _ageController = TextEditingController();
+  CharacterGender _selectedGender = CharacterGender.nonBinary;
+  AppAppearancePreset _selectedAppearancePreset = AppAppearancePreset.blossom;
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -24,11 +29,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _goalController.dispose();
     _partnerStyleController.dispose();
     _weakPointsController.dispose();
+    _ageController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (_isSubmitting) {
+      return;
+    }
+    final age = int.tryParse(_ageController.text.trim());
+    if (age == null || age <= 0) {
+      setState(() {
+        _errorMessage = '年齢を数字で入力してください。';
+      });
       return;
     }
     setState(() {
@@ -48,8 +61,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   .map((value) => value.trim())
                   .where((value) => value.isNotEmpty)
                   .toList(growable: false),
+              age: age,
+              characterGender: _selectedGender,
+              appearancePreset: _selectedAppearancePreset,
             ),
           );
+      if (mounted) {
+        await AppearanceScope.controllerOf(
+          context,
+        ).selectPreset(_selectedAppearancePreset);
+      }
     } catch (error) {
       setState(() {
         _errorMessage = 'キャラクター生成に失敗しました。少し待ってから再試行してください。';
@@ -70,6 +91,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _displayNameController.text.trim().isNotEmpty &&
         _goalController.text.trim().isNotEmpty &&
         _partnerStyleController.text.trim().isNotEmpty &&
+        (_ageController.text.trim().isNotEmpty &&
+            int.tryParse(_ageController.text.trim()) != null) &&
         !_isSubmitting;
 
     return Scaffold(
@@ -110,6 +133,67 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           controller: _displayNameController,
                           hintText: '例: やまだ',
                           onChanged: (_) => setState(() {}),
+                        ),
+                        _FieldBlock(
+                          label: '年齢',
+                          controller: _ageController,
+                          hintText: '例: 28',
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        _DropdownBlock<CharacterGender>(
+                          label: 'キャラの見た目の性別',
+                          value: _selectedGender,
+                          items:
+                              CharacterGender.values
+                                  .map(
+                                    (gender) => DropdownMenuItem(
+                                      value: gender,
+                                      child: Text(gender.label),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedGender = value;
+                            });
+                          },
+                        ),
+                        _DropdownBlock<AppAppearancePreset>(
+                          label: 'テーマカラー',
+                          value: _selectedAppearancePreset,
+                          items:
+                              AppAppearancePreset.values
+                                  .map(
+                                    (preset) => DropdownMenuItem(
+                                      value: preset,
+                                      child: Text(
+                                        preset.label,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _selectedAppearancePreset = value;
+                            });
+                          },
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Text(
+                            _selectedAppearancePreset.description,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.black54,
+                            ),
+                          ),
                         ),
                         _FieldBlock(
                           label: 'いま頑張りたいこと',
@@ -171,6 +255,7 @@ class _FieldBlock extends StatelessWidget {
     required this.hintText,
     this.maxLines = 1,
     this.onChanged,
+    this.keyboardType,
   });
 
   final String label;
@@ -178,6 +263,7 @@ class _FieldBlock extends StatelessWidget {
   final String hintText;
   final int maxLines;
   final ValueChanged<String>? onChanged;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -192,10 +278,46 @@ class _FieldBlock extends StatelessWidget {
             controller: controller,
             onChanged: onChanged,
             maxLines: maxLines,
+            keyboardType: keyboardType,
             decoration: InputDecoration(
               hintText: hintText,
               border: const OutlineInputBorder(),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DropdownBlock<T> extends StatelessWidget {
+  const _DropdownBlock({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<T>(
+            value: value,
+            isExpanded: true,
+            items: items,
+            onChanged: onChanged,
+            decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ],
       ),

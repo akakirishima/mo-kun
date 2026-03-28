@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
+
 enum ChatRole { user, assistant }
 
 enum ChatTransport { http, live }
@@ -13,6 +15,41 @@ enum ChatInputType { text, voice, photo }
 enum VoiceChatAudioStatus { ready, failed }
 
 const defaultAssistantVoiceName = 'Kore';
+
+enum CharacterGender {
+  female(
+    storageValue: 'female',
+    label: '女性',
+    promptHint: 'feminine presentation with natural softness',
+  ),
+  male(
+    storageValue: 'male',
+    label: '男性',
+    promptHint: 'masculine presentation with natural balance',
+  ),
+  nonBinary(
+    storageValue: 'non_binary',
+    label: 'どちらでもない',
+    promptHint: 'androgynous non-binary presentation',
+  );
+
+  const CharacterGender({
+    required this.storageValue,
+    required this.label,
+    required this.promptHint,
+  });
+
+  final String storageValue;
+  final String label;
+  final String promptHint;
+
+  static CharacterGender fromStorageValue(String? value) {
+    return CharacterGender.values.firstWhere(
+      (gender) => gender.storageValue == value,
+      orElse: () => CharacterGender.nonBinary,
+    );
+  }
+}
 
 class AssistantVoiceOption {
   const AssistantVoiceOption({
@@ -124,12 +161,18 @@ class UserProfileInput {
     required this.goal,
     required this.partnerStyle,
     required this.weakPoints,
+    required this.age,
+    required this.characterGender,
+    required this.appearancePreset,
   });
 
   final String displayName;
   final String goal;
   final String partnerStyle;
   final List<String> weakPoints;
+  final int age;
+  final CharacterGender characterGender;
+  final AppAppearancePreset appearancePreset;
 }
 
 class CharacterSnapshot {

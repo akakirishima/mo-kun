@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gdgoc_2026_prototype/app/shell/app_shell.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
+import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
 import 'package:gdgoc_2026_prototype/features/onboarding/presentation/onboarding_screen.dart';
 
 class AppBootstrapScreen extends ConsumerWidget {
@@ -17,6 +20,18 @@ class AppBootstrapScreen extends ConsumerWidget {
     final sessionAsync = ref.watch(sessionProvider);
     return sessionAsync.when(
       data: (session) {
+        if (!session.needsOnboarding) {
+          final controller = AppearanceScope.controllerOf(context);
+          final remotePreset =
+              ref.watch(appearancePreferenceProvider(session.userId)).valueOrNull;
+          if (remotePreset != null && remotePreset != controller.preset) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              unawaited(
+                controller.selectPreset(remotePreset, persistLocal: true),
+              );
+            });
+          }
+        }
         if (session.needsOnboarding) {
           return const OnboardingScreen();
         }

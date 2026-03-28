@@ -4,6 +4,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
 import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 import 'package:gdgoc_2026_prototype/core/theme/app_theme.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_controller.dart';
 import 'package:gdgoc_2026_prototype/core/theme/appearance_scope.dart';
@@ -105,6 +106,9 @@ FakeAppRepository buildFakeRepository() {
       goal: '毎日の進捗を軽く残す',
       partnerStyle: 'やさしく整理して背中を押してほしい',
       weakPoints: <String>['後回しにしやすい', '朝に動き出しが遅い'],
+      age: 28,
+      characterGender: CharacterGender.nonBinary,
+      appearancePreset: AppAppearancePreset.blossom,
     ),
   );
 }

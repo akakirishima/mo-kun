@@ -6,7 +6,9 @@ import {
 } from "@google/genai";
 import { loadConfig, type AppConfig } from "../config.js";
 import {
+  AppearancePresetValue,
   CharacterDraft,
+  CharacterGenderValue,
   SceneSlot,
   DailyBubbleDraft,
   DailySummaryDraft,
@@ -19,6 +21,9 @@ type CharacterProfileInput = {
   goal: string;
   partnerStyle: string;
   weakPoints: string[];
+  age: number;
+  characterGender: CharacterGenderValue;
+  appearancePreset: AppearancePresetValue;
 };
 
 type MessageContext = Array<{ role?: string; text?: string;[key: string]: unknown }>;
@@ -40,6 +45,9 @@ type ImagePromptContext = {
   visualEvolutionMemo: string;
   todaySummary: string;
   sceneItems: string[];
+  age?: number;
+  characterGender?: CharacterGenderValue;
+  appearancePreset?: AppearancePresetValue;
   sceneSlot?: SceneSlot;
   optionalNote?: string;
 };
@@ -49,6 +57,9 @@ type MotionPromptContext = {
   visualEvolutionMemo: string;
   todaySummary: string;
   sceneItems: string[];
+  age?: number;
+  characterGender?: CharacterGenderValue;
+  appearancePreset?: AppearancePresetValue;
   sceneSlot?: SceneSlot;
   activityLabel?: string;
   motionMode?: "base" | "activity";
@@ -159,7 +170,7 @@ const PHOTO_ANALYSIS_RESPONSE_JSON_SCHEMA = {
 export const DEFAULT_ROOM_VISUAL_PROMPT_BASE = [
   "cute pastel pixel-art isometric room",
   "fixed cozy bedroom layout viewed from a slightly top-down angle",
-  "pink walls, mint furniture, warm wooden floor, soft daylight",
+  "soft cozy room with gentle light and a warm lived-in atmosphere",
   "bed on the left, desk and computer on the back wall, two windows, round rug, small table, sofa, cabinet, framed wall art",
   "the same room layout stays consistent across daily updates",
   "a cute companion character stays near the center of the room as the main focus",
@@ -203,6 +214,9 @@ export class AiService {
         DEFAULT_ROOM_VISUAL_PROMPT_BASE,
         profile.goal ? `goal mood hint: ${profile.goal}` : null,
         profile.partnerStyle ? `inner voice tone hint: ${profile.partnerStyle}` : null,
+        profile.age > 0 ? `character age hint: ${buildAgePromptHint(profile.age)}` : null,
+        `character presentation hint: ${buildGenderPresentationHint(profile.characterGender)}`,
+        `room palette hint: ${buildAppearancePaletteHint(profile.appearancePreset)}`,
       ].filter((value): value is string => value != null && value.length > 0).join(", "),
       starterGreeting: "今日は何をした？",
     };
@@ -498,8 +512,9 @@ export class AiService {
         contents: buildDailySummaryPrompt(params),
         config: {
           systemInstruction: buildDailySummarySystemInstruction(),
-          temperature: 0.35,
-          maxOutputTokens: 320,
+          temperature: this.config.dailySummaryTemperature,
+          maxOutputTokens: this.config.dailySummaryMaxOutputTokens,
+          thinkingConfig: buildThinkingConfig(this.config.dailySummaryThinkingBudget),
           responseMimeType: "application/json",
           responseJsonSchema: DAILY_SUMMARY_RESPONSE_JSON_SCHEMA,
         },
@@ -544,8 +559,9 @@ export class AiService {
         contents: buildDailyBubblePrompt(params.previousSummary),
         config: {
           systemInstruction: buildDailyBubbleSystemInstruction(),
-          temperature: 0.45,
-          maxOutputTokens: 120,
+          temperature: this.config.dailyBubbleTemperature,
+          maxOutputTokens: this.config.dailyBubbleMaxOutputTokens,
+          thinkingConfig: buildThinkingConfig(this.config.dailyBubbleThinkingBudget),
           responseMimeType: "application/json",
           responseJsonSchema: DAILY_BUBBLE_RESPONSE_JSON_SCHEMA,
         },
@@ -850,6 +866,15 @@ export function buildCharacterImagePrompt(params: ImagePromptContext): string {
     (assignment) => `- ${assignment.slot}: ${assignment.item}`,
   );
   const sceneMood = describeSceneSlot(params.sceneSlot);
+  const roomPaletteHint = buildAppearancePaletteHint(params.appearancePreset);
+  const characterAppearanceLines = [
+    params.age != null && params.age > 0
+      ? `- character age impression: ${buildAgePromptHint(params.age)}`
+      : null,
+    params.characterGender != null
+      ? `- character presentation: ${buildGenderPresentationHint(params.characterGender)}`
+      : null,
+  ].filter((line): line is string => line != null);
 
   return [
     `あなたは${params.characterName}という同一キャラクターの最新ビジュアルを生成する。`,
@@ -863,7 +888,9 @@ export function buildCharacterImagePrompt(params: ImagePromptContext): string {
     "- fixed one-room layout from a slightly top-down angle",
     "- left side bed, back wall desk and monitor, two windows, round rug, small table, sofa, cabinet, wall frames",
     "- character stands or sits near the center of the room and is the clear main focus",
+    `- room palette and atmosphere: ${roomPaletteHint}`,
     `- time-of-day mood: ${sceneMood}`,
+    ...characterAppearanceLines,
     "",
     "直近7日間の成長メモ:",
     params.visualEvolutionMemo.trim(),
@@ -908,9 +935,18 @@ export function buildCharacterMotionPrompt(params: MotionPromptContext): string 
     : "特別な小物の変化はなし";
   const sceneMood = describeSceneSlot(params.sceneSlot);
   const motionMode = params.motionMode ?? "base";
+  const roomPaletteHint = buildAppearancePaletteHint(params.appearancePreset);
   const activityInstruction = params.activityLabel?.trim()
     ? buildActivityMotionInstruction(params.activityLabel.trim())
     : "The character performs a small natural walk cycle near the center of the room.";
+  const appearancePreservationInstruction = [
+    params.age != null && params.age > 0
+      ? `Keep the character's age impression consistent with ${buildAgePromptHint(params.age)}.`
+      : null,
+    params.characterGender != null
+      ? `Keep the character presentation consistent with ${buildGenderPresentationHint(params.characterGender)}.`
+      : null,
+  ].filter((line): line is string => line != null);
 
   return [
     `Animate the existing room image of ${params.characterName}.`,
@@ -932,7 +968,8 @@ export function buildCharacterMotionPrompt(params: MotionPromptContext): string 
     "No character identity change.",
     "No extreme limb deformation.",
     "Keep the movement gentle and believable for a cozy pixel-art room.",
-    `Keep the room lighting and atmosphere consistent with ${sceneMood}.`,
+    `Keep the room lighting and atmosphere consistent with ${sceneMood} and ${roomPaletteHint}.`,
+    ...appearancePreservationInstruction,
     "",
     "Recent growth mood:",
     params.visualEvolutionMemo.trim(),
@@ -1619,6 +1656,58 @@ function assignRoomSceneSlots(items: string[]): Array<{ slot: string; item: stri
     slot: slotLabels[index],
     item,
   }));
+}
+
+function buildThinkingConfig(thinkingBudget: number) {
+  if (!Number.isFinite(thinkingBudget) || thinkingBudget <= 0) {
+    return undefined;
+  }
+  return { thinkingBudget };
+}
+
+function buildAgePromptHint(age: number): string {
+  if (age <= 12) {
+    return "childlike young presentation";
+  }
+  if (age <= 17) {
+    return "teen presentation";
+  }
+  if (age <= 24) {
+    return "young adult presentation";
+  }
+  if (age <= 39) {
+    return "adult presentation";
+  }
+  if (age <= 59) {
+    return "mature adult presentation";
+  }
+  return "older adult presentation";
+}
+
+function buildGenderPresentationHint(gender?: CharacterGenderValue): string {
+  switch (gender) {
+    case "female":
+      return "feminine presentation with natural softness";
+    case "male":
+      return "masculine presentation with natural balance";
+    case "non_binary":
+    default:
+      return "androgynous non-binary presentation";
+  }
+}
+
+function buildAppearancePaletteHint(preset?: AppearancePresetValue): string {
+  switch (preset) {
+    case "sky":
+      return "pale blue walls, mist-white furnishings, clear airy light";
+    case "forest":
+      return "sage green walls, natural wood furniture, calm grounded light";
+    case "sunset":
+      return "peach and amber room palette, warm late-afternoon glow";
+    case "blossom":
+    default:
+      return "soft pink walls, cream-pink furnishings, airy sweet pastel light";
+  }
 }
 
 function resolveRoomVisualPromptBase(visualPromptBase: string): string {

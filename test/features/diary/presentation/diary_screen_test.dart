@@ -5,6 +5,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/fake_app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_providers.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 import 'package:gdgoc_2026_prototype/features/diary/presentation/diary_screen.dart';
 import 'package:page_turn_animation/page_turn_animation.dart';
 
@@ -619,6 +620,9 @@ void main() {
         goal: '続ける',
         partnerStyle: '静かに寄り添う',
         weakPoints: <String>['三日坊主'],
+        age: 30,
+        characterGender: CharacterGender.nonBinary,
+        appearancePreset: AppAppearancePreset.blossom,
       ),
     );
 

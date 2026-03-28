@@ -5,6 +5,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/image_url_resolver.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 
 final appRepositoryProvider = Provider<AppRepository>((ref) {
   throw UnimplementedError('AppRepository must be overridden.');
@@ -41,6 +42,11 @@ final userProfileProvider = StreamProvider.family<UserProfileInput?, String>((
 ) {
   return ref.watch(appRepositoryProvider).watchUserProfile(userId);
 });
+
+final appearancePreferenceProvider =
+    StreamProvider.family<AppAppearancePreset?, String>((ref, userId) {
+      return ref.watch(appRepositoryProvider).watchAppearancePreference(userId);
+    });
 
 final assistantVoicePreferenceProvider =
     StreamProvider.family<AssistantVoicePreference?, String>((ref, userId) {

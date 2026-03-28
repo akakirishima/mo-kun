@@ -225,6 +225,9 @@ const imagePrompt = buildCharacterImagePrompt({
   visualEvolutionMemo: "表情に少し自信が出てきた。",
   todaySummary: "日付: 2026-03-16\nやったこと: UI を整えた",
   sceneItems: ["ノートPC", "付せんメモ"],
+  age: 28,
+  characterGender: "non_binary",
+  appearancePreset: "forest",
   optionalNote: "少し春っぽい空気感",
 });
 
@@ -234,6 +237,9 @@ assert.match(imagePrompt, /character stands or sits near the center/);
 assert.match(imagePrompt, /desk top item: ノートPC/);
 assert.match(imagePrompt, /表情に少し自信が出てきた/);
 assert.match(imagePrompt, /少し春っぽい空気感/);
+assert.match(imagePrompt, /adult presentation/);
+assert.match(imagePrompt, /androgynous non-binary presentation/);
+assert.match(imagePrompt, /sage green walls|natural wood furniture/);
 assert.match(imagePrompt, /構図ルール/);
 assert.match(imagePrompt, /縦長の人物ポートレートにしない/);
 
@@ -242,6 +248,9 @@ const motionPrompt = buildCharacterMotionPrompt({
   visualEvolutionMemo: "表情に少し自信が出てきた。",
   todaySummary: "日付: 2026-03-16\nやったこと: UI を整えた",
   sceneItems: ["ノートPC", "付せんメモ"],
+  age: 28,
+  characterGender: "non_binary",
+  appearancePreset: "sky",
   sceneSlot: "night",
   optionalNote: "少し春っぽい空気感",
 });
@@ -251,6 +260,9 @@ assert.match(motionPrompt, /tiny idle motions/i);
 assert.match(motionPrompt, /preserve the exact room layout/i);
 assert.match(motionPrompt, /ノートPC/);
 assert.match(motionPrompt, /少し春っぽい空気感/);
+assert.match(motionPrompt, /adult presentation/);
+assert.match(motionPrompt, /androgynous non-binary presentation/);
+assert.match(motionPrompt, /pale blue walls|mist-white furnishings/);
 assert.match(motionPrompt, /late-night light|evening/i);
 
 const generatedImage = extractGeneratedImage({

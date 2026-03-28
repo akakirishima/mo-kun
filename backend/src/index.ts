@@ -141,6 +141,18 @@ app.post("/v1/session/initialize", requireAuth, async (request, response) => {
 app.post("/v1/characters", requireAuth, async (request, response) => {
   try {
     const authedRequest = request as AuthedRequest;
+    const age = Number(request.body.age ?? 0);
+    const rawCharacterGender = String(request.body.characterGender ?? "").trim();
+    const rawAppearancePreset = String(request.body.appearancePreset ?? "").trim();
+    if (
+      !Number.isInteger(age) ||
+      age <= 0 ||
+      !isSupportedCharacterGender(rawCharacterGender) ||
+      !isSupportedAppearancePreset(rawAppearancePreset)
+    ) {
+      response.status(400).json({ error: "invalid_character_payload" });
+      return;
+    }
     const profile = {
       displayName: String(request.body.displayName ?? "").trim(),
       goal: String(request.body.goal ?? "").trim(),
@@ -148,6 +160,9 @@ app.post("/v1/characters", requireAuth, async (request, response) => {
       weakPoints: Array.isArray(request.body.weakPoints)
         ? request.body.weakPoints.map(String)
         : [],
+      age,
+      characterGender: rawCharacterGender,
+      appearancePreset: rawAppearancePreset,
     };
 
     if (!profile.displayName || !profile.goal || !profile.partnerStyle) {
@@ -516,6 +531,16 @@ function inferImageMimeType(filename?: string) {
     return "image/webp";
   }
   return "image/jpeg";
+}
+
+function isSupportedCharacterGender(value: string): value is "female" | "male" | "non_binary" {
+  return value === "female" || value === "male" || value === "non_binary";
+}
+
+function isSupportedAppearancePreset(
+  value: string,
+): value is "blossom" | "sky" | "forest" | "sunset" {
+  return value === "blossom" || value === "sky" || value === "forest" || value === "sunset";
 }
 
 function normalizeIncomingImageMimeType(

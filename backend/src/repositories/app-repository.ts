@@ -1,7 +1,9 @@
 import { Firestore } from "firebase-admin/firestore";
 import { Timestamp } from "../lib/firebase.js";
 import {
+  AppearancePresetValue,
   CharacterDraft,
+  CharacterGenderValue,
   DailyBubbleDraft,
   DailySummaryDraft,
   ImageDraft,
@@ -75,6 +77,9 @@ export class AppRepository {
       goal: string;
       partnerStyle: string;
       weakPoints: string[];
+      age: number;
+      characterGender: CharacterGenderValue;
+      appearancePreset: AppearancePresetValue;
     };
     character: CharacterDraft;
   }) {
@@ -93,6 +98,10 @@ export class AppRepository {
           goal: params.profile.goal,
           partnerStyle: params.profile.partnerStyle,
           weakPoints: params.profile.weakPoints,
+          age: params.profile.age,
+          characterGender: params.profile.characterGender,
+          appearancePreset: params.profile.appearancePreset,
+          appearanceUpdatedAt: now,
           onboardingState: "completed",
           updatedAt: now,
         },
@@ -128,6 +137,11 @@ export class AppRepository {
   async getCharacterContext(userId: string) {
     const characterDoc = await this.db.collection("characters").doc(userId).get();
     return characterDoc.data() ?? null;
+  }
+
+  async getUserProfileContext(userId: string) {
+    const userDoc = await this.db.collection("users").doc(userId).get();
+    return userDoc.data() ?? null;
   }
 
   async getUserVoiceName(userId: string): Promise<string | null> {

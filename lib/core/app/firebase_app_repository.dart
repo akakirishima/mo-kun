@@ -10,6 +10,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_date.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 import 'package:gdgoc_2026_prototype/core/app/app_repository.dart';
 import 'package:gdgoc_2026_prototype/core/app/character_profile_derivation.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 import 'package:gdgoc_2026_prototype/firebase_options.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -70,6 +71,9 @@ class FirebaseAppRepository implements AppRepository {
       'goal': input.goal,
       'partnerStyle': input.partnerStyle,
       'weakPoints': input.weakPoints,
+      'age': input.age,
+      'characterGender': input.characterGender.storageValue,
+      'appearancePreset': input.appearancePreset.storageValue,
     });
     await updateUserProfile(userId: auth.currentUser!.uid, profile: input);
     return AppSession(
@@ -87,12 +91,7 @@ class FirebaseAppRepository implements AppRepository {
         return null;
       }
       final data = snapshot.data() ?? const <String, dynamic>{};
-      return UserProfileInput(
-        displayName: data['displayName'] as String? ?? '',
-        goal: data['goal'] as String? ?? '',
-        partnerStyle: data['partnerStyle'] as String? ?? '',
-        weakPoints: List<String>.from(data['weakPoints'] as List? ?? const []),
-      );
+      return _mapUserProfileData(data);
     });
   }
 
@@ -107,10 +106,51 @@ class FirebaseAppRepository implements AppRepository {
       'goal': profile.goal,
       'partnerStyle': profile.partnerStyle,
       'weakPoints': profile.weakPoints,
+      'age': profile.age,
+      'characterGender': profile.characterGender.storageValue,
+      'appearancePreset': profile.appearancePreset.storageValue,
+      'appearanceUpdatedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     await firestore.collection('characters').doc(userId).set({
       'personaPrompt': derived.personaPrompt,
+      'visualPromptBase': derived.visualPromptBase,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  @override
+  Stream<AppAppearancePreset?> watchAppearancePreference(String userId) {
+    return _userProfileDoc(userId).snapshots().map((snapshot) {
+      if (!snapshot.exists) {
+        return null;
+      }
+      final data = snapshot.data() ?? const <String, dynamic>{};
+      final rawValue = data['appearancePreset'] as String?;
+      return rawValue == null
+          ? null
+          : AppAppearancePreset.fromStorageValue(rawValue);
+    });
+  }
+
+  @override
+  Future<void> updateAppearancePreference({
+    required String userId,
+    required AppAppearancePreset preset,
+  }) async {
+    final userDoc = await _userProfileDoc(userId).get();
+    await _userProfileDoc(userId).set({
+      'appearancePreset': preset.storageValue,
+      'appearanceUpdatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    final existingData = userDoc.data() ?? const <String, dynamic>{};
+    if (existingData.isEmpty) {
+      return;
+    }
+    final profile = _mapUserProfileData(existingData, appearancePreset: preset);
+    final derived = deriveCharacterProfileFields(profile);
+    await firestore.collection('characters').doc(userId).set({
       'visualPromptBase': derived.visualPromptBase,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -560,6 +600,19 @@ class FirebaseAppRepository implements AppRepository {
     return null;
   }
 
+  int? _parseInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
+  }
+
   DailySummary _mapDailySummary(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
@@ -573,6 +626,27 @@ class FirebaseAppRepository implements AppRepository {
       reflection: data['reflection'] as String? ?? '',
       tomorrowNote: data['tomorrowNote'] as String? ?? '',
       generatedAt: _parseTimestamp(data['generatedAt']),
+    );
+  }
+
+  UserProfileInput _mapUserProfileData(
+    Map<String, dynamic> data, {
+    AppAppearancePreset? appearancePreset,
+  }) {
+    return UserProfileInput(
+      displayName: data['displayName'] as String? ?? '',
+      goal: data['goal'] as String? ?? '',
+      partnerStyle: data['partnerStyle'] as String? ?? '',
+      weakPoints: List<String>.from(data['weakPoints'] as List? ?? const []),
+      age: _parseInt(data['age']) ?? 20,
+      characterGender: CharacterGender.fromStorageValue(
+        data['characterGender'] as String?,
+      ),
+      appearancePreset:
+          appearancePreset ??
+          AppAppearancePreset.fromStorageValue(
+            data['appearancePreset'] as String?,
+          ),
     );
   }
 

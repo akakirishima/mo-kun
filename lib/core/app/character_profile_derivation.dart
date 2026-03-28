@@ -3,7 +3,7 @@ import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
 const defaultRoomVisualPromptBase = [
   'cute pastel pixel-art isometric room',
   'fixed cozy bedroom layout viewed from a slightly top-down angle',
-  'pink walls, mint furniture, warm wooden floor, soft daylight',
+  'soft cozy room with gentle light and warm lived-in atmosphere',
   'bed on the left, desk and computer on the back wall, two windows, round rug, small table, sofa, cabinet, framed wall art',
   'the same room layout stays consistent across daily updates',
   'a cute companion character stays near the center of the room as the main focus',
@@ -40,10 +40,46 @@ DerivedCharacterProfileFields deriveCharacterProfileFields(
     if (profile.goal.trim().isNotEmpty) 'goal mood hint: ${profile.goal.trim()}',
     if (profile.partnerStyle.trim().isNotEmpty)
       'inner voice tone hint: ${profile.partnerStyle.trim()}',
+    'character age hint: ${_agePromptHint(profile.age)}',
+    'character presentation hint: ${profile.characterGender.promptHint}',
+    'room palette hint: ${_appearancePromptHint(profile.appearancePreset.storageValue)}',
   ].join(', ');
 
   return DerivedCharacterProfileFields(
     personaPrompt: personaPrompt,
     visualPromptBase: visualPromptBase,
   );
+}
+
+String _agePromptHint(int age) {
+  if (age <= 12) {
+    return 'childlike young presentation';
+  }
+  if (age <= 17) {
+    return 'teen presentation';
+  }
+  if (age <= 24) {
+    return 'young adult presentation';
+  }
+  if (age <= 39) {
+    return 'adult presentation';
+  }
+  if (age <= 59) {
+    return 'mature adult presentation';
+  }
+  return 'older adult presentation';
+}
+
+String _appearancePromptHint(String preset) {
+  switch (preset) {
+    case 'sky':
+      return 'pale blue and mist-white room palette with airy clear light';
+    case 'forest':
+      return 'sage green and natural wood room palette with calm grounded light';
+    case 'sunset':
+      return 'peach amber room palette with warm late-afternoon glow';
+    case 'blossom':
+    default:
+      return 'soft pink and cream room palette with airy sweet pastel light';
+  }
 }

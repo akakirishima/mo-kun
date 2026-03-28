@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:gdgoc_2026_prototype/core/app/app_models.dart';
+import 'package:gdgoc_2026_prototype/core/theme/app_appearance.dart';
 
 abstract class AppRepository {
   Future<AppSession> initializeSession();
@@ -14,6 +15,13 @@ abstract class AppRepository {
   Future<void> updateUserProfile({
     required String userId,
     required UserProfileInput profile,
+  });
+
+  Stream<AppAppearancePreset?> watchAppearancePreference(String userId);
+
+  Future<void> updateAppearancePreference({
+    required String userId,
+    required AppAppearancePreset preset,
   });
 
   Stream<AssistantVoicePreference?> watchAssistantVoicePreference(

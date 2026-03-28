@@ -16,6 +16,10 @@ export type CharacterDraft = {
   starterGreeting: string;
 };
 
+export type CharacterGenderValue = "female" | "male" | "non_binary";
+
+export type AppearancePresetValue = "blossom" | "sky" | "forest" | "sunset";
+
 export type SceneSlot = "morning" | "day" | "night";
 
 export type ImageDraft = {

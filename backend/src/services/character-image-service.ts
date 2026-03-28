@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { AppRepository } from "../repositories/app-repository.js";
 import { AiService } from "./ai-service.js";
-import { ImageDraft, StoredDailySummary, VideoDraft } from "../types.js";
+import {
+  AppearancePresetValue,
+  CharacterGenderValue,
+  ImageDraft,
+  StoredDailySummary,
+  VideoDraft,
+} from "../types.js";
 import { buildAppDateKey } from "./app-date.js";
 
 const execFileAsync = promisify(execFile);
@@ -27,10 +33,16 @@ export class CharacterImageService {
     todaySummary?: StoredDailySummary;
     now?: Date;
   }): Promise<ImageDraft> {
-    const character = await this.repository.getCharacterContext(params.userId);
+    const [character, userProfile] = await Promise.all([
+      this.repository.getCharacterContext(params.userId),
+      this.repository.getUserProfileContext(params.userId),
+    ]);
     if (!character) {
       throw new Error("character_not_found");
     }
+    const appearancePreset = normalizeAppearancePreset(userProfile?.appearancePreset);
+    const characterGender = normalizeCharacterGender(userProfile?.characterGender);
+    const age = normalizeCharacterAge(userProfile?.age);
 
     const now = params.now ?? new Date();
     const targetDateKey = params.todaySummary?.dateKey ?? buildAppDateKey(now);
@@ -69,6 +81,9 @@ export class CharacterImageService {
       visualEvolutionMemo,
       todaySummary: todaySummaryText,
       sceneItems,
+      age,
+      characterGender,
+      appearancePreset,
       optionalNote: params.optionalNote,
     });
     const promptExcerpt = buildPromptExcerpt({
@@ -83,6 +98,9 @@ export class CharacterImageService {
       visualEvolutionMemo,
       todaySummary: todaySummaryText,
       sceneItems,
+      age,
+      characterGender,
+      appearancePreset,
       optionalNote: params.optionalNote,
     });
     const motionPromptExcerpt = buildMotionPromptExcerpt({
@@ -630,6 +648,42 @@ export function resolveSquareVariantDebugInfo(params: {
     detection,
     candidateCount: candidates.length,
   };
+}
+
+function normalizeAppearancePreset(value: unknown): AppearancePresetValue | undefined {
+  switch (value) {
+    case "blossom":
+    case "sky":
+    case "forest":
+    case "sunset":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeCharacterGender(value: unknown): CharacterGenderValue | undefined {
+  switch (value) {
+    case "female":
+    case "male":
+    case "non_binary":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeCharacterAge(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.trunc(value);
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.trunc(parsed);
+    }
+  }
+  return undefined;
 }
 
 function parseGsUrl(sourceUrl: string) {

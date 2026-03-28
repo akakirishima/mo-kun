@@ -19,21 +19,23 @@ class AppearanceController extends ChangeNotifier {
     final storedPreset = AppAppearancePreset.fromStorageValue(
       preferences.getString(storageKey),
     );
-    if (storedPreset == _preset) {
-      return;
-    }
-
-    _preset = storedPreset;
-    notifyListeners();
+    await selectPreset(storedPreset, persistLocal: false);
   }
 
-  Future<void> selectPreset(AppAppearancePreset preset) async {
+  Future<void> selectPreset(
+    AppAppearancePreset preset, {
+    bool persistLocal = true,
+  }) async {
     if (_preset == preset) {
       return;
     }
 
     _preset = preset;
     notifyListeners();
+
+    if (!persistLocal) {
+      return;
+    }
 
     final preferences = _preferences ??= await SharedPreferences.getInstance();
     await preferences.setString(storageKey, preset.storageValue);
