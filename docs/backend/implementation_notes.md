@@ -1,6 +1,6 @@
 # Backend Implementation Notes
 
-`raise you` backend の実装メモです。公開リポジトリで読まれることを前提に、構成と判断理由だけを残しています。
+`Hello new me` backend の実装メモです。公開リポジトリで読まれることを前提に、構成と判断理由だけを残しています。
 
 ## App / backend の接続
 

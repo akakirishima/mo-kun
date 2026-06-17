@@ -1,6 +1,6 @@
 # Backend
 
-`raise you` の Cloud Run 向け TypeScript / Express backend です。
+`Hello new me` の Cloud Run 向け TypeScript / Express backend です。
 
 Flutter app からのチャット、音声、画像生成、日次更新を受け、Firebase と Vertex AI 系サービスへ接続します。
 

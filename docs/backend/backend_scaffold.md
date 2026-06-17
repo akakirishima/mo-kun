@@ -1,6 +1,6 @@
 # Backend Scaffold
 
-このメモは、`raise you` backend の構成とデプロイ時に確認する項目をまとめたものです。
+このメモは、`Hello new me` backend の構成とデプロイ時に確認する項目をまとめたものです。
 
 ## 構成
 

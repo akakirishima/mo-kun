@@ -1,6 +1,6 @@
 # Backend MVP Plan
 
-このメモは、`raise you` backend の MVP 範囲と設計判断をまとめたものです。
+このメモは、`Hello new me` backend の MVP 範囲と設計判断をまとめたものです。
 
 現在の主語は「AI と話すアプリ」ではなく、日々の記録から `自己投影キャラクター` を更新する体験です。
 
